@@ -13,7 +13,7 @@ sudo: false
 # is master.
 branches:
   only:
-    - master
+    - "master"
 
 cache:
   directories:
