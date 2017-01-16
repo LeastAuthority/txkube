@@ -14,6 +14,8 @@ from attr import validators
 from twisted.python.reflect import namedAny
 from twisted.python.url import URL
 
+from twisted.internet.defer import succeed
+
 from twisted.web.iweb import IAgent
 from twisted.web.client import Agent
 
@@ -28,6 +30,12 @@ def network_kubernetes(**kw):
 class _NetworkClient(object):
     kubernetes = attr.ib(validator=validators.provides(IKubernetes))
     agent = attr.ib(validator=validators.provides(IAgent))
+
+    def create(self, obj):
+        """
+        Issue a I{PUT} to create the given object.
+        """
+        return succeed(obj)
 
 
 @implementer(IKubernetes)

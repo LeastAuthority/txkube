@@ -19,6 +19,8 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     install_requires=[
+        "zone.interface",
+        "attr",
         "incremental",
         "twisted[tls]",
     ],
@@ -26,6 +28,7 @@ setuptools.setup(
         "dev": [
             "treq",
             "testtools",
+            "hypothesis",
             "eliot",
             "eliot-tree",
         ],

@@ -7,6 +7,15 @@ Explicit interface definitions for txkube.
 
 from zope.interface import Attribute, Interface
 
+
+class IObject(Interface):
+    """
+    ``IObject`` providers model `Kubernetes objects
+    <https://github.com/kubernetes/community/blob/master/contributors/devel/api-conventions.md#objects>`_.
+    """
+
+
+
 class IKubernetes(Interface):
     """
     An ``IKubernetes`` provider represents a particular Kubernetes deployment.
@@ -34,3 +43,11 @@ class IKubernetesClient(Interface):
     An ``IKubernetesClient`` provider allows access to the API of a particular
     Kubernetes deployment.
     """
+    def create(obj):
+        """
+        Create a new object in the given namespace.
+
+        :param IObject obj: A description of the object to create.
+
+        :return IObject: A description of the created object.
+        """
