@@ -28,6 +28,8 @@ setuptools.setup(
     extras_require={
         "dev": [
             "treq",
+            "pem",
+            "pyyaml",
             "testtools",
             "hypothesis",
             "eliot",
