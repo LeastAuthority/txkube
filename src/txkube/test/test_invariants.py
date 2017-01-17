@@ -9,8 +9,9 @@ from zope.interface import Interface, implementer
 
 from pyrsistent import InvariantException, PClass, field
 
-from twisted.trial.unittest import SynchronousTestCase
+from testtools.matchers import IsInstance
 
+from ..testing import TestCase
 from .._invariants import instance_of, provider_of
 
 
@@ -26,7 +27,7 @@ class Dummy(PClass):
 
 
 
-class InstanceOfTests(SynchronousTestCase):
+class InstanceOfTests(TestCase):
     """
     Tests for ``instance_of``.
     """
@@ -35,12 +36,15 @@ class InstanceOfTests(SynchronousTestCase):
 
 
     def test_invalid(self):
-        with self.assertRaises(InvariantException):
-            Dummy(an_int=b"bytes")
+        self.assertRaises(
+            InvariantException,
+            lambda: Dummy(an_int=b"bytes"),
+        )
 
 
 
-class ProviderOfTests(SynchronousTestCase):
+
+class ProviderOfTests(TestCase):
     """
     Tests for ``provider_of``.
     """
@@ -50,5 +54,7 @@ class ProviderOfTests(SynchronousTestCase):
 
 
     def test_invalid(self):
-        with self.assertRaises(InvariantException):
-            Dummy(an_interface=b"bytes")
+        self.assertRaises(
+            InvariantException,
+            lambda: Dummy(an_interface=b"bytes"),
+        )
