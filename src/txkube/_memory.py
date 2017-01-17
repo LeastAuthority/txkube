@@ -18,7 +18,13 @@ from . import IKubernetes, network_kubernetes
 
 def memory_kubernetes():
     """
+    Create an in-memory Kubernetes-alike service.
 
+    This serves as a places to hold state for stateful Kubernetes interactions
+    allowed by ``IKubernetesClient``.  Only clients created against the same
+    instance will all share state.
+
+    :return IKubernetes: The new Kubernetes-alike service.
     """
     return _MemoryKubernetes()
 
