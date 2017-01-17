@@ -35,6 +35,25 @@ Usage Sample
        d.addCallback(print)
        return d
 
+Installing
+----------
+
+To install the latest version of txkube using pip::
+
+  $ pip install txkube
+
+For additional development dependencies, install the ``dev`` extra::
+
+  $ pip install txkube[dev]
+
+Testing
+-------
+
+txkube uses pyunit-style tests.
+After installing the development dependencies, you can run the test suite with trial::
+
+  $ pip install txkube[dev]
+  $ trial txkube
 
 License
 -------
