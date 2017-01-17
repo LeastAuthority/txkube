@@ -35,6 +35,16 @@ Usage Sample
        d.addCallback(print)
        return d
 
+Installing
+----------
+
+To install the latest version of txkube using pip::
+
+  $ pip install txkube
+
+For additional development dependencies, install the ``dev`` extra::
+
+  $ pip install txkube[dev]
 
 License
 -------
