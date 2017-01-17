@@ -5,15 +5,23 @@
 Hypothesis strategies useful for testing ``pykube``.
 """
 
+from string import ascii_lowercase, digits
+
 from pyrsistent import pmap
 
-from hypothesis.strategies import builds, fixed_dictionaries, text
+from hypothesis.strategies import builds, fixed_dictionaries, text, lists, sampled_from
 
 from .. import NamespacedObjectMetadata, Namespace, ConfigMap
 
 
 def object_name():
-    return text()
+    # https://kubernetes.io/docs/user-guide/identifiers/#names
+    # [a-z0-9]([-a-z0-9]*[a-z0-9])?
+    alphabet = ascii_lowercase + digits + b"-"
+    return builds(
+        lambda parts: b"".join(parts).decode("ascii"),
+        lists(sampled_from(alphabet), average_size=10),
+    )
 
 
 def object_metadatas():
