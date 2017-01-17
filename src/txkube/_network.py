@@ -6,6 +6,11 @@ A Kubernetes client which uses Twisted to interact with Kubernetes
 via HTTP.
 """
 
+from io import BytesIO
+from json import loads, dumps
+
+from pyrsistent import thaw
+
 from zope.interface import implementer
 
 import attr
@@ -13,13 +18,18 @@ from attr import validators
 
 from twisted.python.reflect import namedAny
 from twisted.python.url import URL
+from twisted.python.failure import Failure
 
 from twisted.internet.defer import succeed
 
 from twisted.web.iweb import IAgent
-from twisted.web.client import Agent
+from twisted.web.http import OK, CREATED
+from twisted.web.client import FileBodyProducer, Agent, readBody
 
-from . import IKubernetes, IKubernetesClient
+from . import (
+    IKubernetes, IKubernetesClient,
+    ObjectMetadata, Namespace, ObjectCollection,
+)
 
 def network_kubernetes(**kw):
     return _NetworkKubernetes(**kw)
@@ -28,21 +38,57 @@ def network_kubernetes(**kw):
 @implementer(IKubernetesClient)
 @attr.s(frozen=True)
 class _NetworkClient(object):
+    _apiVersion = u"v1"
+
     kubernetes = attr.ib(validator=validators.provides(IKubernetes))
     agent = attr.ib(validator=validators.provides(IAgent))
 
+    def _get(self, url):
+        return self.agent.request(b"GET", url.asText().encode("ascii"))
+
+
+    def _post(self, url, obj):
+        return self.agent.request(
+            b"POST",
+            url.asText().encode("ascii"),
+            bodyProducer=FileBodyProducer(BytesIO(dumps(obj))),
+        )
+
+
     def create(self, obj):
         """
-        Issue a I{PUT} to create the given object.
+        Issue a I{POST} to create the given object.
         """
-        return succeed(obj)
+        url = obj.location(self.kubernetes.base_url)
+        d = self._post(url, {
+            u"metadata": thaw(obj.metadata.items),
+        })
+        d.addCallback(check_status)
+        d.addCallback(readBody)
+        d.addCallback(loads)
+        d.addCallback(Namespace.from_raw)
+        return d
 
 
     def list(self, kind):
         """
         Issue a I{GET} to retrieve objects of a given kind.
         """
-        return succeed(None)
+        url = kind.location(self.kubernetes.base_url)
+        d = self._get(url)
+        d.addCallback(check_status)
+        d.addCallback(readBody)
+        d.addCallback(loads)
+        def get_namespaces(result):
+            return ObjectCollection(
+                items=(
+                    Namespace.from_raw(obj)
+                    for obj
+                    in result[u"items"]
+                ),
+            )
+        d.addCallback(get_namespaces)
+        return d
 
 
 @implementer(IKubernetes)
@@ -61,3 +107,11 @@ class _NetworkKubernetes(object):
 
     def client(self):
         return _NetworkClient(self, self._agent)
+
+
+def check_status(response):
+    if response.code not in (OK, CREATED):
+        d = readBody(response)
+        d.addCallback(lambda body: Failure(Exception(body)))
+        return d
+    return response

@@ -8,13 +8,14 @@ state.
 
 from zope.interface import implementer
 
-from pyrsistent import CheckedPSet, PClass, field, pmap_field
+from pyrsistent import CheckedPSet, PClass, field, pmap_field, freeze
 
 from . import IObject
 from ._invariants import instance_of, provider_of
 
+
 class ObjectMetadata(PClass):
-    items = pmap_field(unicode, unicode)
+    items = pmap_field(unicode, object)
 
     @property
     def name(self):
@@ -34,12 +35,20 @@ class NamespacedObjectMetadata(ObjectMetadata):
 @implementer(IObject)
 class Namespace(PClass):
     """
-    ``ConfigMap`` instances model `Kubernetes namespaces <https://kubernetes.io/docs/user-guide/namespaces/>`_.
+    ``Namespace`` instances model `Kubernetes namespaces
+    <https://kubernetes.io/docs/user-guide/namespaces/>`_.
     """
+    kind = u"Namespace"
+
     metadata = field(
         mandatory=True,
         invariant=instance_of(ObjectMetadata),
     )
+
+    @classmethod
+    def location(cls, base_url):
+        return base_url.child(u"api", u"v1", u"namespaces", u"")
+
 
     @classmethod
     def default(cls):
@@ -47,6 +56,15 @@ class Namespace(PClass):
         Get the default namespace.
         """
         return cls(ObjectMetadata(items={u"name": u"default"}))
+
+
+    @classmethod
+    def from_raw(cls, raw):
+        return cls(
+            metadata=ObjectMetadata(
+                items=freeze(raw[u"metadata"]),
+            ),
+        )
 
 
 @implementer(IObject)
@@ -59,6 +77,19 @@ class ConfigMap(PClass):
         mandatory=True,
         invariant=instance_of(NamespacedObjectMetadata),
     )
+
+    @classmethod
+    def location(cls, base_url):
+        return base_url.child(u"api", u"v1", u"configmaps", u"")
+
+
+    @classmethod
+    def from_raw(cls, raw):
+        return cls(
+            metadata=ObjectMetadata(
+                items=freeze(raw[u"metadata"]),
+            ),
+        )
 
 
 def _pset_field(iface):
