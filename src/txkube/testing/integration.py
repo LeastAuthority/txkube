@@ -13,8 +13,8 @@ from hypothesis import given
 
 from twisted.trial.unittest import TestCase
 
-from .. import IKubernetesClient, Namespace
-from .strategies import configmaps
+from .. import IKubernetesClient, Namespace, ConfigMap, ObjectCollection
+from .strategies import namespaces, configmaps
 
 
 def kubernetes_client_tests(get_kubernetes):
@@ -31,10 +31,25 @@ def kubernetes_client_tests(get_kubernetes):
             verifyObject(IKubernetesClient, self.client)
 
 
+        def test_namespace(self):
+            """
+            ``Namespace`` objects can be created and retrieved using the ``create``
+            and ``list`` methods of ``IKubernetesClient``.
+            """
+            obj = namespaces().example()
+            d = self.client.create(obj)
+            def created_namespace(created):
+                return self.client.list(Namespace)
+            d.addCallback(created_namespace)
+            def check_namespaces(namespaces):
+                self.assertEqual(ObjectCollection(items={obj}), namespaces)
+            d.addCallback(check_namespaces)
+            return d
+
         def test_configmap(self):
             """
-            ``ConfigMap`` objects can be created and enumerated using the ``create``
-            and ``enumerate`` methods of ``IKubernetesClient``.
+            ``ConfigMap`` objects can be created and retrieved using the ``create``
+            and ``list`` methods of ``IKubernetesClient``.
             """
             obj = configmaps().example()
             # To avoid having to create the namespace (for now), move it to
@@ -42,10 +57,10 @@ def kubernetes_client_tests(get_kubernetes):
             # obj = attr.assoc(obj, Namespace.default())
             d = self.client.create(obj)
             def created_configmap(created):
-                return self.client.enumerate(ConfigMap)
+                return self.client.list(ConfigMap)
             d.addCallback(created_configmap)
             def check_configmaps(configmaps):
-                self.assertEqual({obj}, configmaps)
+                self.assertEqual(ObjectCollection(items={obj}), configmaps)
             d.addCallback(check_configmaps)
             return d
 

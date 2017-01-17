@@ -11,6 +11,7 @@ __all__ = [
     "network_client", "memory_client",
 
     "ObjectMetadata", "NamespacedObjectMetadata", "ConfigMap",
+    "ObjectCollection",
 ]
 
 from incremental import Version
@@ -22,4 +23,8 @@ from ._interface import IObject, IKubernetes, IKubernetesClient
 from ._network import network_kubernetes
 from ._memory import memory_kubernetes
 
-from ._model import ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap
+from ._model import (
+    ObjectMetadata, NamespacedObjectMetadata,
+    Namespace, ConfigMap,
+    ObjectCollection,
+)

@@ -38,6 +38,13 @@ class _NetworkClient(object):
         return succeed(obj)
 
 
+    def list(self, kind):
+        """
+        Issue a I{GET} to retrieve objects of a given kind.
+        """
+        return succeed(None)
+
+
 @implementer(IKubernetes)
 @attr.s(frozen=True)
 class _NetworkKubernetes(object):

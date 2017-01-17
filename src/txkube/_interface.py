@@ -38,16 +38,28 @@ class IKubernetes(Interface):
         """
 
 
+
 class IKubernetesClient(Interface):
     """
     An ``IKubernetesClient`` provider allows access to the API of a particular
     Kubernetes deployment.
     """
+    def list(kind):
+        """
+        Retrieve objects of the given kind.
+
+        :param type kind: A model type representing the object kind to
+            retrieve.  For example ``ConfigMap`` or ``Namespace``.
+
+        :return Deferred(ObjectList): A collection of the matching objects.
+        """
+
+
     def create(obj):
         """
         Create a new object in the given namespace.
 
         :param IObject obj: A description of the object to create.
 
-        :return IObject: A description of the created object.
+        :return Deferred(IObject): A description of the created object.
         """

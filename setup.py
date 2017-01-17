@@ -21,6 +21,7 @@ setuptools.setup(
     install_requires=[
         "zone.interface",
         "attr",
+        "pyrsistent",
         "incremental",
         "twisted[tls]",
     ],
