@@ -46,6 +46,15 @@ For additional development dependencies, install the ``dev`` extra::
 
   $ pip install txkube[dev]
 
+Testing
+-------
+
+txkube uses pyunit-style tests.
+After installing the development dependencies, you can run the test suite with trial::
+
+  $ pip install txkube[dev]
+  $ trial txkube
+
 License
 -------
 
