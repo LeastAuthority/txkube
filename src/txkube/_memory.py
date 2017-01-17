@@ -37,7 +37,7 @@ class _MemoryKubernetes(object):
     subset of the external Kubernetes API.
     """
     def __init__(self):
-        base_url = URL.fromText(u"https://localhost/")
+        base_url = URL.fromText(u"https://kubernetes.example.invalid./")
         self._resource = _kubernetes_resource()
         self._kubernetes = network_kubernetes(
             base_url=base_url,
