@@ -14,7 +14,7 @@ __all__ = [
 from incremental import Version
 
 from ._metadata import version_tuple as _version_tuple
-version = Version("pykube", *_version_tuple)
+version = Version("txkube", *_version_tuple)
 
 from ._interface import IKubernetes, IKubernetesClient
 from ._network import network_kubernetes
