@@ -20,9 +20,10 @@ def object_name():
     alphabet = ascii_lowercase + digits + b"-"
     return builds(
         lambda parts: b"".join(parts).decode("ascii"),
-        lists(sampled_from(alphabet), average_size=10),
+        lists(sampled_from(alphabet), min_size=1, average_size=10),
+    ).filter(
+        lambda value: not (value.startswith(b"-") or value.endswith(b"-"))
     )
-
 
 def object_metadatas():
     return builds(
