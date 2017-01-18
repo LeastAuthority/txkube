@@ -19,6 +19,8 @@ from twisted.python.url import URL
 
 from twisted.web.resource import Resource, NoResource
 
+from eliot import Message
+
 from treq.testing import RequestTraversalAgent
 
 from . import (
@@ -115,14 +117,15 @@ class CollectionV1(Resource):
         obj = self._kind_type.from_raw(loads(request.content.read()))
         self._set_collection(self._get_collection().add(obj))
         request.method = b"GET"
-        return self.getChild(request, obj.metadata.name).render(request)
+        return self.getChild(obj.metadata.name, request).render(request)
 
-    def getChild(self, request, name):
-        import pdb; pdb.set_trace()
+    def getChild(self, name, request):
         try:
             obj = self._get_collection().item_by_name(name)
         except KeyError:
+            Message.log(get_child=u"CollectionV1", name=name, found=False)
             return NoResource()
+        Message.log(get_child=u"CollectionV1", name=name, found=True)
         return self._object_resource_type(obj)
 
 
@@ -140,10 +143,12 @@ class NamespaceV1(ObjectV1):
         ObjectV1.__init__(self, obj)
         self._state = state
 
-    def getChild(self, request, name):
+
+    def getChild(self, name, request):
+        Message.log(get_child=u"NamespaceV1", name=name, found=True)
         get_collection = lambda: getattr(self._state, name)
         set_collection = lambda value: setattr(self._state, name, value)
-        return NamespacedCollectionV1(self.namespace.name, get_collection, set_collection)
+        return NamespacedCollectionV1(self._obj.metadata.name, get_collection, set_collection)
 
 
 class NamespacedCollectionV1(Resource):
@@ -153,6 +158,23 @@ class NamespacedCollectionV1(Resource):
         self._namespace = namespace
         self._get_collection = get_collection
         self._set_collection = set_collection
+
+
+    def getChild(self, name, request):
+        try:
+            obj = self._get_collection().item_by_name(name)
+        except KeyError:
+            Message.log(get_child=u"NamespacedCollectionV1", name=name, found=False)
+            return NoResource()
+        Message.log(get_child=u"NamespacedCollectionV1", name=name, found=True)
+        return ObjectV1(obj)
+
+
+    def render_POST(self, request):
+        obj = Namespace.from_raw(loads(request.content.read()))
+        self._set_collection(self._get_collection().add(obj))
+        request.method = b"GET"
+        return self.getChild(obj.metadata.name, request).render(request)
 
 
     def render_GET(self):
