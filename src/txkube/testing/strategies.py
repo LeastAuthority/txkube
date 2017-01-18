@@ -9,9 +9,9 @@ from string import ascii_lowercase, digits
 
 from pyrsistent import pmap
 
-from hypothesis.strategies import builds, fixed_dictionaries, text, lists, sampled_from
+from hypothesis.strategies import none, builds, fixed_dictionaries, lists, sampled_from
 
-from .. import NamespacedObjectMetadata, Namespace, ConfigMap
+from .. import ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap
 
 
 def object_name():
@@ -26,24 +26,35 @@ def object_name():
     )
 
 def object_metadatas():
+    """
+    Strategy to build ``ObjectMetadata``.
+    """
     return builds(
-        NamespacedObjectMetadata,
+        ObjectMetadata,
         items=fixed_dictionaries({
             u"name": object_name(),
+            u"uid": none(),
         }).map(pmap),
     )
 
 
 def namespaced_object_metadatas():
+    """
+    Strategy to build ``NamespacedObjectMetadata``.
+    """
     return builds(
-        lambda metadata, namespace: metadata.transform(
-            ["items"], lambda items: items.set(u"namespace", namespace),
+        lambda obj_metadata, namespace: NamespacedObjectMetadata(
+            items=obj_metadata.items.set(u"namespace", namespace),
         ),
-        metadata=object_metadatas(),
+        obj_metadata=object_metadatas(),
         namespace=object_name(),
     )
 
+
 def namespaces():
+    """
+    Strategy to build ``Namespace``.
+    """
     return builds(
         Namespace,
         metadata=object_metadatas(),
@@ -51,7 +62,7 @@ def namespaces():
 
 def configmaps():
     """
-    Strategy for creating ``ConfigMap`` Kubernetes objects.
+    Strategy to build ``ConfigMap``.
     """
     return builds(
         ConfigMap,
