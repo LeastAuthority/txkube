@@ -47,7 +47,10 @@ class _NetworkClient(object):
     agent = attr.ib(validator=validators.provides(IAgent))
 
     def _get(self, url):
-        return self.agent.request(b"GET", url.asText().encode("ascii"))
+        action = start_action(action_type=u"network-client:get")
+        with action.context():
+            d = self.agent.request(b"GET", url.asText().encode("ascii"))
+            return DeferredContext(d).addActionFinish()
 
 
     def _post(self, url, obj):
@@ -58,44 +61,48 @@ class _NetworkClient(object):
                 url.asText().encode("ascii"),
                 bodyProducer=FileBodyProducer(BytesIO(dumps(obj))),
             )
-            DeferredContext(d).addActionFinish()
-        return d
+            return DeferredContext(d).addActionFinish()
 
 
     def create(self, obj):
         """
         Issue a I{POST} to create the given object.
         """
-        url = self.kubernetes.base_url.child(*collection_location(obj))
-        d = self._post(url, {
-            u"metadata": thaw(obj.metadata.items),
-        })
-        d.addCallback(check_status)
-        d.addCallback(readBody)
-        d.addCallback(loads)
-        d.addCallback(Namespace.from_raw)
-        return d
+        action = start_action(action_type=u"network-client:create")
+        with action.context():
+            url = self.kubernetes.base_url.child(*collection_location(obj))
+            document = {
+                u"metadata": thaw(obj.metadata.items),
+            }
+            d = DeferredContext(self._post(url, document))
+            d.addCallback(check_status)
+            d.addCallback(readBody)
+            d.addCallback(loads)
+            d.addCallback(Namespace.from_raw)
+            return d.addActionFinish()
 
 
     def list(self, kind):
         """
         Issue a I{GET} to retrieve objects of a given kind.
         """
-        url = self.kubernetes.base_url.child(*collection_location(kind))
-        d = self._get(url)
-        d.addCallback(check_status)
-        d.addCallback(readBody)
-        d.addCallback(loads)
-        def get_namespaces(result):
-            return ObjectCollection(
-                items=(
-                    Namespace.from_raw(obj)
-                    for obj
-                    in result[u"items"]
-                ),
-            )
-        d.addCallback(get_namespaces)
-        return d
+        action = start_action(action_type=u"network-client:list")
+        with action.context():
+            url = self.kubernetes.base_url.child(*collection_location(kind))
+            d = DeferredContext(self._get(url))
+            d.addCallback(check_status)
+            d.addCallback(readBody)
+            d.addCallback(loads)
+            def get_namespaces(result):
+                return ObjectCollection(
+                    items=(
+                        Namespace.from_raw(obj)
+                        for obj
+                        in result[u"items"]
+                    ),
+                )
+            d.addCallback(get_namespaces)
+            return d.addActionFinish()
 
 
 def collection_location(obj):
