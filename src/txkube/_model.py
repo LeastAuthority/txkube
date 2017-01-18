@@ -8,14 +8,20 @@ state.
 
 from zope.interface import implementer
 
-from pyrsistent import CheckedPSet, PClass, field, pmap_field, freeze
+from pyrsistent import CheckedPSet, PClass, field, pmap_field, pset, freeze
 
 from . import IObject
 from ._invariants import instance_of, provider_of
 
 
 class ObjectMetadata(PClass):
+    _required = pset({u"name", u"uid"})
+
     items = pmap_field(unicode, object)
+    __invariant__ = lambda m: (
+        len(m._required - pset(m.items)) == 0,
+        u"Required metadata missing: {}".format(m._required - pset(m.items)),
+    )
 
     @property
     def name(self):
@@ -27,6 +33,8 @@ class ObjectMetadata(PClass):
 
 
 class NamespacedObjectMetadata(ObjectMetadata):
+    _required = ObjectMetadata._required.add(u"namespace")
+
     @property
     def namespace(self):
         return self.items[u"namespace"]
@@ -44,15 +52,6 @@ class Namespace(PClass):
         mandatory=True,
         invariant=instance_of(ObjectMetadata),
     )
-
-    @classmethod
-    def list_location(cls):
-        return (u"api", u"v1", u"namespaces", u"")
-
-
-    def create_location(self):
-        return (u"api", u"v1", u"namespaces", u"")
-
 
     @classmethod
     def default(cls):
@@ -83,15 +82,6 @@ class ConfigMap(PClass):
         mandatory=True,
         invariant=instance_of(NamespacedObjectMetadata),
     )
-
-    @classmethod
-    def list_location(cls):
-        return (u"api", u"v1", u"configmaps", u"")
-
-
-    def create_location(self):
-        return (u"api", u"v1", u"namespaces", self.metadata.namespace, u"configmaps", u"")
-
 
     @classmethod
     def from_raw(cls, raw):

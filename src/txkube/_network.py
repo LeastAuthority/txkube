@@ -66,7 +66,7 @@ class _NetworkClient(object):
         """
         Issue a I{POST} to create the given object.
         """
-        url = self.kubernetes.base_url.child(*obj.create_location())
+        url = self.kubernetes.base_url.child(*collection_location(obj))
         d = self._post(url, {
             u"metadata": thaw(obj.metadata.items),
         })
@@ -81,7 +81,7 @@ class _NetworkClient(object):
         """
         Issue a I{GET} to retrieve objects of a given kind.
         """
-        url = self.kubernetes.base_url.child(*kind.list_location())
+        url = self.kubernetes.base_url.child(*collection_location(kind))
         d = self._get(url)
         d.addCallback(check_status)
         d.addCallback(readBody)
@@ -96,6 +96,25 @@ class _NetworkClient(object):
             )
         d.addCallback(get_namespaces)
         return d
+
+
+def collection_location(obj):
+    """
+    Get the URL for the collection of objects like ``obj``.
+
+    :param obj: Either a type representing a Kubernetes object kind or an
+        instance of such a type.
+
+    :return tuple[unicode]: Some path segments to stick on to a base URL to
+        construct the location of the collection of objects like the one
+        given.
+    """
+    collection = obj.kind.lower() + u"s"
+    try:
+        namespace = obj.metadata.namespace
+    except AttributeError:
+        return (u"api", u"v1", collection, u"")
+    return (u"api", u"v1", u"namespaces", namespace, collection, u"")
 
 
 @implementer(IKubernetes)
