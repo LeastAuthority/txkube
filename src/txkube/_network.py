@@ -6,7 +6,6 @@ A Kubernetes client which uses Twisted to interact with Kubernetes
 via HTTP.
 """
 
-from io import BytesIO
 from json import loads, dumps
 
 from pyrsistent import thaw
@@ -22,20 +21,48 @@ from twisted.python.failure import Failure
 
 from twisted.internet.defer import succeed
 
-from twisted.web.iweb import IAgent
+from twisted.web.iweb import IBodyProducer, IAgent
 from twisted.web.http import OK, CREATED
-from twisted.web.client import FileBodyProducer, Agent, readBody
+from twisted.web.client import Agent, readBody
 
-from eliot import Message, start_action
+from eliot import start_action
 from eliot.twisted import DeferredContext
 
 from . import (
     IKubernetes, IKubernetesClient,
-    ObjectMetadata, Namespace, ObjectCollection,
+    Namespace, ObjectCollection,
 )
 
 def network_kubernetes(**kw):
     return _NetworkKubernetes(**kw)
+
+
+# It would be simpler to use FileBodyProducer(BytesIO(...)) but:
+#
+#  - https://twistedmatrix.com/trac/ticket/9003
+#  - https://github.com/twisted/treq/issues/161
+@implementer(IBodyProducer)
+@attr.s(frozen=True)
+class _BytesProducer(object):
+    _data = attr.ib(validator=validators.instance_of(bytes), repr=False)
+
+    @property
+    def length(self):
+        return len(self._data)
+
+    def startProducing(self, consumer):
+        consumer.write(self._data)
+        return succeed(None)
+
+    def stopProducing(self):
+        pass
+
+    def pauseProducing(self):
+        pass
+
+    def resumeProducing(self):
+        pass
+
 
 
 @implementer(IKubernetesClient)
@@ -59,7 +86,7 @@ class _NetworkClient(object):
             d = self.agent.request(
                 b"POST",
                 url.asText().encode("ascii"),
-                bodyProducer=FileBodyProducer(BytesIO(dumps(obj))),
+                bodyProducer=_BytesProducer(dumps(obj)),
             )
             return DeferredContext(d).addActionFinish()
 
