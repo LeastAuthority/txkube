@@ -83,7 +83,7 @@ def pick_trust_for_twisted(netloc, possible):
     server.  Otherwise, ``None``.
     """
     try:
-        trust_cert = self.trust_roots[netloc]
+        trust_cert = possible[netloc]
     except KeyError:
         return None
 
