@@ -1,4 +1,10 @@
 # Copyright Least Authority Enterprises.
 # See LICENSE for details.
 
-from testtools import TestCase
+__all__ = [
+    "strategies",
+    "integration",
+    "TestCase",
+]
+
+from ._testcase import TestCase

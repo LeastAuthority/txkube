@@ -24,6 +24,7 @@ setuptools.setup(
         "pyrsistent",
         "incremental",
         "twisted[tls]",
+        "eliot",
     ],
     extras_require={
         "dev": [
