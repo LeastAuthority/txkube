@@ -26,6 +26,9 @@ from twisted.web.iweb import IAgent
 from twisted.web.http import OK, CREATED
 from twisted.web.client import FileBodyProducer, Agent, readBody
 
+from eliot import Message, start_action
+from eliot.twisted import DeferredContext
+
 from . import (
     IKubernetes, IKubernetesClient,
     ObjectMetadata, Namespace, ObjectCollection,
@@ -48,18 +51,22 @@ class _NetworkClient(object):
 
 
     def _post(self, url, obj):
-        return self.agent.request(
-            b"POST",
-            url.asText().encode("ascii"),
-            bodyProducer=FileBodyProducer(BytesIO(dumps(obj))),
-        )
+        action = start_action(action_type=u"network-client:post")
+        with action.context():
+            d = self.agent.request(
+                b"POST",
+                url.asText().encode("ascii"),
+                bodyProducer=FileBodyProducer(BytesIO(dumps(obj))),
+            )
+            DeferredContext(d).addActionFinish()
+        return d
 
 
     def create(self, obj):
         """
         Issue a I{POST} to create the given object.
         """
-        url = obj.location(self.kubernetes.base_url)
+        url = self.kubernetes.base_url.child(*obj.create_location())
         d = self._post(url, {
             u"metadata": thaw(obj.metadata.items),
         })
@@ -74,7 +81,7 @@ class _NetworkClient(object):
         """
         Issue a I{GET} to retrieve objects of a given kind.
         """
-        url = kind.location(self.kubernetes.base_url)
+        url = self.kubernetes.base_url.child(*kind.list_location())
         d = self._get(url)
         d.addCallback(check_status)
         d.addCallback(readBody)

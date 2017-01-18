@@ -46,8 +46,12 @@ class Namespace(PClass):
     )
 
     @classmethod
-    def location(cls, base_url):
-        return base_url.child(u"api", u"v1", u"namespaces", u"")
+    def list_location(cls):
+        return (u"api", u"v1", u"namespaces", u"")
+
+
+    def create_location(self):
+        return (u"api", u"v1", u"namespaces", u"")
 
 
     @classmethod
@@ -73,14 +77,20 @@ class ConfigMap(PClass):
     ``ConfigMap`` instances model `ConfigMap objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
     """
+    kind = u"ConfigMap"
+
     metadata = field(
         mandatory=True,
         invariant=instance_of(NamespacedObjectMetadata),
     )
 
     @classmethod
-    def location(cls, base_url):
-        return base_url.child(u"api", u"v1", u"configmaps", u"")
+    def list_location(cls):
+        return (u"api", u"v1", u"configmaps", u"")
+
+
+    def create_location(self):
+        return (u"api", u"v1", u"namespaces", self.metadata.namespace, u"configmaps", u"")
 
 
     @classmethod
