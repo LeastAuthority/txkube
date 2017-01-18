@@ -12,6 +12,8 @@ __all__ = [
 
     "ObjectMetadata", "NamespacedObjectMetadata", "ConfigMap",
     "Namespace", "ObjectCollection",
+
+    "network_kubernetes", "memory_kubernetes",
 ]
 
 from incremental import Version
