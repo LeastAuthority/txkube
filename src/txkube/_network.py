@@ -73,34 +73,40 @@ class _NetworkClient(object):
     kubernetes = attr.ib(validator=validators.provides(IKubernetes))
     agent = attr.ib(validator=validators.provides(IAgent))
 
-    def _get(self, url):
-        action = start_action(action_type=u"network-client:get")
+    def _request(self, method, url, headers=None, bodyProducer=None):
+        action = start_action(
+            action_type=u"network-client:request",
+            method=method,
+            url=url.asText(),
+        )
         with action.context():
-            d = self.agent.request(b"GET", url.asText().encode("ascii"))
+            d = self.agent.request(
+                method, url.asText().encode("ascii"), headers, bodyProducer,
+            )
             return DeferredContext(d).addActionFinish()
+
+
+    def _get(self, url):
+        return self._request(b"GET", url)
 
 
     def _post(self, url, obj):
-        action = start_action(action_type=u"network-client:post")
-        with action.context():
-            d = self.agent.request(
-                b"POST",
-                url.asText().encode("ascii"),
-                bodyProducer=_BytesProducer(dumps(obj)),
-            )
-            return DeferredContext(d).addActionFinish()
+        return self._request(
+            b"POST", url, bodyProducer=_BytesProducer(dumps(obj)),
+        )
 
 
     def create(self, obj):
         """
         Issue a I{POST} to create the given object.
         """
-        action = start_action(action_type=u"network-client:create")
+        action = start_action(
+            action_type=u"network-client:create",
+        )
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(obj))
-            document = {
-                u"metadata": thaw(obj.metadata.items),
-            }
+            document = obj.to_raw()
+            action.add_success_fields(object=document)
             d = DeferredContext(self._post(url, document))
             d.addCallback(check_status)
             d.addCallback(readBody)
@@ -113,7 +119,10 @@ class _NetworkClient(object):
         """
         Issue a I{GET} to retrieve objects of a given kind.
         """
-        action = start_action(action_type=u"network-client:list")
+        action = start_action(
+            action_type=u"network-client:list",
+            kind=kind,
+        )
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(kind))
             d = DeferredContext(self._get(url))
