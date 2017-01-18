@@ -8,7 +8,7 @@ state.
 
 from zope.interface import implementer
 
-from pyrsistent import CheckedPSet, PClass, field, pmap_field, pset, freeze
+from pyrsistent import CheckedPSet, PClass, field, pmap_field, pset, freeze, thaw
 
 from . import IObject
 from ._invariants import instance_of, provider_of
@@ -69,6 +69,17 @@ class Namespace(PClass):
             ),
         )
 
+    def to_raw(self):
+        return {
+            u"kind": self.kind,
+            u"apiVersion": u"v1",
+            u"metadata": thaw(self.metadata.items),
+            u"spec": {},
+            u"status": {},
+        }
+
+
+
 
 @implementer(IObject)
 class ConfigMap(PClass):
@@ -90,6 +101,16 @@ class ConfigMap(PClass):
                 items=freeze(raw[u"metadata"]),
             ),
         )
+
+
+    def to_raw(self):
+        return {
+            u"kind": self.kind,
+            u"apiVersion": u"v1",
+            u"metadata": thaw(self.metadata.items),
+            u"spec": {},
+            u"status": {},
+        }
 
 
 def _pset_field(iface):
@@ -114,4 +135,33 @@ class ObjectCollection(PClass):
 
     :ivar pset items: The objects belonging to this collection.
     """
+    kind = u"List"
     items = _pset_field(IObject)
+
+    def to_raw(self):
+        return {
+            u"kind": self.kind,
+            u"apiVersion": u"v1",
+            u"metadata": {},
+            u"items": list(
+                obj.to_raw()
+                for obj
+                in self.items
+            ),
+        }
+
+    def item_by_name(self, name):
+        for obj in self.items:
+            if obj.metadata.name == name:
+                return obj
+        raise KeyError(name)
+
+
+    def add(self, obj):
+        return self.transform([u"items"], add(obj))
+
+
+def add(value):
+    def evolver(pset):
+        return pset.add(value)
+    return evolver
