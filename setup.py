@@ -19,11 +19,15 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     install_requires=[
-        "incremental", "twisted[tls]",
+        "incremental",
+        "twisted[tls]",
     ],
     extras_require={
         "dev": [
             "treq",
+            "testtools",
+            "eliot",
+            "eliot-tree",
         ],
     },
 )
