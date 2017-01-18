@@ -9,7 +9,7 @@ import attr
 
 from zope.interface.verify import verifyObject
 
-from pyrsistent import pmap, pset
+from pyrsistent import pmap, pset, thaw
 
 from hypothesis import given
 
@@ -104,17 +104,23 @@ def kubernetes_client_tests(get_kubernetes):
             and ``list`` methods of ``IKubernetesClient``.
             """
             obj = configmaps().example()
-            # To avoid having to create the namespace (for now), move it to
-            # the default namespace.
-            # obj = attr.assoc(obj, Namespace.default())
-            d = self.client.create(obj)
+            namespace = namespaces().example()
+            # Move the object into the namespace we're going to create.
+            obj = obj.transform(
+                [u"metadata", u"items", u"namespace"],
+                namespace.metadata.name,
+            )
+            d = self.client.create(namespace)
+            def created_namespace(ignored):
+                return self.client.create(obj)
+            d.addCallback(created_namespace)
             def created_configmap(created):
                 self.assertThat(created, matches_configmap(obj))
                 return self.client.list(ConfigMap)
             d.addCallback(created_configmap)
             def check_configmaps(configmaps):
                 self.assertThat(configmaps, IsInstance(ObjectCollection))
-                self.assertThat(configmaps.items, MatchAny(matches_configmaps(obj)))
+                self.assertThat(configmaps.items, AnyMatch(matches_configmap(obj)))
             d.addCallback(check_configmaps)
             return d
 
