@@ -5,8 +5,6 @@
 xUnit TestCase for txkube testing.
 """
 
-from fixtures import Fixture
-
 from testtools import TestCase as TesttoolsTestCase
 
 from ._eliot import CaptureEliotLogs
