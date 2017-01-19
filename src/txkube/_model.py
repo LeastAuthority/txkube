@@ -2,7 +2,7 @@
 # See LICENSE for details.
 
 """
-Behaviorless structures for representing different kinds of Kubernetes
+Functional structures for representing different kinds of Kubernetes
 state.
 """
 
@@ -97,7 +97,7 @@ class ConfigMap(PClass):
     @classmethod
     def from_raw(cls, raw):
         return cls(
-            metadata=ObjectMetadata(
+            metadata=NamespacedObjectMetadata(
                 items=freeze(raw[u"metadata"]),
             ),
         )
