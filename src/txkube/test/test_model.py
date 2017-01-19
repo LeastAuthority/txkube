@@ -13,7 +13,10 @@ from hypothesis import given
 from hypothesis.strategies import choices
 
 from ..testing import TestCase
-from ..testing.strategies import object_metadatas, namespaced_object_metadatas
+from ..testing.strategies import (
+    object_metadatas, namespaced_object_metadatas, namespaces, configmaps,
+    objectcollections,
+)
 
 from .._model import (
     ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap, ObjectCollection,
@@ -71,9 +74,50 @@ class ObjectMetadataTests(
 
 
 
-class NamespacedObjectMetadata(
+class NamespacedObjectMetadataTests(
     object_metadata_tests(namespaced_object_metadatas, [u"name", u"uid", u"namespace"])
 ):
     """
     Tests for ``NamespacedObjectMetadata``.
+    """
+
+
+def iobject_tests(loader, strategy):
+    class Tests(TestCase):
+        """
+        Tests for ``IObject`` and ``IObjectLoader``.
+        """
+        @given(obj=strategy())
+        def test_roundtrip(self, obj):
+            """
+            ``IObject`` providers can be round-trip through a simplified object graph
+            using ``IObject.to_raw`` and ``IObjectLoader.from_raw``.
+            """
+            marshalled = obj.to_raw()
+            reloaded = loader.from_raw(marshalled)
+            remarshalled = reloaded.to_raw()
+            self.expectThat(obj, Equals(reloaded))
+            self.expectThat(marshalled, Equals(remarshalled))
+
+    return Tests
+
+
+
+class NamespaceTests(iobject_tests(Namespace, namespaces)):
+    """
+    Tests for ``Namespace``.
+    """
+
+
+
+class ConfigMapTests(iobject_tests(ConfigMap, configmaps)):
+    """
+    Tests for ``ConfigMap``.
+    """
+
+
+
+class ObjectCollectionTests(iobject_tests(ObjectCollection, objectcollections)):
+    """
+    Tests for ``ObjectCollection``.
     """

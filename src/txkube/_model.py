@@ -96,23 +96,31 @@ class ConfigMap(PClass):
         invariant=instance_of(NamespacedObjectMetadata),
     )
 
+    data = pmap_field(unicode, unicode, optional=True)
+
     @classmethod
     def from_raw(cls, raw):
         return cls(
             metadata=NamespacedObjectMetadata(
                 items=freeze(raw[u"metadata"]),
             ),
+            data=raw.get(u"data", None),
         )
 
 
     def to_raw(self):
-        return {
+        result = {
             u"kind": self.kind,
             u"apiVersion": u"v1",
             u"metadata": thaw(self.metadata.items),
-            u"spec": {},
-            u"status": {},
         }
+        if self.data is not None:
+            # Kubernetes only includes the item if there is some data.
+            #
+            # XXX I'm not sure if there's a difference between no data and
+            # data with no items.
+            result[u"data"] = thaw(self.data)
+        return result
 
 
 def _pset_field(iface):
@@ -146,11 +154,9 @@ class ObjectCollection(PClass):
     def from_raw(cls, raw):
         return cls(
             items=(
-                # Despite `kind` being a mandatory field, the items in a
-                # FooList don't come back with a `kind` item.  Fortunately,
-                # the top-level `kind` is something like `ConfigMapList` if
-                # you asked for `.../configmaps/`.  So pass that down as a
-                # hint.
+                # Unfortunately `kind` is an optional field.  Fortunately, the
+                # top-level `kind` is something like `ConfigMapList` if you
+                # asked for `.../configmaps/`.  So pass that down as a hint.
                 object_from_raw(obj, raw[u"kind"][:-len(u"List")])
                 for obj
                 in raw[u"items"]
@@ -166,7 +172,9 @@ class ObjectCollection(PClass):
             u"items": list(
                 obj.to_raw()
                 for obj
-                in self.items
+                # Give me a stable output ordering.  This makes the tests
+                # simpler.  I don't know if it mirrors Kubernetes behavior.
+                in sorted(self.items, key=lambda obj: obj.metadata.name),
             ),
         }
 
