@@ -35,6 +35,7 @@ setuptools.setup(
             "hypothesis",
             "eliot",
             "eliot-tree",
+            "klein",
         ],
     },
 )

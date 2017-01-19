@@ -19,6 +19,10 @@ from twisted.python.url import URL
 
 from twisted.web.resource import Resource, NoResource
 
+from klein import Klein
+
+from werkzeug.exceptions import NotFound
+
 from eliot import Message
 
 from treq.testing import RequestTraversalAgent
@@ -68,147 +72,99 @@ class _MemoryKubernetes(object):
 
 
 
+def _kubernetes_resource(state):
+    return _Kubernetes(state).app.resource()
+
+
 @attr.s
 class _KubernetesState(object):
     namespaces = attr.ib(default=ObjectCollection())
     configmaps = attr.ib(default=ObjectCollection())
 
-def _kubernetes_resource(state):
-    v1 = v1_root(state)
 
-    api = Resource()
-    api.putChild(b"v1", v1)
-
-    root = Resource()
-    root.putChild(b"api", api)
-
-    return root
-
-
-def v1_root(state):
+@attr.s(frozen=True)
+class _Kubernetes(object):
     """
-    Create the /api/v1 resource.
+    A place to stick a bunch of Klein definitions.
+
+    :ivar _KubernetesState state: The Kubernetes state with which the API will
+        be interacting.
     """
-    v1 = Resource()
+    state = attr.ib()
 
-    collection_name = Namespace.kind.lower() + u"s"
-    segment = collection_name.encode("ascii")
-    collection = CollectionV1(
-        Namespace.kind, Namespace, state, partial(NamespaceV1, state=state),
-    )
-    v1.putChild(segment, collection)
+    def _list(self, request, namespace, collection):
+        if namespace is not None:
+            # Unfortunately pset does not support transform. :( Use this more
+            # verbose .set() operation.
+            collection = collection.set(
+                u"items",
+                pset(obj for obj in collection.items if obj.metadata.namespace == namespace),
+            )
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        return dumps(collection.to_raw())
 
-    collection_name = ConfigMap.kind.lower() + u"s"
-    segment = collection_name.encode("ascii")
-    collection = CollectionV1(
-        ConfigMap.kind, ConfigMap, state, ObjectV1,
-    )
-    v1.putChild(segment, collection)
+    def _get(self, request, collection, name):
+        obj = collection.item_by_name(name)
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        return dumps(obj.to_raw())
 
-    return v1
+    def _create(self, request, type, collection, collection_name):
+        obj = type.from_raw(loads(request.content.read()))
+        setattr(self.state, collection_name, collection.add(obj))
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        return dumps(obj.to_raw())
 
+    app = Klein()
+    @app.handle_errors(NotFound)
+    def not_found(self, request):
+        request.responseHeaders.setRawHeader(u"content-type", [u"application/json"])
+        return dumps({u"message": u"boo"})
 
-class CollectionV1(Resource):
-    """
-    A resource which serves a collection of Kubernetes objects.
+    with app.subroute(u"/api/v1") as app:
+        @app.route(u"/namespaces", methods=[u"GET"])
+        @app.route(u"/namespaces/", methods=[u"GET"])
+        def list_namespaces(self, request):
+            """
+            Get all existing Namespaces.
+            """
+            return self._list(request, None, self.state.namespaces)
 
-    For example, /api/v1/namespaces or /api/v1/configmaps.
-    """
-    def __init__(self, kind, kind_type, state, object_resource_type):
-        Resource.__init__(self)
-        self.putChild(b"", self)
-        self._kind = kind
-        self._collection_kind = kind.lower() + u"s"
-        self._kind_type = kind_type
-        self._state = state
-        self._object_resource_type = object_resource_type
+        @app.route(u"/namespaces/<namespace>", methods=[u"GET"])
+        @app.route(u"/namespaces/<namespace>/", methods=[u"GET"])
+        def get_namespace(self, request, namespace):
+            """
+            Get one Namespace by name.
+            """
+            return self._get(request, self.state.namespaces, namespace)
 
-    def getChild(self, name, request):
-        try:
-            obj = getattr(self._state, self._collection_kind).item_by_name(name)
-        except KeyError:
-            Message.log(get_child=u"CollectionV1", name=name, found=False)
-            return NoResource()
-        Message.log(get_child=u"CollectionV1", name=name, found=True)
-        return self._object_resource_type(obj)
+        @app.route(u"/namespaces", methods=[u"POST"])
+        @app.route(u"/namespaces/", methods=[u"POST"])
+        def create_namespace(self, request):
+            """
+            Create a new Namespace.
+            """
+            return self._create(request, Namespace, self.state.namespaces, "namespaces")
 
-    def render_GET(self, request):
-        return dumps(getattr(self._state, self._collection_kind).to_raw())
+        @app.route(u"/configmaps", methods=[u"GET"])
+        @app.route(u"/configmaps/", methods=[u"GET"])
+        def list_configmaps(self, request, namespace=None):
+            """
+            Get all existing ConfigMaps.
+            """
+            return self._list(request, namespace, self.state.configmaps)
 
-    def render_POST(self, request):
-        obj = self._kind_type.from_raw(loads(request.content.read()))
-        setattr(self._state, self._collection_kind, getattr(self._state, self._collection_kind).add(obj))
-        request.method = b"GET"
-        return self.getChild(obj.metadata.name, request).render(request)
+        @app.route(u"/configmaps/<configmap>", methods=[u"GET"])
+        @app.route(u"/configmaps/<configmap>/", methods=[u"GET"])
+        def get_configmap(self, request, configmap):
+            """
+            Get one ConfigMap by name.
+            """
+            return self._get(request, self.state.configmaps, configmap)
 
-
-class ObjectV1(Resource):
-    """
-    A resource which serves a single Kubernetes object.
-
-    For example, /api/v1/secrets/default-token-foo (but not /api/v1/namespaces/default).
-    """
-    def __init__(self, obj):
-        Resource.__init__(self)
-        self._obj = obj
-
-    def render_GET(self, request):
-        return dumps(self._obj.to_raw())
-
-
-class NamespaceV1(ObjectV1):
-    """
-    A resource which serves a single Kubernetes namespace.
-
-    eg /api/v1/namespaces/default
-    """
-    def __init__(self, obj, state):
-        ObjectV1.__init__(self, obj)
-        self._state = state
-
-
-    def getChild(self, name, request):
-        Message.log(get_child=u"NamespaceV1", name=name, found=True)
-        return NamespacedCollectionV1(self._obj.metadata.name, self._state, name)
-
-
-class NamespacedCollectionV1(Resource):
-    """
-    A resource which serves a collection of Kubernetes objects which belong to
-    a particular namespace.
-
-    eg /api/v1/namespaces/default/configmaps
-    """
-    def __init__(self, namespace, state, kind):
-        Resource.__init__(self)
-        self.putChild(b"", self)
-        self._namespace = namespace
-        self._state = state
-        self._kind = kind
-
-
-    def getChild(self, name, request):
-        try:
-            obj = getattr(self._state, self._kind).item_by_name(name)
-        except KeyError:
-            Message.log(get_child=u"NamespacedCollectionV1", name=name, found=False)
-            return NoResource()
-        Message.log(get_child=u"NamespacedCollectionV1", name=name, found=True)
-        return ObjectV1(obj)
-
-
-    def render_POST(self, request):
-        obj = Namespace.from_raw(loads(request.content.read()))
-        setattr(self._state, self._kind, getattr(self._state, self._kind).add(obj))
-        request.method = b"GET"
-        return self.getChild(obj.metadata.name, request).render(request)
-
-
-    def render_GET(self):
-        objects = (
-            obj
-            for obj
-            in getatr(self._state, self._kind).items
-            if obj.metadata.namespace == self._namespace
-        )
-        return dumps(ObjectCollection(items=objects).to_raw())
+        @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
+        @app.route(u"/namespaces/<namespace>/configmaps/", methods=[u"POST"])
+        def create_configmap(self, request, namespace):
+            """
+            Create a new ConfigMap.
+            """
+            return self._create(request, ConfigMap, self.state.configmaps, "configmaps")
