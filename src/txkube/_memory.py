@@ -86,6 +86,9 @@ def _kubernetes_resource(state):
 
 
 def v1_root(state):
+    """
+    Create the /api/v1 resource.
+    """
     v1 = Resource()
 
     collection_name = Namespace.kind.lower() + u"s"
@@ -106,6 +109,11 @@ def v1_root(state):
 
 
 class CollectionV1(Resource):
+    """
+    A resource which serves a collection of Kubernetes objects.
+
+    For example, /api/v1/namespaces or /api/v1/configmaps.
+    """
     def __init__(self, kind, kind_type, state, object_resource_type):
         Resource.__init__(self)
         self.putChild(b"", self)
@@ -114,15 +122,6 @@ class CollectionV1(Resource):
         self._kind_type = kind_type
         self._state = state
         self._object_resource_type = object_resource_type
-
-    def render_GET(self, request):
-        return dumps(getattr(self._state, self._collection_kind).to_raw())
-
-    def render_POST(self, request):
-        obj = self._kind_type.from_raw(loads(request.content.read()))
-        setattr(self._state, self._collection_kind, getattr(self._state, self._collection_kind).add(obj))
-        request.method = b"GET"
-        return self.getChild(obj.metadata.name, request).render(request)
 
     def getChild(self, name, request):
         try:
@@ -133,8 +132,22 @@ class CollectionV1(Resource):
         Message.log(get_child=u"CollectionV1", name=name, found=True)
         return self._object_resource_type(obj)
 
+    def render_GET(self, request):
+        return dumps(getattr(self._state, self._collection_kind).to_raw())
+
+    def render_POST(self, request):
+        obj = self._kind_type.from_raw(loads(request.content.read()))
+        setattr(self._state, self._collection_kind, getattr(self._state, self._collection_kind).add(obj))
+        request.method = b"GET"
+        return self.getChild(obj.metadata.name, request).render(request)
+
 
 class ObjectV1(Resource):
+    """
+    A resource which serves a single Kubernetes object.
+
+    For example, /api/v1/secrets/default-token-foo (but not /api/v1/namespaces/default).
+    """
     def __init__(self, obj):
         Resource.__init__(self)
         self._obj = obj
@@ -144,6 +157,11 @@ class ObjectV1(Resource):
 
 
 class NamespaceV1(ObjectV1):
+    """
+    A resource which serves a single Kubernetes namespace.
+
+    eg /api/v1/namespaces/default
+    """
     def __init__(self, obj, state):
         ObjectV1.__init__(self, obj)
         self._state = state
@@ -155,6 +173,12 @@ class NamespaceV1(ObjectV1):
 
 
 class NamespacedCollectionV1(Resource):
+    """
+    A resource which serves a collection of Kubernetes objects which belong to
+    a particular namespace.
+
+    eg /api/v1/namespaces/default/configmaps
+    """
     def __init__(self, namespace, state, kind):
         Resource.__init__(self)
         self.putChild(b"", self)
