@@ -172,6 +172,14 @@ class ObjectCollection(PClass):
 
 
     def item_by_name(self, name):
+        """
+        Find an item in this collection by its name metadata.
+
+        :param unicode name: The name of the object for which to search.
+
+        :raise KeyError: If no object matching the given name is found.
+        :return IObject: The object with the matching name.
+        """
         for obj in self.items:
             if obj.metadata.name == name:
                 return obj
