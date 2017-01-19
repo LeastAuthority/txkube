@@ -10,8 +10,9 @@ __all__ = [
     "IObject", "IKubernetes", "IKubernetesClient",
     "network_client", "memory_client",
 
-    "ObjectMetadata", "NamespacedObjectMetadata", "ConfigMap",
-    "Namespace", "ObjectCollection",
+    "ObjectMetadata", "NamespacedObjectMetadata",
+    "Namespace", "ConfigMap",
+    "ObjectCollection",
 
     "network_kubernetes", "memory_kubernetes",
 ]
