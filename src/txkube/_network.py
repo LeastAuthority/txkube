@@ -129,15 +129,7 @@ class _NetworkClient(object):
             d.addCallback(check_status)
             d.addCallback(readBody)
             d.addCallback(loads)
-            def get_namespaces(result):
-                return ObjectCollection(
-                    items=(
-                        Namespace.from_raw(obj)
-                        for obj
-                        in result[u"items"]
-                    ),
-                )
-            d.addCallback(get_namespaces)
+            d.addCallback(ObjectCollection.from_raw)
             return d.addActionFinish()
 
 
