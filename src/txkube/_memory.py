@@ -73,7 +73,6 @@ class _KubernetesState(object):
     namespaces = attr.ib(default=ObjectCollection())
     configmaps = attr.ib(default=ObjectCollection())
 
-
 def _kubernetes_resource(state):
     v1 = v1_root(state)
 
@@ -88,40 +87,46 @@ def _kubernetes_resource(state):
 
 def v1_root(state):
     v1 = Resource()
-    for model in [Namespace]:
-        collection_name = model.kind.lower() + u"s"
-        segment = collection_name.encode("ascii")
-        get_collection = lambda: getattr(state, collection_name)
-        set_collection = lambda value: setattr(state, collection_name, value)
-        collection = CollectionV1(
-            model.kind, model, get_collection, set_collection, partial(NamespaceV1, state=state),
-        )
-        v1.putChild(segment, collection)
+
+    collection_name = Namespace.kind.lower() + u"s"
+    segment = collection_name.encode("ascii")
+    collection = CollectionV1(
+        Namespace.kind, Namespace, state, partial(NamespaceV1, state=state),
+    )
+    v1.putChild(segment, collection)
+
+    collection_name = ConfigMap.kind.lower() + u"s"
+    segment = collection_name.encode("ascii")
+    collection = CollectionV1(
+        ConfigMap.kind, ConfigMap, state, ObjectV1,
+    )
+    v1.putChild(segment, collection)
+
     return v1
 
 
 class CollectionV1(Resource):
-    def __init__(self, kind, kind_type, get_collection, set_collection, object_resource_type):
+    def __init__(self, kind, kind_type, state, object_resource_type):
         Resource.__init__(self)
         self.putChild(b"", self)
         self._kind = kind
+        self._collection_kind = kind.lower() + u"s"
         self._kind_type = kind_type
-        self._get_collection = get_collection
-        self._set_collection = set_collection
+        self._state = state
         self._object_resource_type = object_resource_type
 
     def render_GET(self, request):
-        return dumps(self._get_collection().to_raw())
+        return dumps(getattr(self._state, self._collection_kind).to_raw())
 
     def render_POST(self, request):
         obj = self._kind_type.from_raw(loads(request.content.read()))
-        self._set_collection(self._get_collection().add(obj))
+        setattr(self._state, self._collection_kind, getattr(self._state, self._collection_kind).add(obj))
         request.method = b"GET"
         return self.getChild(obj.metadata.name, request).render(request)
 
     def getChild(self, name, request):
         try:
-            obj = self._get_collection().item_by_name(name)
+            obj = getattr(self._state, self._collection_kind).item_by_name(name)
         except KeyError:
             Message.log(get_child=u"CollectionV1", name=name, found=False)
             return NoResource()
@@ -146,23 +151,21 @@ class NamespaceV1(ObjectV1):
 
     def getChild(self, name, request):
         Message.log(get_child=u"NamespaceV1", name=name, found=True)
-        get_collection = lambda: getattr(self._state, name)
-        set_collection = lambda value: setattr(self._state, name, value)
-        return NamespacedCollectionV1(self._obj.metadata.name, get_collection, set_collection)
+        return NamespacedCollectionV1(self._obj.metadata.name, self._state, name)
 
 
 class NamespacedCollectionV1(Resource):
-    def __init__(self, namespace, get_collection, set_collection):
+    def __init__(self, namespace, state, kind):
         Resource.__init__(self)
         self.putChild(b"", self)
         self._namespace = namespace
-        self._get_collection = get_collection
-        self._set_collection = set_collection
+        self._state = state
+        self._kind = kind
 
 
     def getChild(self, name, request):
         try:
-            obj = self._get_collection().item_by_name(name)
+            obj = getattr(self._state, self._kind).item_by_name(name)
         except KeyError:
             Message.log(get_child=u"NamespacedCollectionV1", name=name, found=False)
             return NoResource()
@@ -172,7 +175,7 @@ class NamespacedCollectionV1(Resource):
 
     def render_POST(self, request):
         obj = Namespace.from_raw(loads(request.content.read()))
-        self._set_collection(self._get_collection().add(obj))
+        setattr(self._state, self._kind, getattr(self._state, self._kind).add(obj))
         request.method = b"GET"
         return self.getChild(obj.metadata.name, request).render(request)
 
@@ -181,7 +184,7 @@ class NamespacedCollectionV1(Resource):
         objects = (
             obj
             for obj
-            in self._get_collection().items
+            in getatr(self._state, self._kind).items
             if obj.metadata.namespace == self._namespace
         )
         return dumps(ObjectCollection(items=objects).to_raw())
