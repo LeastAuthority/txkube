@@ -13,15 +13,21 @@ class IObject(Interface):
     ``IObject`` providers model `Kubernetes objects
     <https://github.com/kubernetes/community/blob/master/contributors/devel/api-conventions.md#objects>`_.
     """
-    # kind = Attribute(
-    #     """The Kubernetes *kind* of this object.  For example, ``u"Namespace"``."""
-    # )
-    # apiVersion = Attribute(
-    #     """The Kubernetes *apiVersion* of this object.  For example, ``u"v1
-    #     """
-    metadata = Attribute(
-        """The metadata for this object (``UnicodeToObjectPMap``)."""
+    kind = Attribute(
+        """The Kubernetes *kind* of this object.  For example, ``u"Namespace"``."""
     )
+
+    metadata = Attribute(
+        """
+        The metadata for this object.  As either ``ObjectMetadata`` or
+        ``NamespacedObjectMetadata``.
+        """
+    )
+
+    def to_raw():
+        """
+        :return dict: A JSON-compatible representation of this object.
+        """
 
 
 
