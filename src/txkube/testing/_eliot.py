@@ -5,7 +5,7 @@ from io import BytesIO
 
 from fixtures import Fixture
 
-from eliot import add_destination
+from eliot import add_destination, remove_destination
 from eliottree import Tree, render_task_nodes
 
 from testtools.content import Content
