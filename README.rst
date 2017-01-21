@@ -5,12 +5,12 @@ txkube
    :target: https://pypi.python.org/pypi/txkube
    :alt: PyPI Package
 
-.. image:: https://travis-ci.org/twisted/txkube.svg
-   :target: https://travis-ci.org/twisted/txkube
+.. image:: https://travis-ci.org/LeastAuthority/txkube.svg
+   :target: https://travis-ci.org/LeastAuthority/txkube
    :alt: CI status
 
-.. image:: https://codecov.io/github/twisted/txkube/coverage.svg
-   :target: https://codecov.io/github/twisted/txkube
+.. image:: https://codecov.io/github/LeastAuthority/txkube/coverage.svg
+   :target: https://codecov.io/github/LeastAuthority/txkube
    :alt: Coverage
 
 What is this?
