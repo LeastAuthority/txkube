@@ -49,6 +49,7 @@ class CaptureEliotLogs(Fixture):
     def _setUp(self):
         self.logs = []
         add_destination(self.logs.append)
+        self.addCleanup(lambda: remove_destination(self.logs.append))
         self.addDetail(
             self.LOG_DETAIL_NAME,
             Content(
@@ -58,7 +59,3 @@ class CaptureEliotLogs(Fixture):
                 lambda logs=self.logs: [_eliottree(logs)],
             ),
         )
-
-
-    def _tearDown(self):
-        remove_destination(self.logs.append)
