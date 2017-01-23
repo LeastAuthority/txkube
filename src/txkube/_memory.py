@@ -5,15 +5,32 @@
 An in-memory implementation of the Kubernetes client interface.
 """
 
+from functools import partial
+
+from json import dumps, loads
+
+import attr
+
+from pyrsistent import pset
+
 from zope.interface import implementer
 
 from twisted.python.url import URL
 
-from twisted.web.resource import Resource
+from twisted.web.resource import Resource, NoResource
+
+from klein import Klein
+
+from werkzeug.exceptions import NotFound
+
+from eliot import Message
 
 from treq.testing import RequestTraversalAgent
 
-from . import IKubernetes, network_kubernetes
+from . import (
+    IKubernetes, network_kubernetes,
+    ObjectCollection, Namespace, ConfigMap,
+)
 
 
 def memory_kubernetes():
@@ -38,7 +55,8 @@ class _MemoryKubernetes(object):
     """
     def __init__(self):
         base_url = URL.fromText(u"https://kubernetes.example.invalid./")
-        self._resource = _kubernetes_resource()
+        self._state = _KubernetesState()
+        self._resource = _kubernetes_resource(self._state)
         self._kubernetes = network_kubernetes(
             base_url=base_url,
             credentials=None,
@@ -53,5 +71,100 @@ class _MemoryKubernetes(object):
         return self._kubernetes.client(*args, **kwargs)
 
 
-def _kubernetes_resource():
-    return Resource()
+
+def _kubernetes_resource(state):
+    return _Kubernetes(state).app.resource()
+
+
+@attr.s
+class _KubernetesState(object):
+    namespaces = attr.ib(default=ObjectCollection())
+    configmaps = attr.ib(default=ObjectCollection())
+
+
+@attr.s(frozen=True)
+class _Kubernetes(object):
+    """
+    A place to stick a bunch of Klein definitions.
+
+    :ivar _KubernetesState state: The Kubernetes state with which the API will
+        be interacting.
+    """
+    state = attr.ib()
+
+    def _list(self, request, namespace, collection):
+        if namespace is not None:
+            # Unfortunately pset does not support transform. :( Use this more
+            # verbose .set() operation.
+            collection = collection.set(
+                u"items",
+                pset(obj for obj in collection.items if obj.metadata.namespace == namespace),
+            )
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        return dumps(collection.to_raw())
+
+    def _get(self, request, collection, name):
+        obj = collection.item_by_name(name)
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        return dumps(obj.to_raw())
+
+    def _create(self, request, type, collection, collection_name):
+        obj = type.from_raw(loads(request.content.read()))
+        setattr(self.state, collection_name, collection.add(obj))
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        return dumps(obj.to_raw())
+
+    app = Klein()
+    @app.handle_errors(NotFound)
+    def not_found(self, request):
+        request.responseHeaders.setRawHeader(u"content-type", [u"application/json"])
+        return dumps({u"message": u"boo"})
+
+    with app.subroute(u"/api/v1") as app:
+        @app.route(u"/namespaces", methods=[u"GET"])
+        @app.route(u"/namespaces/", methods=[u"GET"])
+        def list_namespaces(self, request):
+            """
+            Get all existing Namespaces.
+            """
+            return self._list(request, None, self.state.namespaces)
+
+        @app.route(u"/namespaces/<namespace>", methods=[u"GET"])
+        @app.route(u"/namespaces/<namespace>/", methods=[u"GET"])
+        def get_namespace(self, request, namespace):
+            """
+            Get one Namespace by name.
+            """
+            return self._get(request, self.state.namespaces, namespace)
+
+        @app.route(u"/namespaces", methods=[u"POST"])
+        @app.route(u"/namespaces/", methods=[u"POST"])
+        def create_namespace(self, request):
+            """
+            Create a new Namespace.
+            """
+            return self._create(request, Namespace, self.state.namespaces, "namespaces")
+
+        @app.route(u"/configmaps", methods=[u"GET"])
+        @app.route(u"/configmaps/", methods=[u"GET"])
+        def list_configmaps(self, request, namespace=None):
+            """
+            Get all existing ConfigMaps.
+            """
+            return self._list(request, namespace, self.state.configmaps)
+
+        @app.route(u"/configmaps/<configmap>", methods=[u"GET"])
+        @app.route(u"/configmaps/<configmap>/", methods=[u"GET"])
+        def get_configmap(self, request, configmap):
+            """
+            Get one ConfigMap by name.
+            """
+            return self._get(request, self.state.configmaps, configmap)
+
+        @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
+        @app.route(u"/namespaces/<namespace>/configmaps/", methods=[u"POST"])
+        def create_configmap(self, request, namespace):
+            """
+            Create a new ConfigMap.
+            """
+            return self._create(request, ConfigMap, self.state.configmaps, "configmaps")

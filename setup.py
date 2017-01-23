@@ -19,15 +19,23 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     install_requires=[
+        "zope.interface",
+        "attr",
+        "pyrsistent",
         "incremental",
         "twisted[tls]",
+        "eliot",
     ],
     extras_require={
         "dev": [
             "treq",
+            "pem",
+            "pyyaml",
             "testtools",
+            "hypothesis",
             "eliot",
             "eliot-tree",
+            "klein",
         ],
     },
 )
