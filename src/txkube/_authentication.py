@@ -215,10 +215,7 @@ def authenticate_with_serviceaccount(reactor, **kw):
 
     token = config.user["token"]
     base_url = URL.fromText(config.cluster["server"].decode("ascii"))
-
-    with open(config.cluster["certificate-authority"].bytes()) as fObj:
-        ca_cert_pem = fObj.read()
-    [ca_cert] = pem.parse(ca_cert_pem)
+    [ca_cert] = pem.parse(config.cluster["certificate-authority"].bytes())
 
     netloc = NetLocation(host=base_url.host, port=base_url.port)
     policy = ClientCertificatePolicyForHTTPS(

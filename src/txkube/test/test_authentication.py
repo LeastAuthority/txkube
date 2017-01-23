@@ -17,7 +17,7 @@ from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactor
 
 from ..testing import TestCase
 
-from .._authentication import authenticate_with_serviceaccount
+from .. import authenticate_with_serviceaccount
 
 # Just an arbitrary certificate pulled off the internet.  Details ought not
 # matter.
@@ -64,13 +64,10 @@ class AuthenticateWithServiceAccountTests(TestCase):
         reactor.listenTCP(80, factory)
 
         t = FilePath(self.useFixture(TempDir()).join(b""))
-        cert = t.child(b"cert")
-        cert.setContent(_CA_CERT_PEM)
-
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
-        serviceaccount.child(b"ca.crt").setContent(cert.path)
+        serviceaccount.child(b"ca.crt").setContent(_CA_CERT_PEM)
         serviceaccount.child(b"token").setContent(token)
 
         self.patch(

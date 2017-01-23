@@ -15,6 +15,8 @@ __all__ = [
     "ObjectCollection",
 
     "network_kubernetes", "memory_kubernetes",
+    "authenticate_with_serviceaccount",
+    "authenticate_with_certificate",
 ]
 
 from incremental import Version
@@ -32,3 +34,6 @@ from ._model import (
 
 from ._network import network_kubernetes
 from ._memory import memory_kubernetes
+from ._authentication import (
+    authenticate_with_serviceaccount, authenticate_with_certificate,
+)
