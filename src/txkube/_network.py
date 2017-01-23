@@ -166,7 +166,7 @@ def object_location(obj):
     :return tuple[unicode]: Some path segments to stick on to a base URL top
         construct the location for the given object.
     """
-    return collection_location(obj)[:-1] + (obj.metadata.name,)
+    return collection_location(obj) + (obj.metadata.name,)
 
 
 
@@ -185,8 +185,8 @@ def collection_location(obj):
     try:
         namespace = obj.metadata.namespace
     except AttributeError:
-        return (u"api", u"v1", collection, u"")
-    return (u"api", u"v1", u"namespaces", namespace, collection, u"")
+        return (u"api", u"v1", collection)
+    return (u"api", u"v1", u"namespaces", namespace, collection)
 
 
 @implementer(IKubernetes)

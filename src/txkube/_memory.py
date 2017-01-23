@@ -124,13 +124,12 @@ class _Kubernetes(object):
 
     app = Klein()
     @app.handle_errors(NotFound)
-    def not_found(self, request):
+    def not_found(self, request, name):
         request.responseHeaders.setRawHeader(u"content-type", [u"application/json"])
         return dumps({u"message": u"boo"})
 
     with app.subroute(u"/api/v1") as app:
         @app.route(u"/namespaces", methods=[u"GET"])
-        @app.route(u"/namespaces/", methods=[u"GET"])
         def list_namespaces(self, request):
             """
             Get all existing Namespaces.
@@ -138,7 +137,6 @@ class _Kubernetes(object):
             return self._list(request, None, self.state.namespaces)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"GET"])
-        @app.route(u"/namespaces/<namespace>/", methods=[u"GET"])
         def get_namespace(self, request, namespace):
             """
             Get one Namespace by name.
@@ -154,7 +152,6 @@ class _Kubernetes(object):
             return self._delete(request, self.state.namespaces, namespace)
 
         @app.route(u"/namespaces", methods=[u"POST"])
-        @app.route(u"/namespaces/", methods=[u"POST"])
         def create_namespace(self, request):
             """
             Create a new Namespace.
@@ -162,7 +159,6 @@ class _Kubernetes(object):
             return self._create(request, Namespace, self.state.namespaces, "namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
-        @app.route(u"/configmaps/", methods=[u"GET"])
         def list_configmaps(self, request, namespace=None):
             """
             Get all existing ConfigMaps.
@@ -170,7 +166,6 @@ class _Kubernetes(object):
             return self._list(request, namespace, self.state.configmaps)
 
         @app.route(u"/configmaps/<configmap>", methods=[u"GET"])
-        @app.route(u"/configmaps/<configmap>/", methods=[u"GET"])
         def get_configmap(self, request, configmap):
             """
             Get one ConfigMap by name.
@@ -178,7 +173,6 @@ class _Kubernetes(object):
             return self._get(request, self.state.configmaps, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
-        @app.route(u"/namespaces/<namespace>/configmaps/", methods=[u"POST"])
         def create_configmap(self, request, namespace):
             """
             Create a new ConfigMap.
