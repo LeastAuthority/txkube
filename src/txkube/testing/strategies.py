@@ -118,7 +118,23 @@ def objectcollections():
     return builds(
         ObjectCollection,
         items=one_of(
-            lists(namespaces()),
-            lists(configmaps()),
+            lists(namespaces(), unique_by=_unique_names),
+            lists(configmaps(), unique_by=_unique_names_with_namespaces),
         ),
     )
+
+
+def _unique_names(item):
+    """
+    Compute the unique key for the given (namespaceless) item within a single
+    collection.
+    """
+    return item.metadata.name
+
+
+def _unique_names_with_namespaces(item):
+    """
+    Compute the unique key for the given (namespaced) item within a single
+    collection.
+    """
+    return (item.metadata.name, item.metadata.namespace)
