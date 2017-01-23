@@ -165,6 +165,15 @@ class ObjectCollection(PClass):
 
 
     def to_raw(self):
+        def key(obj):
+            # Give me a stable output ordering.  This makes the tests
+            # simpler.  I don't know if it mirrors Kubernetes behavior.
+            return (
+                # Not all objects have a namespace.
+                getattr(obj.metadata, "namespace", None),
+                obj.metadata.name,
+            )
+
         return {
             u"kind": self.kind,
             u"apiVersion": u"v1",
@@ -172,9 +181,7 @@ class ObjectCollection(PClass):
             u"items": list(
                 obj.to_raw()
                 for obj
-                # Give me a stable output ordering.  This makes the tests
-                # simpler.  I don't know if it mirrors Kubernetes behavior.
-                in sorted(self.items, key=lambda obj: obj.metadata.name),
+                in sorted(self.items, key=key),
             ),
         }
 
