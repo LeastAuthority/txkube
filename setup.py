@@ -25,6 +25,7 @@ setuptools.setup(
         "incremental",
         "twisted[tls]",
         "eliot",
+        "pykube",
     ],
     extras_require={
         "dev": [
