@@ -19,7 +19,7 @@ from twisted.python.url import URL
 from ..testing.integration import kubernetes_client_tests
 
 from .. import network_kubernetes
-from .._authentication import authenticating_agent
+from .._authentication import authenticate_with_certificate
 
 def load_config():
     with open(expanduser("~/.kube/config")) as config_file:
@@ -85,7 +85,7 @@ def get_kubernetes(case):
             [client_key] = parse(key_file.read())
 
         from twisted.internet import reactor
-        agent = authenticating_agent(
+        agent = authenticate_with_certificate(
             reactor, base_url, client_cert, client_key, ca_cert,
         )
 
