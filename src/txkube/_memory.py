@@ -18,6 +18,7 @@ from zope.interface import implementer
 from twisted.python.url import URL
 
 from twisted.web.resource import Resource, NoResource
+from twisted.web.http import CREATED
 
 from klein import Klein
 
@@ -112,6 +113,13 @@ class _Kubernetes(object):
         obj = type.from_raw(loads(request.content.read()))
         setattr(self.state, collection_name, collection.add(obj))
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        request.setResponseCode(CREATED)
+        return dumps(obj.to_raw())
+
+    def _delete(self, request, collection, name):
+        obj = collection.item_by_name(name)
+        setattr(self.state, collection_name, collection.replace(obj, terminate(obj)))
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps(obj.to_raw())
 
     app = Klein()
@@ -136,6 +144,14 @@ class _Kubernetes(object):
             Get one Namespace by name.
             """
             return self._get(request, self.state.namespaces, namespace)
+
+        @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
+        @app.route(u"/namespaces/<namespace>/", methods=[u"DELETE"])
+        def delete_namespace(self, request, namespace):
+            """
+            Delete one Namespace by name.
+            """
+            return self._delete(request, self.state.namespaces, namespace)
 
         @app.route(u"/namespaces", methods=[u"POST"])
         @app.route(u"/namespaces/", methods=[u"POST"])

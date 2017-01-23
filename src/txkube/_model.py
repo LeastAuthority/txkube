@@ -221,12 +221,24 @@ class ObjectCollection(PClass):
         return self.transform([u"items"], add(obj))
 
 
+    def replace(self, old, new):
+        return self.transform(
+            [u"items"], remove(old),
+            [u"items"], add(new),
+        )
+
+
 
 def add(value):
     def evolver(pset):
         return pset.add(value)
     return evolver
 
+
+def remove(value):
+    def evolver(pset):
+        return pset.remove(value)
+    return evolver
 
 
 _loaders = {
