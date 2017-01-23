@@ -83,6 +83,10 @@ class _KubernetesState(object):
     configmaps = attr.ib(default=ObjectCollection())
 
 
+def terminate(obj):
+    return obj.transform([u"status", u"phase"], u"Terminating")
+
+
 @attr.s(frozen=True)
 class _Kubernetes(object):
     """
@@ -116,7 +120,7 @@ class _Kubernetes(object):
         request.setResponseCode(CREATED)
         return dumps(obj.to_raw())
 
-    def _delete(self, request, collection, name):
+    def _delete(self, request, collection, collection_name, name):
         obj = collection.item_by_name(name)
         setattr(self.state, collection_name, collection.replace(obj, terminate(obj)))
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
@@ -144,12 +148,13 @@ class _Kubernetes(object):
             return self._get(request, self.state.namespaces, namespace)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
-        @app.route(u"/namespaces/<namespace>/", methods=[u"DELETE"])
         def delete_namespace(self, request, namespace):
             """
             Delete one Namespace by name.
             """
-            return self._delete(request, self.state.namespaces, namespace)
+            return self._delete(
+                request, self.state.namespaces, "namespaces", namespace,
+            )
 
         @app.route(u"/namespaces", methods=[u"POST"])
         def create_namespace(self, request):
