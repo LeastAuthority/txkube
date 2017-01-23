@@ -11,6 +11,7 @@ from testtools.matchers import Equals, Contains
 
 from twisted.python.filepath import FilePath
 from twisted.internet.protocol import Factory
+from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
 from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactor
 
@@ -48,13 +49,13 @@ class AuthenticateWithServiceAccountTests(TestCase):
     """
     Tests for ``authenticate_with_serviceaccount``.
     """
-    def test_bearer_token_authorization(self):
+    def _authorized_request(self, token, headers):
         """
-        The ``IAgent`` returned adds an *Authorization* header to each request it
-        issues.  The header includes the bearer token from the service account file.
-        """
-        token = bytes(uuid4())
+        Get an agent using ``authenticate_with_serviceaccount`` and issue a
+        request with it.
 
+        :return bytes: The bytes of the request the agent issues.
+        """
         server = AccumulatingProtocol()
         factory = Factory.forProtocol(lambda: server)
         factory.protocolConnectionMade = None
@@ -82,7 +83,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         agent = authenticate_with_serviceaccount(
             reactor, path=serviceaccount.path,
         )
-        d = agent.request(b"GET", b"http://example.invalid.")
+        d = agent.request(b"GET", b"http://example.invalid.", headers)
 
         [(host, port, factory, _, _)] = reactor.tcpClients
 
@@ -91,8 +92,37 @@ class AuthenticateWithServiceAccountTests(TestCase):
         pump = ConnectionCompleter(reactor).succeedOnce()
         pump.pump()
 
+        return server.data
+
+
+    def test_bearer_token_authorization(self):
+        """
+        The ``IAgent`` returned adds an *Authorization* header to each request it
+        issues.  The header includes the bearer token from the service account file.
+        """
+        token = bytes(uuid4())
+        request_bytes = self._authorized_request(token=token, headers=None)
+
         # Sure would be nice to have an HTTP parser.
         self.assertThat(
-            server.data,
+            request_bytes,
             Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
+        )
+
+
+    def test_other_headers_preserved(self):
+        """
+        Other headers passed to the ``IAgent.request`` implementation are also
+        sent in the request.
+        """
+        token = bytes(uuid4())
+        headers = Headers({u"foo": [u"bar"]})
+        request_bytes = self._authorized_request(token=token, headers=headers)
+        self.expectThat(
+            request_bytes,
+            Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
+        )
+        self.expectThat(
+            request_bytes,
+            Contains(b"Foo: bar"),
         )
