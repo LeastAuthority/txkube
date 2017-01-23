@@ -40,6 +40,20 @@ class NamespacedObjectMetadata(ObjectMetadata):
         return self.items[u"namespace"]
 
 
+
+class ObjectStatus(PClass):
+    phase = field(mandatory=True)
+
+    @classmethod
+    def from_raw(cls, status):
+        return cls(phase=status[u"phase"])
+
+
+    def to_raw(self):
+        return {u"phase": self.phase}
+
+
+
 @provider(IObjectLoader)
 @implementer(IObject)
 class Namespace(PClass):
@@ -54,6 +68,8 @@ class Namespace(PClass):
         invariant=instance_of(ObjectMetadata),
     )
 
+    status = field(mandatory=True, type=(ObjectStatus, type(None)))
+
     @classmethod
     def default(cls):
         """
@@ -64,10 +80,17 @@ class Namespace(PClass):
 
     @classmethod
     def from_raw(cls, raw):
+        try:
+            status_raw = raw[u"status"]
+        except KeyError:
+            status = None
+        else:
+            status = ObjectStatus.from_raw(status_raw)
         return cls(
             metadata=ObjectMetadata(
                 items=freeze(raw[u"metadata"]),
             ),
+            status=status,
         )
 
     def to_raw(self):
@@ -76,7 +99,7 @@ class Namespace(PClass):
             u"apiVersion": u"v1",
             u"metadata": thaw(self.metadata.items),
             u"spec": {},
-            u"status": {},
+            u"status": self.status.to_raw(),
         }
 
 

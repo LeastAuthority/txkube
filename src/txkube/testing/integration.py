@@ -13,7 +13,9 @@ from pyrsistent import pmap, pset, thaw
 
 from hypothesis import given
 
-from testtools.matchers import AnyMatch, MatchesStructure, IsInstance, Equals
+from testtools.matchers import (
+    AnyMatch, MatchesStructure, IsInstance, Equals, Not, Contains,
+)
 
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from testtools import run_test_with
@@ -92,6 +94,35 @@ def kubernetes_client_tests(get_kubernetes):
                 self.assertThat(
                     namespaces.items,
                     AnyMatch(matches_namespace(obj)),
+                )
+            d.addCallback(check_namespaces)
+            return d
+
+
+        @async
+        def test_namespace_deletion(self):
+            """
+            ``IKubernetesClient.delete`` can be used to delete ``Namespace``
+            objects.
+            """
+            obj = namespaces().example()
+            d = self.client.create(obj)
+            def created_namespace(created):
+                return self.client.delete(created)
+            d.addCallback(created_namespace)
+            def deleted_namespace(ignored):
+                return self.client.list(Namespace)
+            d.addCallback(deleted_namespace)
+            def check_namespaces(collection):
+                active = list(
+                    ns.metadata.name
+                    for ns
+                    in collection.items
+                    if ns.status.phase == u"Active"
+                )
+                self.assertThat(
+                    active,
+                    Not(Contains(obj.metadata.name)),
                 )
             d.addCallback(check_namespaces)
             return d
