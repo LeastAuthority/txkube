@@ -55,7 +55,6 @@ def get_kubernetes(case):
         return network_kubernetes(
             base_url=base_url,
             agent=agent,
-            credentials=None,
         )
 
 
