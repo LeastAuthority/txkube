@@ -5,7 +5,7 @@ from io import BytesIO
 
 from fixtures import Fixture
 
-from eliot import add_destination
+from eliot import add_destination, remove_destination
 from eliottree import Tree, render_task_nodes
 
 from testtools.content import Content
@@ -49,6 +49,7 @@ class CaptureEliotLogs(Fixture):
     def _setUp(self):
         self.logs = []
         add_destination(self.logs.append)
+        self.addCleanup(lambda: remove_destination(self.logs.append))
         self.addDetail(
             self.LOG_DETAIL_NAME,
             Content(
@@ -58,7 +59,3 @@ class CaptureEliotLogs(Fixture):
                 lambda logs=self.logs: [_eliottree(logs)],
             ),
         )
-
-
-    def _tearDown(self):
-        remove_destination(self.logs.append)
