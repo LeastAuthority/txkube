@@ -5,7 +5,7 @@
 Tests for ``txkube._model``.
 """
 
-from testtools.matchers import Equals, LessThan, raises
+from testtools.matchers import Equals, LessThan, MatchesStructure, raises
 
 from pyrsistent import InvariantException
 
@@ -14,6 +14,7 @@ from hypothesis.strategies import choices
 
 from ..testing import TestCase
 from ..testing.strategies import (
+    object_name,
     object_metadatas, namespaced_object_metadatas,
     retrievable_namespaces, creatable_namespaces,
     configmaps,
@@ -118,6 +119,39 @@ class CreatableNamespaceTests(iobject_tests(Namespace, creatable_namespaces)):
     enough to be created.
     """
 
+
+class NamespaceTests(TestCase):
+    """
+    Other tests for ``Namespace``.
+    """
+    def test_default(self):
+        """
+        ``Namespace.default`` returns the *default* namespace.
+        """
+        self.assertThat(
+            Namespace.default(),
+            MatchesStructure(
+                metadata=MatchesStructure(
+                    name=Equals(u"default"),
+                ),
+            ),
+        )
+
+
+    @given(object_name())
+    def test_named(self, name):
+        """
+        ``Namespace.named`` returns a ``Namespace`` model object with the given
+        name.
+        """
+        self.assertThat(
+            Namespace.named(name),
+            MatchesStructure(
+                metadata=MatchesStructure(
+                    name=Equals(name),
+                ),
+            ),
+        )
 
 
 class ConfigMapTests(iobject_tests(ConfigMap, configmaps)):
