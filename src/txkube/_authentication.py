@@ -7,15 +7,19 @@ Kubernetes authentication support.
 
 import pem
 
-from OpenSSL.crypto import FILETYPE_PEM
+from OpenSSL.crypto import FILETYPE_PEM, Error as OpenSSLError
 
 from zope.interface import implementer
 
 from pyrsistent import PClass, field, pmap_field
 
+from twisted.python.url import URL
 from twisted.internet import ssl
-from twisted.web.iweb import IPolicyForHTTPS
+from twisted.web.iweb import IPolicyForHTTPS, IAgent
+from twisted.web.http_headers import Headers
 from twisted.web.client import Agent
+
+from pykube import KubeConfig
 
 from ._invariants import instance_of
 
@@ -134,10 +138,10 @@ class ClientCertificatePolicyForHTTPS(PClass):
         )
 
 
-def authenticating_agent(reactor, base_url, client_cert, client_key, ca_cert):
+def authenticate_with_certificate(reactor, base_url, client_cert, client_key, ca_cert):
     """
     Create an ``IAgent`` which can issue authenticated requests to a
-    particular Kubernetes server .
+    particular Kubernetes server using a client certificate.
 
     :param reactor: The reactor with which to configure the resulting agent.
 
@@ -158,7 +162,7 @@ def authenticating_agent(reactor, base_url, client_cert, client_key, ca_cert):
     """
     if base_url.scheme != u"https":
         raise ValueError(
-            "authenticating_agent() makes sense for HTTPS, not {!r}".format(
+            "authenticate_with_certificate() makes sense for HTTPS, not {!r}".format(
                 base_url.scheme
             ),
         )
@@ -173,3 +177,79 @@ def authenticating_agent(reactor, base_url, client_cert, client_key, ca_cert):
         },
     )
     return Agent(reactor, contextFactory=policy)
+
+
+
+@implementer(IAgent)
+class HeaderInjectingAgent(PClass):
+    """
+    An ``IAgent`` which adds some headers to every request it makes.
+
+    :ivar Headers _to_inject: The headers to add.
+    @ivar IAgent _agent: The agent to use to issue requests.
+    """
+    _to_inject = field(mandatory=True)
+    _agent = field(mandatory=True)
+
+    def request(self, method, url, headers=None, bodyProducer=None):
+        """
+        Issue a request with some extra headers.
+
+        :see: ``twisted.web.iweb.IAgent.request``
+        """
+        if headers is None:
+            headers = Headers()
+        else:
+            headers = headers.copy()
+        for k, vs in self._to_inject.getAllRawHeaders():
+            headers.setRawHeaders(k, vs)
+        return self._agent.request(method, url, headers, bodyProducer)
+
+
+
+def authenticate_with_serviceaccount(reactor, **kw):
+    """
+    Create an ``IAgent`` which can issue authenticated requests to a
+    particular Kubernetes server using a service account token.
+
+    :param reactor: The reactor with which to configure the resulting agent.
+
+    :param bytes path: The location of the service account directory.  The
+        default should work fine for normal use within a container.
+
+    :return IAgent: An agent which will authenticate itself to a particular
+        Kubernetes server and which will verify that server or refuse to
+        interact with it.
+    """
+    config = KubeConfig.from_service_account(**kw)
+
+    token = config.user["token"]
+    base_url = URL.fromText(config.cluster["server"].decode("ascii"))
+
+    ca_certs = pem.parse(config.cluster["certificate-authority"].bytes())
+    if not ca_certs:
+        raise ValueError("No certificate authority certificate found.")
+    ca_cert = ca_certs[0]
+
+    try:
+        # Validate the certificate so we have early failures for garbage data.
+        ssl.Certificate.load(ca_cert.as_bytes(), FILETYPE_PEM)
+    except OpenSSLError as e:
+        raise ValueError(
+            "Invalid certificate authority certificate found.",
+            str(e),
+        )
+
+    netloc = NetLocation(host=base_url.host, port=base_url.port)
+    policy = ClientCertificatePolicyForHTTPS(
+        credentials={},
+        trust_roots={
+            netloc: ca_cert,
+        },
+    )
+
+    agent = HeaderInjectingAgent(
+        _to_inject=Headers({u"authorization": [u"Bearer {}".format(token)]}),
+        _agent=Agent(reactor, contextFactory=policy),
+    )
+    return agent
