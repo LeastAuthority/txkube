@@ -84,6 +84,7 @@ class _KubernetesState(object):
 
 
 def terminate(obj):
+    # TODO: Add deletionTimestamp?  See #24
     return obj.transform([u"status", u"phase"], u"Terminating")
 
 
