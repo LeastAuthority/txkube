@@ -40,12 +40,7 @@ def async(f):
 def matches_namespace(ns):
     return MatchesStructure(
         metadata=MatchesStructure(
-            metadata=MatchesStructure(
-                name=Equals(ns.metadata.name),
-            ),
-            status=MatchesStructure(
-                phase=Equals(ns.status.phase),
-            ),
+            name=Equals(ns.metadata.name),
         ),
     )
 

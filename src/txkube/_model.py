@@ -108,14 +108,15 @@ class Namespace(PClass):
         )
 
     def to_raw(self):
-        return {
+        result = {
             u"kind": self.kind,
             u"apiVersion": u"v1",
             u"metadata": thaw(self.metadata.items),
             u"spec": {},
-            u"status": self.status.to_raw(),
         }
-
+        if self.status is not None:
+            result[u"status"] = self.status.to_raw()
+        return result
 
 
 
