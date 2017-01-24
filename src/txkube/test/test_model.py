@@ -14,7 +14,9 @@ from hypothesis.strategies import choices
 
 from ..testing import TestCase
 from ..testing.strategies import (
-    object_metadatas, namespaced_object_metadatas, namespaces, configmaps,
+    object_metadatas, namespaced_object_metadatas,
+    retrievable_namespaces, creatable_namespaces,
+    configmaps,
     objectcollections,
 )
 
@@ -103,9 +105,17 @@ def iobject_tests(loader, strategy):
 
 
 
-class NamespaceTests(iobject_tests(Namespace, namespaces)):
+class RetrievableNamespaceTests(iobject_tests(Namespace, retrievable_namespaces)):
     """
-    Tests for ``Namespace``.
+    Tests for ``Namespace`` based on a strategy for fully-populated objects.
+    """
+
+
+
+class CreatableNamespaceTests(iobject_tests(Namespace, retrievable_namespaces)):
+    """
+    Tests for ``Namespace`` based on a strategy for objects just detailed
+    enough to be created.
     """
 
 

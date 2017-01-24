@@ -14,7 +14,7 @@ from pyrsistent import pmap, pset, thaw
 from hypothesis import given
 
 from testtools.matchers import (
-    AnyMatch, MatchesStructure, IsInstance, Equals, Not, Contains,
+    AnyMatch, MatchesAll, MatchesStructure, IsInstance, Equals, Not, Contains,
 )
 
 from testtools.twistedsupport import AsynchronousDeferredRunTest
@@ -25,8 +25,8 @@ from twisted.internet.task import deferLater
 
 from ..testing import TestCase
 
-from .. import IKubernetesClient, Namespace, ConfigMap, ObjectCollection
-from .strategies import namespaces, configmaps
+from .. import IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection
+from .strategies import creatable_namespaces, configmaps
 
 
 def async(f):
@@ -103,13 +103,12 @@ def kubernetes_client_tests(get_kubernetes):
             ``Namespace`` objects can be created and retrieved using the ``create``
             and ``list`` methods of ``IKubernetesClient``.
             """
-            obj = namespaces().example()
+            obj = creatable_namespaces().example()
             d = self.client.create(obj)
             def created_namespace(created):
                 self.assertThat(created, matches_namespace(obj))
                 return self.client.list(Namespace)
             d.addCallback(created_namespace)
-
             def check_namespaces(namespaces):
                 self.assertThat(namespaces, IsInstance(ObjectCollection))
                 # There are some built-in namespaces that we'll ignore.  If we
@@ -128,7 +127,7 @@ def kubernetes_client_tests(get_kubernetes):
             ``IKubernetesClient.delete`` can be used to delete ``Namespace``
             objects.
             """
-            obj = namespaces().example()
+            obj = creatable_namespaces().example()
             d = self.client.create(obj)
             def created_namespace(created):
                 return self.client.delete(created)
@@ -157,10 +156,9 @@ def kubernetes_client_tests(get_kubernetes):
             ``ConfigMap`` objects can be created and retrieved using the ``create``
             and ``list`` methods of ``IKubernetesClient``.
             """
-            obj = configmaps().example()
-            namespace = namespaces().example()
+            namespace = creatable_namespaces().example()
             # Move the object into the namespace we're going to create.
-            obj = obj.transform(
+            obj = configmaps().example().transform(
                 [u"metadata", u"items", u"namespace"],
                 namespace.metadata.name,
             )

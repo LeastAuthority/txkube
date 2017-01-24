@@ -68,13 +68,29 @@ def namespace_statuses():
     )
 
 
-def namespaces():
+def creatable_namespaces():
     """
-    Strategy to build ``Namespace``.
+    Strategy to build ``Namespace``\ s which can be created on a Kubernetes
+    cluster.
     """
     return builds(
         Namespace,
         metadata=object_metadatas(),
+        status=none(),
+    )
+
+
+def retrievable_namespaces():
+    """
+    Strategy to build ``Namespace``\ s which might be retrieved from a
+    Kubernetes cluster.
+
+    This includes additional fields that might be populated by the Kubernetes
+    cluster automatically.
+    """
+    return builds(
+        lambda ns, status: ns.set(status=status),
+        creatable_namespaces(),
         status=namespace_statuses(),
     )
 
@@ -123,14 +139,14 @@ def configmaps():
     )
 
 
-def objectcollections():
+def objectcollections(namespaces=creatable_namespaces()):
     """
     Strategy to build ``ObjectCollection``.
     """
     return builds(
         ObjectCollection,
         items=one_of(
-            lists(namespaces()),
+            lists(namespaces),
             lists(configmaps()),
         ),
     )
