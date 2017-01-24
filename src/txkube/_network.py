@@ -200,7 +200,6 @@ class _NetworkKubernetes(object):
     deployment.
     """
     base_url = attr.ib(validator=validators.instance_of(URL))
-    credentials = attr.ib()
     _agent = attr.ib(
         default=attr.Factory(lambda: Agent(namedAny("twisted.internet.reactor"))),
     )

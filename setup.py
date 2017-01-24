@@ -24,7 +24,9 @@ setuptools.setup(
         "pyrsistent",
         "incremental",
         "twisted[tls]",
+        "pem",
         "eliot",
+        "pykube",
     ],
     extras_require={
         "dev": [

@@ -61,7 +61,6 @@ class _MemoryKubernetes(object):
         self._resource = _kubernetes_resource(self._state)
         self._kubernetes = network_kubernetes(
             base_url=base_url,
-            credentials=None,
             agent=RequestTraversalAgent(self._resource),
         )
 
