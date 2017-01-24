@@ -113,7 +113,7 @@ class _NetworkClient(object):
             d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(log_result, action)
+            d.addCallback(log_response_object, action)
             d.addCallback(object_from_raw)
             return d.addActionFinish()
 
@@ -137,7 +137,7 @@ class _NetworkClient(object):
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(log_result, action)
+            d.addCallback(log_response_object, action)
             d.addCallback(object_from_raw)
             return d.addActionFinish()
 
@@ -245,7 +245,18 @@ class KubernetesError(Exception):
 
 
 
-def log_result(document, action):
+def log_response_object(document, action):
+    """
+    Emit an Eliot log event belonging to the given action describing the given
+    response.
+
+    :param document: Anything Eliot loggable (but presumably a parsed
+        Kubernetes response document).
+
+    :param action: The Eliot action to which to attach the event.
+
+    :return: ``document``
+    """
     action.add_success_fields(response_object=document)
     return document
 
