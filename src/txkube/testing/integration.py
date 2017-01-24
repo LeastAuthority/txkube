@@ -36,14 +36,29 @@ def async(f):
     return run_test_with(_async)(f)
 
 
+
 def matches_namespace(ns):
     return MatchesStructure(
-        metadata=MatchesStructure.fromExample(
-            ns.metadata, "name",
+        metadata=MatchesStructure(
+            metadata=MatchesStructure(
+                name=Equals(ns.metadata.name),
+            ),
+            status=MatchesStructure(
+                phase=Equals(ns.status.phase),
+            ),
         ),
     )
 
-matches_configmap = matches_namespace
+
+
+def matches_configmap(configmap):
+    return MatchesStructure(
+        metadata=MatchesStructure.fromExample(
+            configmap.metadata, "name",
+
+        ),
+    )
+
 
 
 def kubernetes_client_tests(get_kubernetes):
