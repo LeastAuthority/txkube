@@ -12,6 +12,7 @@ __all__ = [
 
     "NamespaceStatus",
     "ObjectMetadata", "NamespacedObjectMetadata",
+    "object_from_raw",
     "Namespace", "ConfigMap",
     "ObjectCollection",
 
@@ -28,6 +29,7 @@ from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 from ._model import (
     NamespaceStatus,
     ObjectMetadata, NamespacedObjectMetadata,
+    object_from_raw,
     Namespace, ConfigMap,
     ObjectCollection,
 )

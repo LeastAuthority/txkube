@@ -253,7 +253,7 @@ _loaders = {
 
 
 
-def object_from_raw(raw, kind_hint):
+def object_from_raw(raw, kind_hint=None):
     """
     Load an object of unspecified type from the raw representation of it.
 

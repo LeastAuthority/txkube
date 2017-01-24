@@ -30,7 +30,7 @@ from eliot.twisted import DeferredContext
 
 from . import (
     IKubernetes, IKubernetesClient,
-    Namespace, ObjectCollection,
+    object_from_raw,
 )
 
 def network_kubernetes(**kw):
@@ -115,7 +115,7 @@ class _NetworkClient(object):
             d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(Namespace.from_raw)
+            d.addCallback(object_from_raw)
             return d.addActionFinish()
 
 
@@ -152,7 +152,7 @@ class _NetworkClient(object):
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(ObjectCollection.from_raw)
+            d.addCallback(object_from_raw)
             return d.addActionFinish()
 
 
