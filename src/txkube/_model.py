@@ -41,7 +41,11 @@ class NamespacedObjectMetadata(ObjectMetadata):
 
 
 
-class ObjectStatus(PClass):
+class NamespaceStatus(PClass):
+    """
+    ``NamespaceStatus`` instances model `Kubernetes namespace status
+    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
+    """
     phase = field(mandatory=True)
 
     @classmethod
@@ -68,7 +72,7 @@ class Namespace(PClass):
         invariant=instance_of(ObjectMetadata),
     )
 
-    status = field(mandatory=True, type=(ObjectStatus, type(None)))
+    status = field(mandatory=True, type=(NamespaceStatus, type(None)))
 
     @classmethod
     def default(cls):
@@ -85,7 +89,7 @@ class Namespace(PClass):
         except KeyError:
             status = None
         else:
-            status = ObjectStatus.from_raw(status_raw)
+            status = NamespaceStatus.from_raw(status_raw)
         return cls(
             metadata=ObjectMetadata(
                 items=freeze(raw[u"metadata"]),
