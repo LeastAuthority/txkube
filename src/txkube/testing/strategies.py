@@ -15,7 +15,7 @@ from hypothesis.strategies import (
 )
 
 from .. import (
-    ObjectStatus,
+    NamespaceStatus,
     ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap,
     ObjectCollection,
 )
@@ -63,7 +63,7 @@ def namespace_statuses():
     Strategy to build ``Namespace.status``.
     """
     return builds(
-        ObjectStatus,
+        NamespaceStatus,
         phase=sampled_from({u"Active", u"Terminating"}),
     )
 
