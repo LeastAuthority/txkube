@@ -20,9 +20,8 @@ from ..testing.strategies import (
     objectcollections,
 )
 
-from .._model import object_sort_key
 from .. import (
-    ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap, ObjectCollection,
+    Namespace, ConfigMap, ObjectCollection,
 )
 
 def object_metadata_tests(metadatas, accessors):
@@ -113,7 +112,7 @@ class RetrievableNamespaceTests(iobject_tests(Namespace, retrievable_namespaces)
 
 
 
-class CreatableNamespaceTests(iobject_tests(Namespace, retrievable_namespaces)):
+class CreatableNamespaceTests(iobject_tests(Namespace, creatable_namespaces)):
     """
     Tests for ``Namespace`` based on a strategy for objects just detailed
     enough to be created.
