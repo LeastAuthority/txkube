@@ -113,10 +113,31 @@ class _NetworkClient(object):
             d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            def log_result(doc):
-                action.add_success_fields(response_object=doc)
-                return doc
-            d.addCallback(log_result)
+            d.addCallback(log_result, action)
+            d.addCallback(object_from_raw)
+            return d.addActionFinish()
+
+
+    def get(self, obj):
+        """
+        Issue a I{GET} to retrieve the given object.
+
+        The object must have identifying metadata such as a namespace and a
+        name but other fields are ignored.
+        """
+        action = start_action(
+            action_type=u"network-client:get",
+            kind=obj.kind,
+            name=obj.metadata.name,
+            namespace=getattr(obj.metadata, "namespace", None),
+        )
+        with action.context():
+            url = self.kubernetes.base_url.child(*object_location(obj))
+            d = DeferredContext(self._get(url))
+            d.addCallback(check_status, (OK,))
+            d.addCallback(readBody)
+            d.addCallback(loads)
+            d.addCallback(log_result, action)
             d.addCallback(object_from_raw)
             return d.addActionFinish()
 
@@ -223,6 +244,11 @@ class KubernetesError(Exception):
 
     __str__ = __repr__
 
+
+
+def log_result(document, action):
+    action.add_success_fields(response_object=document)
+    return document
 
 
 def check_status(response, expected):
