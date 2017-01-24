@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fixtures import TempDir
 
-from testtools.matchers import Equals, Contains
+from testtools.matchers import Equals, Contains, raises
 
 from twisted.python.filepath import FilePath
 from twisted.internet.protocol import Factory
@@ -80,7 +80,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         agent = authenticate_with_serviceaccount(
             reactor, path=serviceaccount.path,
         )
-        d = agent.request(b"GET", b"http://example.invalid.", headers)
+        agent.request(b"GET", b"http://example.invalid.", headers)
 
         [(host, port, factory, _, _)] = reactor.tcpClients
 
@@ -122,4 +122,31 @@ class AuthenticateWithServiceAccountTests(TestCase):
         self.expectThat(
             request_bytes,
             Contains(b"Foo: bar"),
+        )
+
+
+    def test_missing_ca_certificate(self):
+        """
+        If no CA certificate is found in the service account directory,
+        ``authenticate_with_serviceaccount`` raises ``ValueError``.
+        """
+        t = FilePath(self.useFixture(TempDir()).join(b""))
+        serviceaccount = t.child(b"serviceaccount")
+        serviceaccount.makedirs()
+
+        serviceaccount.child(b"ca.crt").setContent(b"not a cert pem")
+        serviceaccount.child(b"token").setContent(b"token")
+
+        self.patch(
+            os, "environ", {
+                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
+                b"KUBERNETES_SERVICE_PORT": b"443",
+            },
+        )
+
+        self.assertThat(
+            lambda: authenticate_with_serviceaccount(
+                MemoryReactor(), path=serviceaccount.path,
+            ),
+            raises(ValueError("No certificate authority certificate found.")),
         )

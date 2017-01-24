@@ -14,7 +14,6 @@ from zope.interface import implementer
 from pyrsistent import PClass, field, pmap_field
 
 from twisted.python.url import URL
-from twisted.python.reflect import requireModule
 from twisted.internet import ssl
 from twisted.web.iweb import IPolicyForHTTPS, IAgent
 from twisted.web.http_headers import Headers
@@ -226,7 +225,11 @@ def authenticate_with_serviceaccount(reactor, **kw):
 
     token = config.user["token"]
     base_url = URL.fromText(config.cluster["server"].decode("ascii"))
-    [ca_cert] = pem.parse(config.cluster["certificate-authority"].bytes())
+
+    ca_certs = pem.parse(config.cluster["certificate-authority"].bytes())
+    if not ca_certs:
+        raise ValueError("No certificate authority certificate found.")
+    ca_cert = ca_certs[0]
 
     netloc = NetLocation(host=base_url.host, port=base_url.port)
     policy = ClientCertificatePolicyForHTTPS(
