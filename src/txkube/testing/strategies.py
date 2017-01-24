@@ -15,6 +15,7 @@ from hypothesis.strategies import (
 )
 
 from .. import (
+    NamespaceStatus,
     ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap,
     ObjectCollection,
 )
@@ -57,13 +58,40 @@ def namespaced_object_metadatas():
     )
 
 
-def namespaces():
+def namespace_statuses():
     """
-    Strategy to build ``Namespace``.
+    Strategy to build ``Namespace.status``.
+    """
+    return builds(
+        NamespaceStatus,
+        phase=sampled_from({u"Active", u"Terminating"}),
+    )
+
+
+def creatable_namespaces():
+    """
+    Strategy to build ``Namespace``\ s which can be created on a Kubernetes
+    cluster.
     """
     return builds(
         Namespace,
         metadata=object_metadatas(),
+        status=none(),
+    )
+
+
+def retrievable_namespaces():
+    """
+    Strategy to build ``Namespace``\ s which might be retrieved from a
+    Kubernetes cluster.
+
+    This includes additional fields that might be populated by the Kubernetes
+    cluster automatically.
+    """
+    return builds(
+        lambda ns, status: ns.set(status=status),
+        creatable_namespaces(),
+        status=namespace_statuses(),
     )
 
 
@@ -111,14 +139,14 @@ def configmaps():
     )
 
 
-def objectcollections():
+def objectcollections(namespaces=creatable_namespaces()):
     """
     Strategy to build ``ObjectCollection``.
     """
     return builds(
         ObjectCollection,
         items=one_of(
-            lists(namespaces(), unique_by=_unique_names),
+            lists(namespaces, unique_by=_unique_names),
             lists(configmaps(), unique_by=_unique_names_with_namespaces),
         ),
     )

@@ -18,6 +18,7 @@ from zope.interface import implementer
 from twisted.python.url import URL
 
 from twisted.web.resource import Resource, NoResource
+from twisted.web.http import CREATED
 
 from klein import Klein
 
@@ -29,6 +30,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
+    NamespaceStatus,
     ObjectCollection, Namespace, ConfigMap,
 )
 
@@ -82,6 +84,13 @@ class _KubernetesState(object):
     configmaps = attr.ib(default=ObjectCollection())
 
 
+def terminate(obj):
+    # TODO: Add deletionTimestamp?  See #24
+    return obj.transform(
+        [u"status"], NamespaceStatus.terminating(),
+    )
+
+
 @attr.s(frozen=True)
 class _Kubernetes(object):
     """
@@ -109,20 +118,26 @@ class _Kubernetes(object):
         return dumps(obj.to_raw())
 
     def _create(self, request, type, collection, collection_name):
-        obj = type.from_raw(loads(request.content.read()))
+        obj = type.from_raw(loads(request.content.read())).fill_defaults()
         setattr(self.state, collection_name, collection.add(obj))
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        request.setResponseCode(CREATED)
+        return dumps(obj.to_raw())
+
+    def _delete(self, request, collection, collection_name, name):
+        obj = collection.item_by_name(name)
+        setattr(self.state, collection_name, collection.replace(obj, terminate(obj)))
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps(obj.to_raw())
 
     app = Klein()
     @app.handle_errors(NotFound)
-    def not_found(self, request):
+    def not_found(self, request, name):
         request.responseHeaders.setRawHeader(u"content-type", [u"application/json"])
         return dumps({u"message": u"boo"})
 
     with app.subroute(u"/api/v1") as app:
         @app.route(u"/namespaces", methods=[u"GET"])
-        @app.route(u"/namespaces/", methods=[u"GET"])
         def list_namespaces(self, request):
             """
             Get all existing Namespaces.
@@ -130,15 +145,22 @@ class _Kubernetes(object):
             return self._list(request, None, self.state.namespaces)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"GET"])
-        @app.route(u"/namespaces/<namespace>/", methods=[u"GET"])
         def get_namespace(self, request, namespace):
             """
             Get one Namespace by name.
             """
             return self._get(request, self.state.namespaces, namespace)
 
+        @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
+        def delete_namespace(self, request, namespace):
+            """
+            Delete one Namespace by name.
+            """
+            return self._delete(
+                request, self.state.namespaces, "namespaces", namespace,
+            )
+
         @app.route(u"/namespaces", methods=[u"POST"])
-        @app.route(u"/namespaces/", methods=[u"POST"])
         def create_namespace(self, request):
             """
             Create a new Namespace.
@@ -146,7 +168,6 @@ class _Kubernetes(object):
             return self._create(request, Namespace, self.state.namespaces, "namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
-        @app.route(u"/configmaps/", methods=[u"GET"])
         def list_configmaps(self, request, namespace=None):
             """
             Get all existing ConfigMaps.
@@ -154,7 +175,6 @@ class _Kubernetes(object):
             return self._list(request, namespace, self.state.configmaps)
 
         @app.route(u"/configmaps/<configmap>", methods=[u"GET"])
-        @app.route(u"/configmaps/<configmap>/", methods=[u"GET"])
         def get_configmap(self, request, configmap):
             """
             Get one ConfigMap by name.
@@ -162,7 +182,6 @@ class _Kubernetes(object):
             return self._get(request, self.state.configmaps, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
-        @app.route(u"/namespaces/<namespace>/configmaps/", methods=[u"POST"])
         def create_configmap(self, request, namespace):
             """
             Create a new ConfigMap.

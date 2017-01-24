@@ -28,7 +28,7 @@ from eliot.twisted import DeferredContext
 
 from . import (
     IKubernetes, IKubernetesClient,
-    Namespace, ObjectCollection,
+    object_from_raw,
 )
 
 def network_kubernetes(**kw):
@@ -88,6 +88,10 @@ class _NetworkClient(object):
         return self._request(b"GET", url)
 
 
+    def _delete(self, url):
+        return self._request(b"DELETE", url)
+
+
     def _post(self, url, obj):
         return self._request(
             b"POST", url, bodyProducer=_BytesProducer(dumps(obj)),
@@ -104,12 +108,35 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(obj))
             document = obj.to_raw()
-            action.add_success_fields(object=document)
+            action.add_success_fields(submitted_object=document)
             d = DeferredContext(self._post(url, document))
-            d.addCallback(check_status)
+            d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(Namespace.from_raw)
+            def log_result(doc):
+                action.add_success_fields(response_object=doc)
+                return doc
+            d.addCallback(log_result)
+            d.addCallback(object_from_raw)
+            return d.addActionFinish()
+
+
+    def delete(self, obj):
+        """
+        Issue a I{DELETE} to delete the given object.
+        """
+        action = start_action(
+            action_type=u"network-client:delete",
+            kind=obj.kind,
+            name=obj.metadata.name,
+            namespace=getattr(obj.metadata, "namespace", None),
+        )
+        with action.context():
+            url = self.kubernetes.base_url.child(*object_location(obj))
+            d = DeferredContext(self._delete(url))
+            d.addCallback(check_status, (OK,))
+            d.addCallback(readBody)
+            d.addCallback(lambda raw: None)
             return d.addActionFinish()
 
 
@@ -124,11 +151,24 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(kind))
             d = DeferredContext(self._get(url))
-            d.addCallback(check_status)
+            d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(ObjectCollection.from_raw)
+            d.addCallback(object_from_raw)
             return d.addActionFinish()
+
+
+
+def object_location(obj):
+    """
+    Get the URL for a specific object.
+
+    :param IObject obj: The object the URL for which to get.
+
+    :return tuple[unicode]: Some path segments to stick on to a base URL top
+        construct the location for the given object.
+    """
+    return collection_location(obj) + (obj.metadata.name,)
 
 
 
@@ -147,8 +187,8 @@ def collection_location(obj):
     try:
         namespace = obj.metadata.namespace
     except AttributeError:
-        return (u"api", u"v1", collection, u"")
-    return (u"api", u"v1", u"namespaces", namespace, collection, u"")
+        return (u"api", u"v1", collection)
+    return (u"api", u"v1", u"namespaces", namespace, collection)
 
 
 @implementer(IKubernetes)
@@ -169,9 +209,25 @@ class _NetworkKubernetes(object):
         return _NetworkClient(self, self._agent)
 
 
-def check_status(response):
-    if response.code not in (OK, CREATED):
+
+class KubernetesError(Exception):
+    def __init__(self, code, response):
+        self.code = code
+        self.response = response
+
+
+    def __repr__(self):
+        return "<KubernetesError: code = {}; response = {}>".format(
+            self.code, self.response,
+        )
+
+    __str__ = __repr__
+
+
+
+def check_status(response, expected):
+    if response.code not in expected:
         d = readBody(response)
-        d.addCallback(lambda body: Failure(Exception(body)))
+        d.addCallback(lambda body: Failure(KubernetesError(response.code, body)))
         return d
     return response
