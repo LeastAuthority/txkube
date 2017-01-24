@@ -186,9 +186,12 @@ def kubernetes_client_tests(get_kubernetes):
             strategy = configmaps()
             objs = [strategy.example(), strategy.example()]
             ns = list(
-                Namespace(metadata=ObjectMetadata(items={
-                    u"name": obj.metadata.namespace, u"uid": None,
-                }))
+                Namespace(
+                    metadata=ObjectMetadata(items={
+                        u"name": obj.metadata.namespace, u"uid": None,
+                    }),
+                    status=None,
+                )
                 for obj
                 in objs
             )
