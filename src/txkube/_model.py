@@ -49,6 +49,16 @@ class NamespaceStatus(PClass):
     phase = field(mandatory=True)
 
     @classmethod
+    def active(cls):
+        return cls(phase=u"Active")
+
+
+    @classmethod
+    def terminating(cls):
+        return cls(phase=u"Terminating")
+
+
+    @classmethod
     def from_raw(cls, status):
         return cls(phase=status[u"phase"])
 

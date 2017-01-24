@@ -30,6 +30,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
+    NamespaceStatus,
     ObjectCollection, Namespace, ConfigMap,
 )
 
@@ -85,7 +86,9 @@ class _KubernetesState(object):
 
 def terminate(obj):
     # TODO: Add deletionTimestamp?  See #24
-    return obj.transform([u"status", u"phase"], u"Terminating")
+    return obj.transform(
+        [u"status"], NamespaceStatus.terminating(),
+    )
 
 
 @attr.s(frozen=True)
