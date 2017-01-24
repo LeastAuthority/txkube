@@ -110,11 +110,15 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(obj))
             document = obj.to_raw()
-            action.add_success_fields(object=document)
+            action.add_success_fields(submitted_object=document)
             d = DeferredContext(self._post(url, document))
             d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
             d.addCallback(loads)
+            def log_result(doc):
+                action.add_success_fields(response_object=doc)
+                return doc
+            d.addCallback(log_result)
             d.addCallback(object_from_raw)
             return d.addActionFinish()
 
