@@ -8,8 +8,6 @@ via HTTP.
 
 from json import loads, dumps
 
-from pyrsistent import thaw
-
 from zope.interface import implementer
 
 import attr
@@ -131,6 +129,7 @@ class _NetworkClient(object):
             d.addCallback(loads)
             d.addCallback(ObjectCollection.from_raw)
             return d.addActionFinish()
+
 
 
 def collection_location(obj):

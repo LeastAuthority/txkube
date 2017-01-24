@@ -8,7 +8,7 @@ state.
 
 from zope.interface import provider, implementer
 
-from pyrsistent import CheckedPSet, PClass, field, pmap_field, pset, freeze, thaw
+from pyrsistent import CheckedPVector, PClass, field, pmap_field, pset, freeze, thaw
 
 from . import IObject, IObjectLoader
 from ._invariants import instance_of, provider_of
@@ -123,16 +123,32 @@ class ConfigMap(PClass):
         return result
 
 
-def _pset_field(iface):
-    class _CheckedIObjectPSet(CheckedPSet):
+
+def object_sort_key(obj):
+    """
+    Define a predictable sort ordering for Kubernetes objects.
+
+    This should be the same ordering that Kubernetes itself imposes.
+    """
+    return (
+        # Not all objects have a namespace.
+        getattr(obj.metadata, "namespace", None),
+        obj.metadata.name,
+    )
+
+
+
+def _pvector_field(iface):
+    class _CheckedIObjectPVector(CheckedPVector):
         __invariant__ = provider_of(iface)
 
     return field(
         mandatory=True,
-        type=_CheckedIObjectPSet,
-        factory=_CheckedIObjectPSet.create,
-        initial=_CheckedIObjectPSet(),
+        type=_CheckedIObjectPVector,
+        factory=lambda v: _CheckedIObjectPVector.create(sorted(v, key=object_sort_key)),
+        initial=_CheckedIObjectPVector(),
     )
+
 
 
 @provider(IObjectLoader)
@@ -145,35 +161,25 @@ class ObjectCollection(PClass):
     this is actually more useful than a native Python collection such as a set
     but we'll try it out.
 
-    :ivar pset items: The objects belonging to this collection.
+    :ivar pvector items: The objects belonging to this collection.
     """
     kind = u"List"
-    items = _pset_field(IObject)
+    items = _pvector_field(IObject)
 
     @classmethod
     def from_raw(cls, raw):
-        return cls(
-            items=(
-                # Unfortunately `kind` is an optional field.  Fortunately, the
-                # top-level `kind` is something like `ConfigMapList` if you
-                # asked for `.../configmaps/`.  So pass that down as a hint.
-                object_from_raw(obj, raw[u"kind"][:-len(u"List")])
-                for obj
-                in raw[u"items"]
-            ),
+        items = (
+            # Unfortunately `kind` is an optional field.  Fortunately, the
+            # top-level `kind` is something like `ConfigMapList` if you
+            # asked for `.../configmaps/`.  So pass that down as a hint.
+            object_from_raw(obj, raw[u"kind"][:-len(u"List")])
+            for obj
+            in raw[u"items"]
         )
+        return cls(items=items)
 
 
     def to_raw(self):
-        def key(obj):
-            # Give me a stable output ordering.  This makes the tests
-            # simpler.  I don't know if it mirrors Kubernetes behavior.
-            return (
-                # Not all objects have a namespace.
-                getattr(obj.metadata, "namespace", None),
-                obj.metadata.name,
-            )
-
         return {
             u"kind": self.kind,
             u"apiVersion": u"v1",
@@ -181,7 +187,7 @@ class ObjectCollection(PClass):
             u"items": list(
                 obj.to_raw()
                 for obj
-                in sorted(self.items, key=key),
+                in self.items
             ),
         }
 
@@ -207,8 +213,8 @@ class ObjectCollection(PClass):
 
 
 def add(value):
-    def evolver(pset):
-        return pset.add(value)
+    def evolver(pvector):
+        return sorted(pvector.append(value), key=object_sort_key)
     return evolver
 
 
