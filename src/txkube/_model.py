@@ -6,6 +6,8 @@ Functional structures for representing different kinds of Kubernetes
 state.
 """
 
+from uuid import uuid4
+
 from zope.interface import provider, implementer
 
 from pyrsistent import CheckedPSet, PClass, field, pmap_field, pset, freeze, thaw
@@ -107,6 +109,13 @@ class Namespace(PClass):
             status=status,
         )
 
+    def fill_defaults(self):
+        return self.transform(
+            # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
+            [u"metadata", u"items", u"uid"], unicode(uuid4()),
+            [u"status"], NamespaceStatus.active(),
+        )
+
     def to_raw(self):
         result = {
             u"kind": self.kind,
@@ -144,6 +153,11 @@ class ConfigMap(PClass):
             ),
             data=raw.get(u"data", None),
         )
+
+
+    def fill_defaults(self):
+        # TODO Surely some stuff to fill.
+        return self
 
 
     def to_raw(self):

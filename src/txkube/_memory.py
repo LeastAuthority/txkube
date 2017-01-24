@@ -118,7 +118,7 @@ class _Kubernetes(object):
         return dumps(obj.to_raw())
 
     def _create(self, request, type, collection, collection_name):
-        obj = type.from_raw(loads(request.content.read()))
+        obj = type.from_raw(loads(request.content.read())).fill_defaults()
         setattr(self.state, collection_name, collection.add(obj))
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         request.setResponseCode(CREATED)

@@ -54,9 +54,19 @@ def matches_configmap(configmap):
         ),
     )
 
+
+def has_uid():
+    return MatchesStructure(
+        metadata=MatchesStructure(
+            uid=Not(Equals(None)),
         ),
     )
 
+
+def is_active():
+    return MatchesStructure(
+        status=Equals(NamespaceStatus.active()),
+    )
 
 
 def kubernetes_client_tests(get_kubernetes):
@@ -106,7 +116,7 @@ def kubernetes_client_tests(get_kubernetes):
                 # find the one we created, that's sufficient.
                 self.assertThat(
                     namespaces.items,
-                    AnyMatch(matches_namespace(obj)),
+                    AnyMatch(MatchesAll(matches_namespace(obj), has_uid(), is_active())),
                 )
             d.addCallback(check_namespaces)
             return d
