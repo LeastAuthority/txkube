@@ -6,6 +6,8 @@ Functional structures for representing different kinds of Kubernetes
 state.
 """
 
+from uuid import uuid4
+
 from zope.interface import provider, implementer
 
 from pyrsistent import CheckedPSet, PClass, field, pmap_field, pset, freeze, thaw
@@ -40,6 +42,34 @@ class NamespacedObjectMetadata(ObjectMetadata):
         return self.items[u"namespace"]
 
 
+
+class NamespaceStatus(PClass):
+    """
+    ``NamespaceStatus`` instances model `Kubernetes namespace status
+    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
+    """
+    phase = field(mandatory=True)
+
+    @classmethod
+    def active(cls):
+        return cls(phase=u"Active")
+
+
+    @classmethod
+    def terminating(cls):
+        return cls(phase=u"Terminating")
+
+
+    @classmethod
+    def from_raw(cls, status):
+        return cls(phase=status[u"phase"])
+
+
+    def to_raw(self):
+        return {u"phase": self.phase}
+
+
+
 @provider(IObjectLoader)
 @implementer(IObject)
 class Namespace(PClass):
@@ -54,6 +84,8 @@ class Namespace(PClass):
         invariant=instance_of(ObjectMetadata),
     )
 
+    status = field(mandatory=True, type=(NamespaceStatus, type(None)))
+
     @classmethod
     def default(cls):
         """
@@ -64,21 +96,36 @@ class Namespace(PClass):
 
     @classmethod
     def from_raw(cls, raw):
+        try:
+            status_raw = raw[u"status"]
+        except KeyError:
+            status = None
+        else:
+            status = NamespaceStatus.from_raw(status_raw)
         return cls(
             metadata=ObjectMetadata(
                 items=freeze(raw[u"metadata"]),
             ),
+            status=status,
+        )
+
+    def fill_defaults(self):
+        return self.transform(
+            # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
+            [u"metadata", u"items", u"uid"], unicode(uuid4()),
+            [u"status"], NamespaceStatus.active(),
         )
 
     def to_raw(self):
-        return {
+        result = {
             u"kind": self.kind,
             u"apiVersion": u"v1",
             u"metadata": thaw(self.metadata.items),
             u"spec": {},
-            u"status": {},
         }
-
+        if self.status is not None:
+            result[u"status"] = self.status.to_raw()
+        return result
 
 
 
@@ -106,6 +153,11 @@ class ConfigMap(PClass):
             ),
             data=raw.get(u"data", None),
         )
+
+
+    def fill_defaults(self):
+        # TODO Surely some stuff to fill.
+        return self
 
 
     def to_raw(self):
@@ -198,12 +250,24 @@ class ObjectCollection(PClass):
         return self.transform([u"items"], add(obj))
 
 
+    def replace(self, old, new):
+        return self.transform(
+            [u"items"], remove(old),
+            [u"items"], add(new),
+        )
+
+
 
 def add(value):
     def evolver(pset):
         return pset.add(value)
     return evolver
 
+
+def remove(value):
+    def evolver(pset):
+        return pset.remove(value)
+    return evolver
 
 
 _loaders = {
@@ -214,7 +278,7 @@ _loaders = {
 
 
 
-def object_from_raw(raw, kind_hint):
+def object_from_raw(raw, kind_hint=None):
     """
     Load an object of unspecified type from the raw representation of it.
 
