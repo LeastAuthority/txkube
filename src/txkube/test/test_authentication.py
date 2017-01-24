@@ -20,7 +20,10 @@ from ..testing import TestCase
 from .. import authenticate_with_serviceaccount
 
 # Just an arbitrary certificate pulled off the internet.  Details ought not
-# matter.
+# matter.  Retrieved using:
+#
+#    $ openssl s_client -showcerts -connect google.com:443
+#
 _CA_CERT_PEM = b"""\
 -----BEGIN CERTIFICATE-----
 MIIDfTCCAuagAwIBAgIDErvmMA0GCSqGSIb3DQEBBQUAME4xCzAJBgNVBAYTAlVT
