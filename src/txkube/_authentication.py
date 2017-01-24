@@ -183,10 +183,21 @@ def authenticate_with_certificate(reactor, base_url, client_cert, client_key, ca
 
 @implementer(IAgent)
 class HeaderInjectingAgent(PClass):
+    """
+    An ``IAgent`` which adds some headers to every request it makes.
+
+    :ivar Headers _to_inject: The headers to add.
+    @ivar IAgent _agent: The agent to use to issue requests.
+    """
     _to_inject = field(mandatory=True)
     _agent = field(mandatory=True)
 
     def request(self, method, url, headers=None, bodyProducer=None):
+        """
+        Issue a request with some extra headers.
+
+        :see: ``twisted.web.iweb.IAgent.request``
+        """
         if headers is None:
             headers = Headers()
         else:
