@@ -5,16 +5,14 @@
 Integration test generator for ``txkube.IKubernetesClient``.
 """
 
-import attr
+from operator import attrgetter
+from functools import partial
 
 from zope.interface.verify import verifyObject
 
-from pyrsistent import pmap, pset, thaw
-
-from hypothesis import given
-
 from testtools.matchers import (
     AnyMatch, MatchesAll, MatchesStructure, IsInstance, Equals, Not, Contains,
+    AfterPreprocessing, MatchesPredicate,
 )
 
 from testtools.twistedsupport import AsynchronousDeferredRunTest
@@ -25,7 +23,10 @@ from twisted.internet.task import deferLater
 
 from ..testing import TestCase
 
-from .. import IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection
+from .. import (
+    IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
+    ObjectMetadata,
+)
 from .strategies import creatable_namespaces, configmaps
 
 
@@ -170,10 +171,61 @@ def kubernetes_client_tests(get_kubernetes):
                 self.assertThat(created, matches_configmap(obj))
                 return self.client.list(ConfigMap)
             d.addCallback(created_configmap)
-            def check_configmaps(configmaps):
-                self.assertThat(configmaps, IsInstance(ObjectCollection))
-                self.assertThat(configmaps.items, AnyMatch(matches_configmap(obj)))
+            def check_configmaps(collection):
+                self.assertThat(collection, IsInstance(ObjectCollection))
+                self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
+            d.addCallback(check_configmaps)
+            return d
+
+        @async
+        def test_configmaps_sorted(self):
+            """
+            ``ConfigMap`` objects retrieved with ``IKubernetesClient.list`` appear in
+            sorted order, with (namespace, name) as the sort key.
+            """
+            strategy = configmaps()
+            objs = [strategy.example(), strategy.example()]
+            ns = list(
+                Namespace(
+                    metadata=ObjectMetadata(items={
+                        u"name": obj.metadata.namespace, u"uid": None,
+                    }),
+                    status=None,
+                )
+                for obj
+                in objs
+            )
+            d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
+            def created_configmaps(ignored):
+                return self.client.list(ConfigMap)
+            d.addCallback(created_configmaps)
+            def check_configmaps(collection):
+                self.expectThat(collection, items_are_sorted())
             d.addCallback(check_configmaps)
             return d
 
     return KubernetesClientIntegrationTests
+
+
+
+def items_are_sorted():
+    """
+    Match an ObjectCollection if its items can be iterated in the Kubernetes
+    canonical sort order - lexicographical by namespace, name.
+    """
+    def key(obj):
+        return (
+            getattr(obj.metadata, "namespace", None),
+            obj.metadata.name,
+        )
+
+    def is_sorted(items, key):
+        return list(items) == sorted(items, key=key)
+
+    return AfterPreprocessing(
+        attrgetter("items"),
+        MatchesPredicate(
+            partial(is_sorted, key=key),
+            u"%s is not sorted by namespace, name",
+        ),
+    )

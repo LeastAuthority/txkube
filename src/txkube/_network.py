@@ -8,8 +8,6 @@ via HTTP.
 
 from json import loads, dumps
 
-from pyrsistent import thaw
-
 from zope.interface import implementer
 
 import attr
