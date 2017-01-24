@@ -6,9 +6,11 @@ Functional structures for representing different kinds of Kubernetes
 state.
 """
 
+from uuid import uuid4
+
 from zope.interface import provider, implementer
 
-from pyrsistent import CheckedPSet, PClass, field, pmap_field, pset, freeze, thaw
+from pyrsistent import CheckedPVector, PClass, field, pmap_field, pset, freeze, thaw
 
 from . import IObject, IObjectLoader
 from ._invariants import instance_of, provider_of
@@ -40,6 +42,34 @@ class NamespacedObjectMetadata(ObjectMetadata):
         return self.items[u"namespace"]
 
 
+
+class NamespaceStatus(PClass):
+    """
+    ``NamespaceStatus`` instances model `Kubernetes namespace status
+    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
+    """
+    phase = field(mandatory=True)
+
+    @classmethod
+    def active(cls):
+        return cls(phase=u"Active")
+
+
+    @classmethod
+    def terminating(cls):
+        return cls(phase=u"Terminating")
+
+
+    @classmethod
+    def from_raw(cls, status):
+        return cls(phase=status[u"phase"])
+
+
+    def to_raw(self):
+        return {u"phase": self.phase}
+
+
+
 @provider(IObjectLoader)
 @implementer(IObject)
 class Namespace(PClass):
@@ -54,6 +84,8 @@ class Namespace(PClass):
         invariant=instance_of(ObjectMetadata),
     )
 
+    status = field(mandatory=True, type=(NamespaceStatus, type(None)))
+
     @classmethod
     def default(cls):
         """
@@ -64,21 +96,36 @@ class Namespace(PClass):
 
     @classmethod
     def from_raw(cls, raw):
+        try:
+            status_raw = raw[u"status"]
+        except KeyError:
+            status = None
+        else:
+            status = NamespaceStatus.from_raw(status_raw)
         return cls(
             metadata=ObjectMetadata(
                 items=freeze(raw[u"metadata"]),
             ),
+            status=status,
+        )
+
+    def fill_defaults(self):
+        return self.transform(
+            # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
+            [u"metadata", u"items", u"uid"], unicode(uuid4()),
+            [u"status"], NamespaceStatus.active(),
         )
 
     def to_raw(self):
-        return {
+        result = {
             u"kind": self.kind,
             u"apiVersion": u"v1",
             u"metadata": thaw(self.metadata.items),
             u"spec": {},
-            u"status": {},
         }
-
+        if self.status is not None:
+            result[u"status"] = self.status.to_raw()
+        return result
 
 
 
@@ -108,6 +155,11 @@ class ConfigMap(PClass):
         )
 
 
+    def fill_defaults(self):
+        # TODO Surely some stuff to fill.
+        return self
+
+
     def to_raw(self):
         result = {
             u"kind": self.kind,
@@ -123,16 +175,32 @@ class ConfigMap(PClass):
         return result
 
 
-def _pset_field(iface):
-    class _CheckedIObjectPSet(CheckedPSet):
+
+def object_sort_key(obj):
+    """
+    Define a predictable sort ordering for Kubernetes objects.
+
+    This should be the same ordering that Kubernetes itself imposes.
+    """
+    return (
+        # Not all objects have a namespace.
+        getattr(obj.metadata, "namespace", None),
+        obj.metadata.name,
+    )
+
+
+
+def _pvector_field(iface):
+    class _CheckedIObjectPVector(CheckedPVector):
         __invariant__ = provider_of(iface)
 
     return field(
         mandatory=True,
-        type=_CheckedIObjectPSet,
-        factory=_CheckedIObjectPSet.create,
-        initial=_CheckedIObjectPSet(),
+        type=_CheckedIObjectPVector,
+        factory=lambda v: _CheckedIObjectPVector.create(sorted(v, key=object_sort_key)),
+        initial=_CheckedIObjectPVector(),
     )
+
 
 
 @provider(IObjectLoader)
@@ -145,23 +213,22 @@ class ObjectCollection(PClass):
     this is actually more useful than a native Python collection such as a set
     but we'll try it out.
 
-    :ivar pset items: The objects belonging to this collection.
+    :ivar pvector items: The objects belonging to this collection.
     """
     kind = u"List"
-    items = _pset_field(IObject)
+    items = _pvector_field(IObject)
 
     @classmethod
     def from_raw(cls, raw):
-        return cls(
-            items=(
-                # Unfortunately `kind` is an optional field.  Fortunately, the
-                # top-level `kind` is something like `ConfigMapList` if you
-                # asked for `.../configmaps/`.  So pass that down as a hint.
-                object_from_raw(obj, raw[u"kind"][:-len(u"List")])
-                for obj
-                in raw[u"items"]
-            ),
+        items = (
+            # Unfortunately `kind` is an optional field.  Fortunately, the
+            # top-level `kind` is something like `ConfigMapList` if you
+            # asked for `.../configmaps/`.  So pass that down as a hint.
+            object_from_raw(obj, raw[u"kind"][:-len(u"List")])
+            for obj
+            in raw[u"items"]
         )
+        return cls(items=items)
 
 
     def to_raw(self):
@@ -172,9 +239,7 @@ class ObjectCollection(PClass):
             u"items": list(
                 obj.to_raw()
                 for obj
-                # Give me a stable output ordering.  This makes the tests
-                # simpler.  I don't know if it mirrors Kubernetes behavior.
-                in sorted(self.items, key=lambda obj: obj.metadata.name),
+                in self.items
             ),
         }
 
@@ -198,12 +263,24 @@ class ObjectCollection(PClass):
         return self.transform([u"items"], add(obj))
 
 
+    def replace(self, old, new):
+        return self.transform(
+            [u"items"], remove(old),
+            [u"items"], add(new),
+        )
+
+
 
 def add(value):
-    def evolver(pset):
-        return pset.add(value)
+    def evolver(pvector):
+        return sorted(pvector.append(value), key=object_sort_key)
     return evolver
 
+
+def remove(value):
+    def evolver(pset):
+        return pset.remove(value)
+    return evolver
 
 
 _loaders = {
@@ -214,7 +291,7 @@ _loaders = {
 
 
 
-def object_from_raw(raw, kind_hint):
+def object_from_raw(raw, kind_hint=None):
     """
     Load an object of unspecified type from the raw representation of it.
 

@@ -10,7 +10,9 @@ __all__ = [
     "IObject", "IObjectLoader", "IKubernetes", "IKubernetesClient",
     "network_client", "memory_client",
 
+    "NamespaceStatus",
     "ObjectMetadata", "NamespacedObjectMetadata",
+    "object_from_raw",
     "Namespace", "ConfigMap",
     "ObjectCollection",
 
@@ -27,7 +29,9 @@ version = Version("txkube", *_version_tuple)
 from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 
 from ._model import (
+    NamespaceStatus,
     ObjectMetadata, NamespacedObjectMetadata,
+    object_from_raw,
     Namespace, ConfigMap,
     ObjectCollection,
 )

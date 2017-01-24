@@ -5,21 +5,23 @@
 Tests for ``txkube._model``.
 """
 
-from testtools.matchers import Equals, raises
+from testtools.matchers import Equals, LessThan, raises
 
 from pyrsistent import InvariantException
 
-from hypothesis import given
+from hypothesis import given, assume
 from hypothesis.strategies import choices
 
 from ..testing import TestCase
 from ..testing.strategies import (
-    object_metadatas, namespaced_object_metadatas, namespaces, configmaps,
+    object_metadatas, namespaced_object_metadatas,
+    retrievable_namespaces, creatable_namespaces,
+    configmaps,
     objectcollections,
 )
 
-from .._model import (
-    ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap, ObjectCollection,
+from .. import (
+    Namespace, ConfigMap, ObjectCollection,
 )
 
 def object_metadata_tests(metadatas, accessors):
@@ -103,9 +105,17 @@ def iobject_tests(loader, strategy):
 
 
 
-class NamespaceTests(iobject_tests(Namespace, namespaces)):
+class RetrievableNamespaceTests(iobject_tests(Namespace, retrievable_namespaces)):
     """
-    Tests for ``Namespace``.
+    Tests for ``Namespace`` based on a strategy for fully-populated objects.
+    """
+
+
+
+class CreatableNamespaceTests(iobject_tests(Namespace, creatable_namespaces)):
+    """
+    Tests for ``Namespace`` based on a strategy for objects just detailed
+    enough to be created.
     """
 
 
@@ -121,3 +131,22 @@ class ObjectCollectionTests(iobject_tests(ObjectCollection, objectcollections)):
     """
     Tests for ``ObjectCollection``.
     """
+    @given(a=configmaps(), b=configmaps())
+    def test_items_sorted(self, a, b):
+        """
+        ``ObjectCollection.items`` is sorted by (namespace, name) regardless of
+        the order given to the initializer.
+        """
+        assume(
+            (a.metadata.namespace, a.metadata.name)
+            != (b.metadata.namespace, b.metadata.name)
+        )
+
+        collection = ObjectCollection(items=[a, b])
+        first = collection.items[0].metadata
+        second = collection.items[1].metadata
+
+        self.assertThat(
+            (first.namespace, first.name),
+            LessThan((second.namespace, second.name)),
+        )
