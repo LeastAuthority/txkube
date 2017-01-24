@@ -168,15 +168,10 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        @async
-        def test_configmap(self):
-            """
-            ``ConfigMap`` objects can be created and retrieved using the ``create``
-            and ``list`` methods of ``IKubernetesClient``.
-            """
+        def _namespaced_create_list_test(self, kind, object_strategy, matches_object):
             namespace = creatable_namespaces().example()
             # Move the object into the namespace we're going to create.
-            obj = configmaps().example().transform(
+            obj = object_strategy.example().transform(
                 [u"metadata", u"items", u"namespace"],
                 namespace.metadata.name,
             )
@@ -185,22 +180,28 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.create(obj)
             d.addCallback(created_namespace)
             def created_configmap(created):
-                self.assertThat(created, matches_configmap(obj))
-                return self.client.list(ConfigMap)
+                self.assertThat(created, matches_object(obj))
+                return self.client.list(kind)
             d.addCallback(created_configmap)
-            def check_configmaps(collection):
+            def check_collection(collection):
                 self.assertThat(collection, IsInstance(ObjectCollection))
-                self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
-            d.addCallback(check_configmaps)
+                self.assertThat(collection.items, AnyMatch(matches_object(obj)))
+            d.addCallback(check_collection)
             return d
 
+
         @async
-        def test_configmaps_sorted(self):
+        def test_configmap(self):
             """
-            ``ConfigMap`` objects retrieved with ``IKubernetesClient.list`` appear in
-            sorted order, with (namespace, name) as the sort key.
+            ``ConfigMap`` objects can be created and retrieved using the ``create``
+            and ``list`` methods of ``IKubernetesClient``.
             """
-            strategy = configmaps()
+            return self._namespaced_create_list_test(
+                ConfigMap, configmaps(), matches_configmap,
+            )
+
+
+        def _namespaced_list_sorted(self, kind, strategy):
             objs = [strategy.example(), strategy.example()]
             ns = list(
                 Namespace(
@@ -213,13 +214,25 @@ def kubernetes_client_tests(get_kubernetes):
                 in objs
             )
             d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
-            def created_configmaps(ignored):
-                return self.client.list(ConfigMap)
-            d.addCallback(created_configmaps)
-            def check_configmaps(collection):
+            def created_objects(ignored):
+                return self.client.list(kind)
+            d.addCallback(created_objects)
+            def check_collection(collection):
                 self.expectThat(collection, items_are_sorted())
-            d.addCallback(check_configmaps)
+            d.addCallback(check_collection)
             return d
+
+
+        @async
+        def test_configmaps_sorted(self):
+            """
+            ``ConfigMap`` objects retrieved with ``IKubernetesClient.list`` appear in
+            sorted order, with (namespace, name) as the sort key.
+            """
+            return self._namespaced_list_sorted(
+                ConfigMap, configmaps(),
+            )
+
 
     return KubernetesClientIntegrationTests
 
