@@ -48,8 +48,11 @@ def matches_namespace(ns):
 
 def matches_configmap(configmap):
     return MatchesStructure(
-        metadata=MatchesStructure.fromExample(
-            configmap.metadata, "name",
+        metadata=MatchesStructure(
+            namespace=Equals(configmap.metadata.namespace),
+            name=Equals(configmap.metadata.name),
+        ),
+    )
 
         ),
     )
