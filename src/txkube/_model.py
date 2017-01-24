@@ -91,7 +91,7 @@ class Namespace(PClass):
         """
         Get the default namespace.
         """
-        return cls(ObjectMetadata(items={u"name": u"default"}))
+        return cls.named(u"default")
 
 
     @classmethod
@@ -109,12 +109,25 @@ class Namespace(PClass):
             status=status,
         )
 
+
+    @classmethod
+    def named(cls, name):
+        """
+        Create an object with only the name metadata item.
+        """
+        return cls(
+            metadata=ObjectMetadata(items={u"name": name, u"uid": None}),
+            status=None,
+        )
+
+
     def fill_defaults(self):
         return self.transform(
             # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
             [u"metadata", u"items", u"uid"], unicode(uuid4()),
             [u"status"], NamespaceStatus.active(),
         )
+
 
     def to_raw(self):
         result = {

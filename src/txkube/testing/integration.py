@@ -123,6 +123,23 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @async
+        def test_namespace_retrieval(self):
+            """
+            A specific ``Namespace`` object can be retrieved by name using
+            ``IKubernetesClient.get``.
+            """
+            obj = creatable_namespaces().example()
+            d = self.client.create(obj)
+            def created_namespace(created):
+                return self.client.get(Namespace.named(obj.metadata.name))
+            d.addCallback(created_namespace)
+            def got_namespace(namespace):
+                self.assertThat(namespace, matches_namespace(obj))
+            d.addCallback(got_namespace)
+            return d
+
+
+        @async
         def test_namespace_deletion(self):
             """
             ``IKubernetesClient.delete`` can be used to delete ``Namespace``
