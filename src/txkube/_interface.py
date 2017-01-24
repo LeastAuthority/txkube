@@ -96,3 +96,26 @@ class IKubernetesClient(Interface):
 
         :return Deferred(IObject): A description of the created object.
         """
+
+
+    def get(obj):
+        """
+        Get a single object.
+
+        :param IObject obj: A description of which object to get.  The *kind*,
+            *namespace*, and *name* address the specific object to retrieve.
+
+        :return Deferred(IObject): A description of the retrieved object.
+        """
+
+
+    def delete(obj):
+        """
+        Delete a single object.
+
+        :param IObject obj: A description of which object to delete.  The *kind*,
+            *namespace*, and *name* address the specific object to delete.
+
+        :return Deferred(None): The Deferred fires when the object has been
+            deleted.
+        """
