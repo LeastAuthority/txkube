@@ -7,7 +7,7 @@ Kubernetes authentication support.
 
 import pem
 
-from OpenSSL.crypto import FILETYPE_PEM
+from OpenSSL.crypto import FILETYPE_PEM, Error as OpenSSLError
 
 from zope.interface import implementer
 
@@ -230,6 +230,15 @@ def authenticate_with_serviceaccount(reactor, **kw):
     if not ca_certs:
         raise ValueError("No certificate authority certificate found.")
     ca_cert = ca_certs[0]
+
+    try:
+        # Validate the certificate so we have early failures for garbage data.
+        ssl.Certificate.load(ca_cert.as_bytes(), FILETYPE_PEM)
+    except OpenSSLError as e:
+        raise ValueError(
+            "Invalid certificate authority certificate found.",
+            str(e),
+        )
 
     netloc = NetLocation(host=base_url.host, port=base_url.port)
     policy = ClientCertificatePolicyForHTTPS(

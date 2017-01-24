@@ -150,3 +150,37 @@ class AuthenticateWithServiceAccountTests(TestCase):
             ),
             raises(ValueError("No certificate authority certificate found.")),
         )
+
+
+    def test_bad_ca_certificate(self):
+        """
+        If no CA certificate is found in the service account directory,
+        ``authenticate_with_serviceaccount`` raises ``ValueError``.
+        """
+        t = FilePath(self.useFixture(TempDir()).join(b""))
+        serviceaccount = t.child(b"serviceaccount")
+        serviceaccount.makedirs()
+
+        serviceaccount.child(b"ca.crt").setContent(
+            b"-----BEGIN CERTIFICATE-----\n"
+            b"not a cert pem\n"
+            b"-----END CERTIFICATE-----\n"
+        )
+        serviceaccount.child(b"token").setContent(b"token")
+
+        self.patch(
+            os, "environ", {
+                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
+                b"KUBERNETES_SERVICE_PORT": b"443",
+            },
+        )
+
+        self.assertThat(
+            lambda: authenticate_with_serviceaccount(
+                MemoryReactor(), path=serviceaccount.path,
+            ),
+            raises(ValueError(
+                "Invalid certificate authority certificate found.",
+                "[('PEM routines', 'PEM_read_bio', 'bad base64 decode')]",
+            )),
+        )
