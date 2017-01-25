@@ -218,6 +218,7 @@ class _IntegerRange(PClass):
 
 class _ClassModel(PClass):
     _basic_types = {
+        (u"boolean", None): _BasicTypeModel(python_types=(bool,)),
         (u"integer", u"int32"): _BasicTypeModel(
             # XXX Kubernetes uses this to mean unsigned 32 bit integer.
             # Swagger spec says it is for signed 32 bit integer.  Since we're

@@ -57,6 +57,15 @@ class SwaggerTests(TestCase):
             u"simple-type": {
                 u"type": u"string",
             },
+            u"boolean": {
+                u"description": u"has type boolean",
+                u"properties": {
+                    u"v": {
+                        u"description": u"",
+                        u"type": u"boolean"
+                    },
+                }
+            },
             u"string.unlabeled": {
                 u"description": u"has type string and no label",
                 u"properties": {
@@ -131,6 +140,20 @@ class SwaggerTests(TestCase):
                 args=(u"simple-type", {u"type": u"string"}),
             ),
         )
+
+
+    def test_boolean(self):
+        Type = self.spec.pclass_for_definition(u"boolean")
+        self.expectThat(
+            lambda: Type(v=3),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(
+            lambda: Type(v=u"true"),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(Type(v=True).v, Equals(True))
+        self.expectThat(Type(v=False).v, Equals(False))
 
 
     def test_integer_int32_errors(self):
