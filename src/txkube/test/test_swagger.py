@@ -76,6 +76,16 @@ class SwaggerTests(TestCase):
                     },
                 },
             },
+            u"integer.int64": {
+                u"description": u"has type integer and label int64",
+                u"properties": {
+                    u"i": {
+                        u"description": u"",
+                        u"type": "integer",
+                        u"format": "int64"
+                    },
+                },
+            },
             u"string.date-time": {
                 u"description": u"has type string and label date-time",
                 u"properties": {
@@ -139,9 +149,34 @@ class SwaggerTests(TestCase):
         )
 
 
-    @given(integers(min_value=0, max_value=65535))
+    @given(integers(min_value=0, max_value=2 ** 32 - 1))
     def test_integer_int32_valid(self, expected):
         Type = self.spec.pclass_for_definition(u"integer.int32")
+        self.assertThat(
+            Type(i=expected).i,
+            Equals(expected),
+        )
+
+
+    def test_integer_int64_errors(self):
+        Type = self.spec.pclass_for_definition(u"integer.int64")
+        self.expectThat(
+            lambda: Type(i=u"foo"),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(
+            lambda: Type(i=2 ** 64),
+            raises_exception(InvariantException),
+        )
+        self.expectThat(
+            lambda: Type(i=-1),
+            raises_exception(InvariantException),
+        )
+
+
+    @given(integers(min_value=0, max_value=2 ** 64 - 1))
+    def test_integer_int64_valid(self, expected):
+        Type = self.spec.pclass_for_definition(u"integer.int64")
         self.assertThat(
             Type(i=expected).i,
             Equals(expected),

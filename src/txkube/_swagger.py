@@ -196,8 +196,8 @@ class _AttributeModel(PClass):
 
 
 class _IntegerRange(PClass):
-    min = field(type=int)
-    max = field(type=int)
+    min = field(type=(int, long))
+    max = field(type=(int, long))
 
     @classmethod
     def from_unsigned_bits(cls, n):
@@ -223,6 +223,9 @@ class _ClassModel(PClass):
             # Swagger spec says it is for signed 32 bit integer.  Since we're
             # trying to *use* Kubernetes ...
             python_types=(int, long), range=_IntegerRange.from_unsigned_bits(32),
+        ),
+        (u"integer", u"int64"): _BasicTypeModel(
+            python_types=(int, long), range=_IntegerRange.from_unsigned_bits(64),
         ),
         (u"string", None): _BasicTypeModel(python_types=(unicode,)),
         (u"string", u"byte"): _BasicTypeModel(python_types=(bytes,)),
