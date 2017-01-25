@@ -20,6 +20,11 @@ from pyrsistent import (
 from twisted.python.compat import nativeString
 
 
+class NotClassLike(Exception):
+    pass
+
+
+
 class Swagger(PClass):
     """
     A ``Swagger`` contains a single Swagger specification.
@@ -56,8 +61,6 @@ class Swagger(PClass):
         return cls(_pclasses={}, **document)
 
 
-
-
     def pclass_for_definition(self, name):
         """
         Get a ``pyrsistent.PClass`` subclass representing the Swagger definition
@@ -73,6 +76,8 @@ class Swagger(PClass):
         except KeyError:
             definition = self.definitions[name]
             kind = self._identify_kind(definition)
+            if kind is None:
+                raise NotClassLike(name, definition)
             generator =  getattr(self, "_model_for_{}".format(kind))
             model = generator(name, definition)
             cls = model.pclass()
@@ -83,7 +88,7 @@ class Swagger(PClass):
     def _identify_kind(self, definition):
         if u"properties" in definition:
             return "CLASS"
-        raise Exception("Unsupported stuff", definition)
+        return None
 
 
     def _model_for_CLASS(self, name, definition):

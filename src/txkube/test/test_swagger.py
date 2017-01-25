@@ -24,7 +24,7 @@ from testtools.matchers import (
     IsInstance, MatchesAll, AfterPreprocessing,
 )
 
-from .._swagger import Swagger, _IntegerRange
+from .._swagger import NotClassLike, Swagger, _IntegerRange
 
 from ..testing import TestCase
 
@@ -54,6 +54,10 @@ class _IntegerRangeTests(TestCase):
 class SwaggerTests(TestCase):
     spec_document = {
         u"definitions": {
+            u"simple-type": {
+                u"type": u"string",
+            },
+
             u"string.unlabeled": {
                 u"description": u"has type string and no label",
                 u"properties": {
@@ -100,6 +104,16 @@ class SwaggerTests(TestCase):
     def setUp(self):
         super(SwaggerTests, self).setUp()
         self.spec = Swagger.from_document(self.spec_document)
+
+
+    def test_simple_type(self):
+        self.assertThat(
+            lambda: self.spec.pclass_for_definition(u"simple-type"),
+            raises_exception(
+                NotClassLike,
+                args=(u"simple-type", {u"type": u"string"}),
+            ),
+        )
 
 
     def test_integer_int32_errors(self):
