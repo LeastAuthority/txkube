@@ -11,7 +11,7 @@ from pyrsistent import pmap
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries,
+    dictionaries, just,
 )
 
 from .. import (
@@ -40,7 +40,7 @@ def object_metadatas():
         ObjectMetadata,
         items=fixed_dictionaries({
             u"name": object_name(),
-            u"uid": none(),
+            u"uid": just(u""),
         }).map(pmap),
     )
 
