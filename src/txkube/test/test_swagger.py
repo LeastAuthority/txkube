@@ -10,6 +10,8 @@ from datetime import datetime
 from hypothesis import given
 from hypothesis.strategies import integers
 
+from eliot import Message
+
 from pyrsistent import InvariantException, CheckedValueTypeError, PTypeError, PClass
 
 from twisted.python.filepath import FilePath
@@ -147,6 +149,19 @@ class Kubernetes15SwaggerTests(TestCase):
         The specification can be loaded from a file.
         """
         Swagger.from_path(self.spec_path)
+
+
+    def test_everything(self):
+        """
+        Load every single definition from the specification.
+
+        This is a smoke test.  If it breaks, write some more specific tests
+        and then fix the problem.
+        """
+        spec = Swagger.from_path(self.spec_path)
+        for name in spec.definitions:
+            Message.log(name=name)
+            spec.pclass_for_definition(name)
 
 
     def test_properties_required_definition(self):
