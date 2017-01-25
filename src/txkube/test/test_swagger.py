@@ -57,6 +57,10 @@ class SwaggerTests(TestCase):
             u"simple-type": {
                 u"type": u"string",
             },
+            u"optional-description": {
+                u"properties": {
+                },
+            },
             u"boolean": {
                 u"description": u"has type boolean",
                 u"properties": {
@@ -150,6 +154,11 @@ class SwaggerTests(TestCase):
                 args=(u"simple-type", {u"type": u"string"}),
             ),
         )
+
+
+    def test_optional_description(self):
+        Type = self.spec.pclass_for_definition(u"optional-description")
+        self.assertThat(Type(), IsInstance(Type))
 
 
     def test_boolean(self):

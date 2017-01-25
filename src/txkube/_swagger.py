@@ -312,7 +312,7 @@ class _ClassModel(PClass):
     def from_swagger(cls, pclass_for_definition, name, definition):
         return cls(
             name=name,
-            doc=definition[u"description"],
+            doc=definition.get(u"description", name),
             attributes=cls._attributes_for_definition(pclass_for_definition, definition),
         )
 
