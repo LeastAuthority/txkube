@@ -50,6 +50,8 @@ class Swagger(PClass):
         return cls(_pclasses={}, **document)
 
 
+
+
     def pclass_for_definition(self, name):
         """
         Get a ``pyrsistent.PClass`` subclass representing the Swagger definition
@@ -98,7 +100,19 @@ class ITypeModel(Interface):
 
 @implementer(ITypeModel)
 class _BasicTypeModel(PClass):
-    python_types = field()
+    python_types = field(mandatory=True)
+    range = field(mandatory=True, initial=None)
+
+    def pclass_field_for_type(self, required):
+        if self.range is None:
+            extra = {}
+        else:
+            extra = dict(invariant=self.range.pyrsistent_invariant())
+        return field(
+            mandatory=required, type=self.python_types, **extra
+        )
+
+
 
     def pclass_field_for_type(self, required):
         return field(mandatory=required, type=self.python_types)
@@ -110,6 +124,7 @@ class _ArrayTypeModel(PClass):
     element_type = field(invariant=lambda o: (ITypeModel.providedBy(o), "does not provide ITypeModel"))
 
     def pclass_field_for_type(self, required):
+        # XXX ignores the range's pyrsistent_invariant
         return pvector_field(self.element_type.python_types, optional=not required)
 
 
@@ -125,8 +140,35 @@ class _AttributeModel(PClass):
 
 
 
+class _IntegerRange(PClass):
+    min = field(type=int)
+    max = field(type=int)
+
+    @classmethod
+    def from_unsigned_bits(cls, n):
+        return cls(min=0, max=2 ** n - 1)
+
+    @classmethod
+    def from_signed_bits(cls, n):
+        m = n - 1
+        return cls(min=-2 ** m, max=2 ** m - 1)
+
+    def pyrsistent_invariant(self):
+        return lambda v: (
+            self.min <= v <= self.max,
+            "out of required range ({}, {})".format(self.min, self.max),
+        )
+
+
+
 class _ClassModel(PClass):
     _basic_types = {
+        (u"integer", u"int32"): _BasicTypeModel(
+            # XXX Kubernetes uses this to mean unsigned 32 bit integer.
+            # Swagger spec says it is for signed 32 bit integer.  Since we're
+            # trying to *use* Kubernetes ...
+            python_types=(int, long), range=_IntegerRange.from_unsigned_bits(32),
+        ),
         (u"string", None): _BasicTypeModel(python_types=(unicode,)),
         (u"string", u"byte"): _BasicTypeModel(python_types=(bytes,)),
     }

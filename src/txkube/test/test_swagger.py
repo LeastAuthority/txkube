@@ -5,6 +5,9 @@
 Tests for ``txkube._swagger``.
 """
 
+from hypothesis import given
+from hypothesis.strategies import integers
+
 from pyrsistent import InvariantException, CheckedValueTypeError, PTypeError, PClass
 
 from twisted.python.filepath import FilePath
@@ -14,9 +17,77 @@ from testtools.matchers import (
     IsInstance, MatchesAll, AfterPreprocessing,
 )
 
-from .._swagger import Swagger
+from .._swagger import Swagger, _IntegerRange
 
 from ..testing import TestCase
+
+
+class _IntegerRangeTests(TestCase):
+    def test_from_signed_bits(self):
+        """
+        ``_IntegerRange.from_signed_bits`` returns an ``_IntegerRange`` with lower
+        and upper bounds set to the smallest and largest values a signed
+        integer of the given width can represent.
+        """
+        r = _IntegerRange.from_signed_bits(4)
+        self.assertThat(r, Equals(_IntegerRange(min=-8, max=7)))
+
+
+    def test_from_unsigned_bits(self):
+        """
+        ``_IntegerRange.from_unsigned_bits`` returns an ``_IntegerRange`` with
+        lower and upper bounds set to the smallest and largest values an
+        unsigned integer of the given width can represent.
+        """
+        r = _IntegerRange.from_unsigned_bits(4)
+        self.assertThat(r, Equals(_IntegerRange(min=0, max=15)))
+
+
+
+class SwaggerTests(TestCase):
+    spec_document = {
+        u"definitions": {
+            u"integer.int32": {
+                u"description": u"has type integer and label int32",
+                u"properties": {
+                    u"i": {
+                        u"description": u"",
+                        u"type": "integer",
+                        u"format": "int32"
+                    },
+                },
+            },
+        },
+    }
+
+    def setUp(self):
+        super(SwaggerTests, self).setUp()
+        self.spec = Swagger.from_document(self.spec_document)
+
+
+    def test_integer_int32_errors(self):
+        Type = self.spec.pclass_for_definition(u"integer.int32")
+        self.expectThat(
+            lambda: Type(i=u"foo"),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(
+            lambda: Type(i=2 ** 32),
+            raises_exception(InvariantException),
+        )
+        self.expectThat(
+            lambda: Type(i=-1),
+            raises_exception(InvariantException),
+        )
+
+
+    @given(integers(min_value=0, max_value=65535))
+    def test_integer_int32_valid(self, expected):
+        Type = self.spec.pclass_for_definition(u"integer.int32")
+        self.assertThat(
+            Type(i=expected).i,
+            Equals(expected),
+        )
 
 
 class Kubernetes15SwaggerTests(TestCase):
