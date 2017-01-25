@@ -20,6 +20,11 @@ from .. import (
     ObjectCollection,
 )
 
+# Without some attempt to cap the size of collection strategies (lists,
+# dictionaries), the slowness health check fails intermittently.  Here are
+# some sizes for collections with no other opinion on the matter.
+_AVERAGE_SIZE = 3
+_MAX_SIZE = 10
 
 def object_name():
     # https://kubernetes.io/docs/user-guide/identifiers/#names
@@ -124,6 +129,8 @@ def configmap_datas():
         dictionaries(
             keys=configmap_data_keys(),
             values=configmap_data_values(),
+            average_size=_AVERAGE_SIZE,
+            max_size=_MAX_SIZE,
         ),
     )
 
@@ -146,8 +153,18 @@ def objectcollections(namespaces=creatable_namespaces()):
     return builds(
         ObjectCollection,
         items=one_of(
-            lists(namespaces, unique_by=_unique_names),
-            lists(configmaps(), unique_by=_unique_names_with_namespaces),
+            lists(
+                namespaces,
+                average_size=_AVERAGE_SIZE,
+                max_size=_MAX_SIZE,
+                unique_by=_unique_names,
+            ),
+            lists(
+                configmaps(),
+                average_size=_AVERAGE_SIZE,
+                max_size=_MAX_SIZE,
+                unique_by=_unique_names_with_namespaces,
+            ),
         ),
     )
 
