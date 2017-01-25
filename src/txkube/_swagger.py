@@ -25,6 +25,8 @@ class Swagger(PClass):
     security = field()
     swagger = field()
 
+    _pclasses = field(mandatory=True, factory=dict)
+
 
     @classmethod
     def from_path(cls, spec_path):
@@ -45,7 +47,7 @@ class Swagger(PClass):
         :param dict document: An object like the one that might be created by
             parsing a Swagger JSON specification string.
         """
-        return cls(**document)
+        return cls(_pclasses={}, **document)
 
 
     def pclass_for_definition(self, name):
@@ -58,11 +60,16 @@ class Swagger(PClass):
         :return: A Python class which can be used to represent the Swagger
             definition of the given name.
         """
-        definition = self.definitions[name]
-        kind = self._identify_kind(definition)
-        generator =  getattr(self, "_model_for_{}".format(kind))
-        model = generator(name, definition)
-        return model.pclass()
+        try:
+            cls = self._pclasses[name]
+        except KeyError:
+            definition = self.definitions[name]
+            kind = self._identify_kind(definition)
+            generator =  getattr(self, "_model_for_{}".format(kind))
+            model = generator(name, definition)
+            cls = model.pclass()
+            self._pclasses[name] = cls
+        return cls
 
 
     def _identify_kind(self, definition):
@@ -75,7 +82,7 @@ class Swagger(PClass):
         """
         Model a Swagger definition that is like a Python class.
         """
-        return _ClassModel.from_swagger(name, definition)
+        return _ClassModel.from_swagger(self.pclass_for_definition, name, definition)
 
 
 
@@ -88,6 +95,7 @@ class ITypeModel(Interface):
         """
 
 
+
 @implementer(ITypeModel)
 class _BasicTypeModel(PClass):
     python_types = field()
@@ -96,12 +104,14 @@ class _BasicTypeModel(PClass):
         return field(mandatory=required, type=self.python_types)
 
 
+
 @implementer(ITypeModel)
 class _ArrayTypeModel(PClass):
     element_type = field(invariant=lambda o: (ITypeModel.providedBy(o), "does not provide ITypeModel"))
 
     def pclass_field_for_type(self, required):
         return pvector_field(self.element_type.python_types, optional=not required)
+
 
 
 class _AttributeModel(PClass):
@@ -126,32 +136,48 @@ class _ClassModel(PClass):
     attributes = field(type=PVector, factory=pvector)
 
     @classmethod
-    def _type_model_for_spec(cls, spec):
-        if spec[u"type"] == u"array":
-            element_type = cls._type_model_for_spec(spec[u"items"])
+    def _type_model_for_spec(cls, pclass_for_definition, spec):
+        if spec.get(u"type") == u"array":
+            element_type = cls._type_model_for_spec(
+                pclass_for_definition, spec[u"items"],
+            )
             return _ArrayTypeModel(element_type=element_type)
-        # TODO $ref
+
+        if u"$ref" in spec:
+            name = spec[u"$ref"]
+            assert name.startswith(u"#/definitions/")
+            name = name[len(u"#/definitions/"):]
+            pclass = pclass_for_definition(name)
+            return _BasicTypeModel(python_types=(pclass,))
+
         return cls._basic_types[spec[u"type"], spec.get(u"format", None)]
 
 
     @classmethod
-    def _attribute_for_property(cls, name, required, definition):
-        type_model = cls._type_model_for_spec(definition)
+    def _attribute_for_property(
+        cls, pclass_for_definition, name, required, definition
+    ):
+        type_model = cls._type_model_for_spec(pclass_for_definition, definition)
         return _AttributeModel(name=name, required=required, type_model=type_model)
 
-    @classmethod
-    def _attributes_for_definition(cls, definition):
-        required = definition.get(u"required", [])
-        for prop, spec in definition[u"properties"].items():
-            yield cls._attribute_for_property(prop, prop in required, spec)
 
     @classmethod
-    def from_swagger(cls, name, definition):
+    def _attributes_for_definition(cls, pclass_for_definition, definition):
+        required = definition.get(u"required", [])
+        for prop, spec in definition[u"properties"].items():
+            yield cls._attribute_for_property(
+                pclass_for_definition, prop, prop in required, spec,
+            )
+
+
+    @classmethod
+    def from_swagger(cls, pclass_for_definition, name, definition):
         return cls(
             name=name,
             doc=definition[u"description"],
-            attributes=cls._attributes_for_definition(definition),
+            attributes=cls._attributes_for_definition(pclass_for_definition, definition),
         )
+
 
     def pclass(self):
         """

@@ -109,6 +109,40 @@ class Kubernetes15SwaggerTests(TestCase):
         )
 
 
+    def test_reference_property(self):
+        """
+        For a definition with a property with a ``$ref`` reference,
+        ``Swagger.pclass_for_definition`` returns a ``PClass`` with a
+        corresponding field values for which must be instances of another
+        ``PClass`` derived from the target of that reference.
+        """
+        spec = Swagger.from_path(self.spec_path)
+        # Arbitrarily select a simple definition that includes an array from
+        # the spec.  It also demonstrates that "required" itself is optional.
+        name = u"v1.APIGroup"
+        APIGroup = spec.pclass_for_definition(name)
+        GroupVersionForDiscovery = spec.pclass_for_definition(u"v1.GroupVersionForDiscovery")
+        self.assertThat(
+            lambda: APIGroup(
+                name=u"group",
+                versions=[spec],
+            ),
+            raises_exception(
+                TypeError,
+            ),
+        )
+
+        group_version = GroupVersionForDiscovery(
+            groupVersion=u"group/version",
+            version=u"version",
+        )
+
+        self.assertThat(
+            APIGroup(name=u"group", versions=[group_version]).versions,
+            Equals([group_version]),
+        )
+
+
 
 def is_subclass(cls):
     return MatchesPredicate(
