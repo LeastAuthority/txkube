@@ -115,12 +115,15 @@ class _BasicTypeModel(PClass):
     range = field(mandatory=True, initial=None)
 
     def pclass_field_for_type(self, required):
-        if self.range is None:
-            extra = {}
-        else:
-            extra = dict(invariant=self.range.pyrsistent_invariant())
+        extra = {}
+        python_types = self.python_types
+        if self.range is not None:
+            extra[u"invariant"] = self.range.pyrsistent_invariant()
+        if not required:
+            python_types += (type(None),)
+            extra[u"initial"] = None
         return field(
-            mandatory=required, type=self.python_types, **extra
+            mandatory=required, type=python_types, **extra
         )
 
 

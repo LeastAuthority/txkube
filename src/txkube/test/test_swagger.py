@@ -21,7 +21,7 @@ from twisted.python.filepath import FilePath
 
 from testtools.matchers import (
     Equals, MatchesPredicate, MatchesStructure, Raises,
-    IsInstance, MatchesAll, AfterPreprocessing,
+    IsInstance, MatchesAll, AfterPreprocessing, Is,
 )
 
 from .._swagger import NotClassLike, Swagger, _IntegerRange
@@ -173,6 +173,11 @@ class SwaggerTests(TestCase):
     def test_optional_description(self):
         Type = self.spec.pclass_for_definition(u"optional-description")
         self.assertThat(Type(), IsInstance(Type))
+
+
+    def test_nonrequired_none_default(self):
+        Type = self.spec.pclass_for_definition(u"object-with-simple-ref")
+        self.assertThat(Type().p, Is(None))
 
 
     def test_boolean(self):
