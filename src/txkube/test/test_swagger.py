@@ -138,6 +138,20 @@ class SwaggerTests(TestCase):
                     },
                 },
             },
+            u"object-with-array": {
+                u"description": u"has type object and array values",
+                u"properties": {
+                    u"o": {
+                        u"type": u"object",
+                        u"additionalProperties": {
+                            u"type": u"array",
+                            u"items": {
+                                u"type": u"string",
+                            },
+                        },
+                    },
+                },
+            }
         },
     }
 
@@ -287,6 +301,14 @@ class SwaggerTests(TestCase):
             raises_exception(PTypeError),
         )
         self.expectThat(Type(p=u"foo").p, Equals(u"foo"))
+
+
+    def test_property_object_arrays(self):
+        Type = self.spec.pclass_for_definition(u"object-with-array")
+        self.assertThat(
+            Type(o={u"foo": [u"bar"]}).o,
+            Equals({u"foo": [u"bar"]}),
+        )
 
 
 

@@ -14,7 +14,7 @@ from zope.interface import Attribute, Interface, implementer
 
 from pyrsistent import (
     CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
-    pmap_field,
+    pmap_field, freeze,
 )
 
 from twisted.python.compat import nativeString
@@ -164,6 +164,13 @@ def itypemodel_field():
 @implementer(ITypeModel)
 class _ArrayTypeModel(PClass):
     element_type = itypemodel_field()
+
+    @property
+    def python_types(self):
+        # Cheat a bit and make pyrsistent synthesize a type for us...
+        # Amusingly, it's a regular set internally so also freeze it so it's
+        # okay to put it back in to field again.
+        return freeze(self.pclass_field_for_type(True).type)
 
     def pclass_field_for_type(self, required):
         # XXX ignores the range's pyrsistent_invariant
