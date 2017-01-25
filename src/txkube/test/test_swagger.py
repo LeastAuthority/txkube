@@ -5,6 +5,8 @@
 Tests for ``txkube._swagger``.
 """
 
+from datetime import datetime
+
 from hypothesis import given
 from hypothesis.strategies import integers
 
@@ -47,6 +49,15 @@ class _IntegerRangeTests(TestCase):
 class SwaggerTests(TestCase):
     spec_document = {
         u"definitions": {
+            u"string.unlabeled": {
+                u"description": u"has type string and no label",
+                u"properties": {
+                    u"s": {
+                        u"description": u"",
+                        u"type": u"string"
+                    },
+                }
+            },
             u"integer.int32": {
                 u"description": u"has type integer and label int32",
                 u"properties": {
@@ -88,6 +99,15 @@ class SwaggerTests(TestCase):
             Type(i=expected).i,
             Equals(expected),
         )
+
+
+    def test_string_unlabeled(self):
+        Type = self.spec.pclass_for_definition(u"string.unlabeled")
+        self.expectThat(
+            lambda: Type(s=b"foo"),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(Type(s=u"bar").s, Equals(u"bar"))
 
 
 class Kubernetes15SwaggerTests(TestCase):
