@@ -231,6 +231,9 @@ class _ClassModel(PClass):
         (u"string", None): _BasicTypeModel(python_types=(unicode,)),
         (u"string", u"byte"): _BasicTypeModel(python_types=(bytes,)),
         (u"string", u"date-time"): _DatetimeTypeModel(),
+        (u"string", u"int-or-string"): _BasicTypeModel(
+            python_types=(unicode, int, long),
+        ),
     }
 
     name = field(type=unicode)

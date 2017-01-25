@@ -105,6 +105,13 @@ class SwaggerTests(TestCase):
                     },
                 },
             },
+            u"string.int-or-string": {
+                u"description": u"has type string and format int-or-string",
+                u"properties": {
+                    u"s": {
+                        u"description": u"",
+                        u"type": u"string",
+                        u"format": u"int-or-string",
                     },
                 },
             },
@@ -231,6 +238,18 @@ class SwaggerTests(TestCase):
         now = datetime.utcnow()
         self.expectThat(Type(s=now).s, Equals(now))
         self.expectThat(Type(s=now.isoformat().decode("ascii")).s, Equals(now))
+
+
+    def test_string_int_or_string(self):
+        Type = self.spec.pclass_for_definition(u"string.int-or-string")
+        self.expectThat(
+            lambda: Type(s=b"foo"),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(Type(s=u"foo").s, Equals(u"foo"))
+        self.expectThat(Type(s=u"50").s, Equals(u"50"))
+        self.expectThat(Type(s=50).s, Equals(50))
+        self.expectThat(Type(s=50L).s, Equals(50))
 
 
     def test_object(self):
