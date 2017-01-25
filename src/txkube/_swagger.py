@@ -236,24 +236,51 @@ class _ClassModel(PClass):
     @classmethod
     def _type_model_for_spec(cls, pclass_for_definition, spec):
         if spec.get(u"type") == u"array":
+            # "array" type definitions represent an array of some other thing.
+            # Get a model for whatever the nested thing is and put it into an
+            # array model.
             element_type = cls._type_model_for_spec(
                 pclass_for_definition, spec[u"items"],
             )
             return _ArrayTypeModel(element_type=element_type)
 
         if spec.get(u"type") == u"object":
+            # "object" type definitions represent a mapping from unicode to
+            # some other thing.  Get a model for whatever the values are
+            # supposed to be and put that into a mapping model.
             value_type = cls._type_model_for_spec(
                 pclass_for_definition, spec[u"additionalProperties"],
             )
             return _MappingTypeModel(value_type=value_type)
 
         if u"$ref" in spec:
+            # "$ref" type definitions refer to some other definition in the
+            # specification.  Look that up and use it.
             name = spec[u"$ref"]
             assert name.startswith(u"#/definitions/")
             name = name[len(u"#/definitions/"):]
-            pclass = pclass_for_definition(name)
-            return _BasicTypeModel(python_types=(pclass,))
+            try:
+                # For anything that's class-like (basically, has properties)
+                # we'll get another PClass for the reference target.
+                python_types = (pclass_for_definition(name),)
+            except NotClassLike as e:
+                # For anything that's not class-like (it could be a simple
+                # type like a string), create a simple type model for it instead.
+                #
+                # The spec is conveniently available in the exception
+                # arguments.  This is an awful way to pass information around.
+                # Probably some refactoring is in order.
+                _, spec = e.args
+                return cls._type_model_for_spec(
+                    pclass_for_definition, spec,
+                )
+            else:
+                # For our purposes, the pclass we got is just another basic
+                # type we can model.
+                return _BasicTypeModel(python_types=python_types)
 
+        # If it wasn't any of those kinds of things, maybe it's just a simple
+        # type.  Look up the corresponding model object in the static mapping.
         return cls._basic_types[spec[u"type"], spec.get(u"format", None)]
 
 

@@ -57,7 +57,6 @@ class SwaggerTests(TestCase):
             u"simple-type": {
                 u"type": u"string",
             },
-
             u"string.unlabeled": {
                 u"description": u"has type string and no label",
                 u"properties": {
@@ -95,6 +94,14 @@ class SwaggerTests(TestCase):
                         u"additionalProperties": {
                             u"type": u"string",
                         },
+                    },
+                },
+            },
+            u"object-with-simple-ref": {
+                u"description": u"has type object and $ref with simple type target",
+                u"properties": {
+                    u"p": {
+                        u"$ref": u"#/definitions/simple-type",
                     },
                 },
             },
@@ -183,6 +190,14 @@ class SwaggerTests(TestCase):
             Type(o={u"foo": u"bar"}).o,
             Equals({u"foo": u"bar"}),
         )
+
+    def test_property_ref_simple(self):
+        Type = self.spec.pclass_for_definition(u"object-with-simple-ref")
+        self.expectThat(
+            lambda: Type(p=3),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(Type(p=u"foo").p, Equals(u"foo"))
 
 
 
