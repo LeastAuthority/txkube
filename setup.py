@@ -26,6 +26,7 @@ setuptools.setup(
         "twisted[tls]",
         "pem",
         "eliot",
+        "python-dateutil",
         "pykube",
     ],
     extras_require={
