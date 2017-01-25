@@ -138,6 +138,14 @@ class SwaggerTests(TestCase):
                     },
                 },
             },
+            u"object-with-complex-ref": {
+                u"description": u"has type object and $ref with type target of another class",
+                u"properties": {
+                    u"p": {
+                        u"$ref": u"#/definitions/object-with-simple-ref",
+                    },
+                },
+            },
             u"object-with-array": {
                 u"description": u"has type object and array values",
                 u"properties": {
@@ -299,6 +307,7 @@ class SwaggerTests(TestCase):
             Equals({u"foo": u"bar"}),
         )
 
+
     def test_property_ref_simple(self):
         Type = self.spec.pclass_for_definition(u"object-with-simple-ref")
         self.expectThat(
@@ -306,6 +315,21 @@ class SwaggerTests(TestCase):
             raises_exception(PTypeError),
         )
         self.expectThat(Type(p=u"foo").p, Equals(u"foo"))
+
+
+    def test_property_ref_complex(self):
+        Simple = self.spec.pclass_for_definition(u"object-with-simple-ref")
+        Complex = self.spec.pclass_for_definition(u"object-with-complex-ref")
+        self.expectThat(
+            Complex(p=Simple(p=u"foo")).p,
+            Equals(Simple(p=u"foo")),
+        )
+        # Allow construction with a dictionary that maps properly onto the
+        # target type, too.
+        self.expectThat(
+            Complex(p={u"p": u"foo"}).p,
+            Equals(Simple(p=u"foo")),
+        )
 
 
     def test_property_object_arrays(self):

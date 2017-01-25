@@ -101,6 +101,7 @@ class Swagger(PClass):
 
 class ITypeModel(Interface):
     python_types = Attribute("tuple of python types compatible with this type")
+    factory = Attribute("An optional callable for converting values to this type.")
 
     def pclass_field_for_type(required):
         """
@@ -113,6 +114,7 @@ class ITypeModel(Interface):
 class _BasicTypeModel(PClass):
     python_types = field(mandatory=True)
     range = field(mandatory=True, initial=None)
+    factory = field(mandatory=True, initial=None)
 
     def pclass_field_for_type(self, required):
         extra = {}
@@ -122,6 +124,8 @@ class _BasicTypeModel(PClass):
         if not required:
             python_types += (type(None),)
             extra[u"initial"] = None
+        if self.factory is not None:
+            extra[u"factory"] = self.factory
         return field(
             mandatory=required, type=python_types, **extra
         )
@@ -279,7 +283,7 @@ class _ClassModel(PClass):
             try:
                 # For anything that's class-like (basically, has properties)
                 # we'll get another PClass for the reference target.
-                python_types = (pclass_for_definition(name),)
+                python_type = pclass_for_definition(name)
             except NotClassLike as e:
                 # For anything that's not class-like (it could be a simple
                 # type like a string), create a simple type model for it instead.
@@ -294,7 +298,7 @@ class _ClassModel(PClass):
             else:
                 # For our purposes, the pclass we got is just another basic
                 # type we can model.
-                return _BasicTypeModel(python_types=python_types)
+                return _BasicTypeModel(python_types=(python_type,), factory=python_type.create)
 
         # If it wasn't any of those kinds of things, maybe it's just a simple
         # type.  Look up the corresponding model object in the static mapping.
