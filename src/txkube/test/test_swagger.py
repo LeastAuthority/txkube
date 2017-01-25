@@ -334,9 +334,13 @@ class Kubernetes15SwaggerTests(TestCase):
         and then fix the problem.
         """
         spec = Swagger.from_path(self.spec_path)
-        for name in spec.definitions:
+        for name in sorted(spec.definitions):
             Message.log(name=name)
-            spec.pclass_for_definition(name)
+            try:
+                spec.pclass_for_definition(name)
+            except NotClassLike:
+                # Some stuff, indeed, is not ...
+                pass
 
 
     def test_properties_required_definition(self):
