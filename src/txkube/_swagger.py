@@ -6,10 +6,16 @@ An interface to Swagger specifications.
 """
 
 from json import load
+from datetime import datetime
+
+from dateutil.parser import parse as parse_iso8601
 
 from zope.interface import Attribute, Interface, implementer
 
-from pyrsistent import PClass, PVector, pvector, field, pvector_field
+from pyrsistent import (
+    CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
+    pmap_field,
+)
 
 from twisted.python.compat import nativeString
 
@@ -114,8 +120,32 @@ class _BasicTypeModel(PClass):
 
 
 
+@implementer(ITypeModel)
+class _DatetimeTypeModel(object):
+    python_types = datetime
+
+    def _parse(self, value):
+        if isinstance(value, self.python_types):
+            return value
+        if isinstance(value, unicode):
+            try:
+                return parse_iso8601(value)
+            except ValueError:
+                raise CheckedValueTypeError(
+                    None, self.python_types, unicode, value,
+                )
+        # Let pyrsistent reject it.
+        return value
+
+
     def pclass_field_for_type(self, required):
-        return field(mandatory=required, type=self.python_types)
+        return field(
+            mandatory=required, type=self.python_types,
+            factory=self._parse,
+            serializer=lambda d: d.isoformat(),
+        )
+
+
 
 
 
@@ -171,6 +201,7 @@ class _ClassModel(PClass):
         ),
         (u"string", None): _BasicTypeModel(python_types=(unicode,)),
         (u"string", u"byte"): _BasicTypeModel(python_types=(bytes,)),
+        (u"string", u"date-time"): _DatetimeTypeModel(),
     }
 
     name = field(type=unicode)

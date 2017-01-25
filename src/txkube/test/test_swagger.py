@@ -68,6 +68,16 @@ class SwaggerTests(TestCase):
                     },
                 },
             },
+            u"string.date-time": {
+                u"description": u"has type string and label date-time",
+                u"properties": {
+                    u"s": {
+                        u"description": u"",
+                        u"type": "string",
+                        u"format": "date-time"
+                    },
+                },
+            },
         },
     }
 
@@ -108,6 +118,21 @@ class SwaggerTests(TestCase):
             raises_exception(PTypeError),
         )
         self.expectThat(Type(s=u"bar").s, Equals(u"bar"))
+
+
+    def test_string_date_time(self):
+        Type = self.spec.pclass_for_definition(u"string.date-time")
+        self.expectThat(
+            lambda: Type(s=b"foo"),
+            raises_exception(PTypeError),
+        )
+        self.expectThat(
+            lambda: Type(s=u"foo"),
+            raises_exception(CheckedValueTypeError),
+        )
+        now = datetime.utcnow()
+        self.expectThat(Type(s=now).s, Equals(now))
+        self.expectThat(Type(s=now.isoformat().decode("ascii")).s, Equals(now))
 
 
 class Kubernetes15SwaggerTests(TestCase):
