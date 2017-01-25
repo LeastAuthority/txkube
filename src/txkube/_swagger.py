@@ -120,6 +120,7 @@ class _BasicTypeModel(PClass):
         extra = {}
         python_types = self.python_types
         if self.range is not None:
+            # XXX Allow None here
             extra[u"invariant"] = self.range.pyrsistent_invariant()
         if not required:
             python_types += (type(None),)
@@ -225,7 +226,7 @@ class _IntegerRange(PClass):
     def pyrsistent_invariant(self):
         return lambda v: (
             self.min <= v <= self.max,
-            "out of required range ({}, {})".format(self.min, self.max),
+            "{!r} out of required range ({}, {})".format(v, self.min, self.max),
         )
 
 
