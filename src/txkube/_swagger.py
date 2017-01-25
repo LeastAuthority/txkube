@@ -146,17 +146,37 @@ class _DatetimeTypeModel(object):
         )
 
 
+def itypemodel_field():
+    return field(
+        invariant=lambda o: (
+            ITypeModel.providedBy(o),
+            "does not provide ITypeModel",
+        ),
+    )
 
 
 
 @implementer(ITypeModel)
 class _ArrayTypeModel(PClass):
-    element_type = field(invariant=lambda o: (ITypeModel.providedBy(o), "does not provide ITypeModel"))
+    element_type = itypemodel_field()
 
     def pclass_field_for_type(self, required):
         # XXX ignores the range's pyrsistent_invariant
         return pvector_field(self.element_type.python_types, optional=not required)
 
+
+
+@implementer(ITypeModel)
+class _MappingTypeModel(PClass):
+    value_type = itypemodel_field()
+
+    def pclass_field_for_type(self, required):
+        # XXX ignores the range's pyrsistent_invariant
+        return pmap_field(
+            key_type=unicode,
+            value_type=self.value_type.python_types,
+            optional=not required,
+        )
 
 
 class _AttributeModel(PClass):
@@ -215,6 +235,12 @@ class _ClassModel(PClass):
                 pclass_for_definition, spec[u"items"],
             )
             return _ArrayTypeModel(element_type=element_type)
+
+        if spec.get(u"type") == u"object":
+            value_type = cls._type_model_for_spec(
+                pclass_for_definition, spec[u"additionalProperties"],
+            )
+            return _MappingTypeModel(value_type=value_type)
 
         if u"$ref" in spec:
             name = spec[u"$ref"]

@@ -12,7 +12,10 @@ from hypothesis.strategies import integers
 
 from eliot import Message
 
-from pyrsistent import InvariantException, CheckedValueTypeError, PTypeError, PClass
+from pyrsistent import (
+    InvariantException, CheckedKeyTypeError, CheckedValueTypeError,
+    PTypeError, PClass,
+)
 
 from twisted.python.filepath import FilePath
 
@@ -80,6 +83,17 @@ class SwaggerTests(TestCase):
                     },
                 },
             },
+            u"object": {
+                u"description": u"has type object",
+                u"properties": {
+                    u"o": {
+                        u"type": u"object",
+                        u"additionalProperties": {
+                            u"type": u"string",
+                        },
+                    },
+                },
+            },
         },
     }
 
@@ -135,6 +149,27 @@ class SwaggerTests(TestCase):
         now = datetime.utcnow()
         self.expectThat(Type(s=now).s, Equals(now))
         self.expectThat(Type(s=now.isoformat().decode("ascii")).s, Equals(now))
+
+
+    def test_object(self):
+        Type = self.spec.pclass_for_definition(u"object")
+        self.expectThat(
+            lambda: Type(o=3),
+            raises_exception(AttributeError),
+        )
+        self.expectThat(
+            lambda: Type(o={b"foo": u"bar"}),
+            raises_exception(CheckedKeyTypeError),
+        )
+        self.expectThat(
+            lambda: Type(o={u"foo": b"bar"}),
+            raises_exception(CheckedValueTypeError),
+        )
+        self.expectThat(
+            Type(o={u"foo": u"bar"}).o,
+            Equals({u"foo": u"bar"}),
+        )
+
 
 
 class Kubernetes15SwaggerTests(TestCase):
