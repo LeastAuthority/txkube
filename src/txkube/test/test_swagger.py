@@ -67,7 +67,7 @@ class SwaggerTests(TestCase):
                 }
             },
             u"string.unlabeled": {
-                u"description": u"has type string and no label",
+                u"description": u"has type string and no format",
                 u"properties": {
                     u"s": {
                         u"description": u"",
@@ -76,32 +76,35 @@ class SwaggerTests(TestCase):
                 }
             },
             u"integer.int32": {
-                u"description": u"has type integer and label int32",
+                u"description": u"has type integer and format int32",
                 u"properties": {
                     u"i": {
                         u"description": u"",
-                        u"type": "integer",
-                        u"format": "int32"
+                        u"type": u"integer",
+                        u"format": u"int32"
                     },
                 },
             },
             u"integer.int64": {
-                u"description": u"has type integer and label int64",
+                u"description": u"has type integer and format int64",
                 u"properties": {
                     u"i": {
                         u"description": u"",
-                        u"type": "integer",
-                        u"format": "int64"
+                        u"type": u"integer",
+                        u"format": u"int64"
                     },
                 },
             },
             u"string.date-time": {
-                u"description": u"has type string and label date-time",
+                u"description": u"has type string and format date-time",
                 u"properties": {
                     u"s": {
                         u"description": u"",
-                        u"type": "string",
-                        u"format": "date-time"
+                        u"type": u"string",
+                        u"format": u"date-time",
+                    },
+                },
+            },
                     },
                 },
             },
