@@ -169,6 +169,11 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         def _namespaced_create_list_test(self, kind, object_strategy, matches_object):
+            """
+            Verify that new objects of a particular namespaced *kind* can be created
+            using ``IKubernetesClient.create`` and then appear in the result
+            of ``IKubernetesClient.list`` for that *kind*.
+            """
             namespace = creatable_namespaces().example()
             # Move the object into the namespace we're going to create.
             obj = object_strategy.example().transform(
@@ -202,6 +207,10 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         def _namespaced_list_sorted(self, kind, strategy):
+            """
+            Verify that the objects in the collection returned by
+            ``IKubernetesClient.list`` are in canonical order.
+            """
             objs = [strategy.example(), strategy.example()]
             ns = list(
                 Namespace(
