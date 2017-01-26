@@ -330,6 +330,10 @@ class SwaggerTests(TestCase):
             Complex(p={u"p": u"foo"}).p,
             Equals(Simple(p=u"foo")),
         )
+        # It is not marked as required so we can set it to None.
+        self.expectThat(Complex(p=None).p, Is(None))
+        # It should also default to None.
+        self.expectThat(Complex().p, Is(None))
 
 
     def test_property_object_arrays(self):

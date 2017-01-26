@@ -120,17 +120,47 @@ class _BasicTypeModel(PClass):
     range = field(mandatory=True, initial=None)
     factory = field(mandatory=True, initial=None)
 
+    def _pyrsistent_invariant(self, required):
+        if self.range is None:
+            return None
+        invariant = self.range.pyrsistent_invariant()
+        if required:
+            return invariant
+        def optional(v):
+            if v is None:
+                return (True, u"")
+            return invariant(v)
+        return optional
+
+
+    def _pyrsistent_factory(self, required):
+        if self.factory is None:
+            return None
+        if required:
+            return self.factory
+        def optional(v):
+            if v is None:
+                return v
+            return self.factory(v)
+        return optional
+
+
     def pclass_field_for_type(self, required):
         extra = {}
         python_types = self.python_types
-        if self.range is not None:
-            # XXX Allow None here
-            extra[u"invariant"] = self.range.pyrsistent_invariant()
+
+        invariant = self._pyrsistent_invariant(required)
+        if invariant is not None:
+            extra[u"invariant"] = invariant
+
         if not required:
             python_types += (type(None),)
             extra[u"initial"] = None
-        if self.factory is not None:
-            extra[u"factory"] = self.factory
+
+        factory = self._pyrsistent_factory(required)
+        if factory is not None:
+            extra[u"factory"] = factory
+
         return field(
             mandatory=required, type=python_types, **extra
         )
