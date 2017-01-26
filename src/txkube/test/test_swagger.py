@@ -226,9 +226,9 @@ class SwaggerTests(TestCase):
             Equals(expected),
         )
         # The property is not required so we can set it to None.
-        self.assertThat(Type(i=None).i, Is(None))
+        self.expectThat(Type(i=None).i, Is(None))
         # The property is not required so it defaults to None.
-        self.assertThat(Type().i, Is(None))
+        self.expectThat(Type().i, Is(None))
 
 
     def test_integer_int64_errors(self):
