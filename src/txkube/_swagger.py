@@ -7,6 +7,7 @@ An interface to Swagger specifications.
 
 from json import load
 from datetime import datetime
+from itertools import chain
 
 from dateutil.parser import parse as parse_iso8601
 
@@ -14,7 +15,7 @@ from zope.interface import Attribute, Interface, implementer
 
 from pyrsistent import (
     CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
-    pmap_field, freeze,
+    pmap_field, freeze, pmap,
 )
 
 from twisted.python.compat import nativeString
@@ -61,7 +62,7 @@ class Swagger(PClass):
         return cls(_pclasses={}, **document)
 
 
-    def pclass_for_definition(self, name):
+    def pclass_for_definition(self, name, constant_fields=pmap()):
         """
         Get a ``pyrsistent.PClass`` subclass representing the Swagger definition
         in this specification which corresponds to the given name.
@@ -79,7 +80,7 @@ class Swagger(PClass):
             if kind is None:
                 raise NotClassLike(name, definition)
             generator =  getattr(self, "_model_for_{}".format(kind))
-            model = generator(name, definition)
+            model = generator(name, definition, constant_fields)
             cls = model.pclass()
             self._pclasses[name] = cls
         return cls
@@ -91,11 +92,14 @@ class Swagger(PClass):
         return None
 
 
-    def _model_for_CLASS(self, name, definition):
+    def _model_for_CLASS(self, name, definition, constant_fields):
         """
         Model a Swagger definition that is like a Python class.
         """
-        return _ClassModel.from_swagger(self.pclass_for_definition, name, definition)
+        return _ClassModel.from_swagger(
+            self.pclass_for_definition, name, definition,
+            constant_fields,
+        )
 
 
 
@@ -208,6 +212,13 @@ class _AttributeModel(PClass):
     def pclass_field_for_attribute(self):
         return self.type_model.pclass_field_for_type(required=self.required)
 
+
+class _ConstantModel(PClass):
+    name = field(type=unicode)
+    value = field()
+
+    def pclass_field_for_attribute(self):
+        return self.value
 
 
 class _IntegerRange(PClass):
@@ -324,11 +335,20 @@ class _ClassModel(PClass):
 
 
     @classmethod
-    def from_swagger(cls, pclass_for_definition, name, definition):
+    def from_swagger(cls, pclass_for_definition, name, definition, constant_fields):
         return cls(
             name=name,
             doc=definition.get(u"description", name),
-            attributes=cls._attributes_for_definition(pclass_for_definition, definition),
+            attributes=chain((
+                attr
+                for attr
+                in cls._attributes_for_definition(pclass_for_definition, definition)
+                if constant_fields is None or attr.name not in constant_fields
+            ), (
+                _ConstantModel(name=name, value=value)
+                for (name, value)
+                in constant_fields.items()
+            )),
         )
 
 

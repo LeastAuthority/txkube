@@ -340,6 +340,15 @@ class SwaggerTests(TestCase):
         )
 
 
+    def test_constant_property_replacement(self):
+        """
+        A property an object can be replaced by a constant value using thge
+        ``constant_fields`` parameter.
+        """
+        Type = self.spec.pclass_for_definition(u"object-with-array", constant_fields={u"o": u"foo"})
+        self.assertThat(Type().o, Equals(u"foo"))
+
+
 
 class Kubernetes15SwaggerTests(TestCase):
     """
