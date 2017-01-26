@@ -23,6 +23,11 @@ from .. import (
 # Without some attempt to cap the size of collection strategies (lists,
 # dictionaries), the slowness health check fails intermittently.  Here are
 # some sizes for collections with no other opinion on the matter.
+#
+# If you write a strategy that involves a collection and there are no official
+# upper limits on the number of items in that collection, you should almost
+# certainly impose these limits to make sure your strategy runs quickly
+# enough.
 _QUICK_AVERAGE_SIZE = 3
 _QUICK_MAX_SIZE = 10
 
