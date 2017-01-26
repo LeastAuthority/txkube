@@ -3,6 +3,12 @@
 
 """
 An interface to Swagger specifications.
+
+This module provides the ability to automatically derive somewhat sensible
+Python type definitions from definitions in a Swagger specification.  The
+Python types enforce the constraints defined by the Swagger specification as
+best they can.  They also support being serialized down to raw (JSON-y)
+objects and loaded from such objects.
 """
 
 from json import load
@@ -22,23 +28,36 @@ from twisted.python.compat import nativeString
 
 
 class NotClassLike(Exception):
-    pass
+    """
+    An attempt was made to treat a Swagger definition as though it were
+    compatible with Python classes but it is not (for example, it is a simple
+    type like *string* or *integer*).
+    """
 
 
 
 class Swagger(PClass):
     """
     A ``Swagger`` contains a single Swagger specification.
+
+    Public attributes of this class correspond to the top-level properties in
+    a `Swagger specification <http://swagger.io/>`_.
+
+    :ivar dict _pclasses: A cache of the `PClass`\ es that have been
+        constructed for definitions from this specification already.  This
+        allows multiple requests for the same definition to be satisfied with
+        the same type object (rather than a new type object which has all the
+        same attributes and behavior).  This plays better with Python's type
+        system than the alternative.
     """
     info = field()
     paths = field()
-    definitions = field()
+    definitions = field(factory=pmap)
     securityDefinitions = field()
     security = field()
     swagger = field()
 
-    _pclasses = field(mandatory=True, factory=dict)
-
+    _pclasses = field(mandatory=True, type=dict)
 
     @classmethod
     def from_path(cls, spec_path):
@@ -87,6 +106,20 @@ class Swagger(PClass):
 
 
     def _identify_kind(self, definition):
+        """
+        Determine what kind of thing the given definition seems to resemble.
+
+        This must be inferred from the structure of the definition.  For
+        example, if it includes the *properties* then the thing is sort of
+        like a Python class.
+
+        :param pyrsistent.PMap definition: A Swagger definition to categorize.
+            This will be a value like the one found at
+            ``spec["definitions"][name]``.
+
+        :return: ``"CLASS"`` for things that are class-like.  ``None``
+            otherwise (though it would be good to extend this).
+        """
         if u"properties" in definition:
             return "CLASS"
         return None
@@ -95,6 +128,17 @@ class Swagger(PClass):
     def _model_for_CLASS(self, name, definition, constant_fields):
         """
         Model a Swagger definition that is like a Python class.
+
+        :param unicode name: The name of the definition from the
+            specification.
+
+        :param pyrsistent.PMap definition: A Swagger definition to categorize.
+            This will be a value like the one found at
+            ``spec["definitions"][name]``.
+
+        :param dict constant_fields: Additional fields to set as constants on
+            the resulting class.  These will override properties from the
+            Swagger definition if they collide.
         """
         return _ClassModel.from_swagger(
             self.pclass_for_definition, name, definition,
