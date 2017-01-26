@@ -279,6 +279,13 @@ class SwaggerTests(TestCase):
         self.expectThat(Type(s=now).s, Equals(now))
         self.expectThat(Type(s=now.isoformat().decode("ascii")).s, Equals(now))
 
+        # string / date-time fields serialize back to an ISO8601 format
+        # string.
+        self.expectThat(
+            Type(s=now).serialize(),
+            Equals({u"s": now.isoformat().decode("ascii")}),
+        )
+
 
     def test_string_int_or_string(self):
         Type = self.spec.pclass_for_definition(u"string.int-or-string")

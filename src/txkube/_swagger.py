@@ -189,7 +189,7 @@ class _DatetimeTypeModel(object):
         return field(
             mandatory=required, type=self.python_types,
             factory=self._parse,
-            serializer=lambda d: d.isoformat(),
+            serializer=lambda format, value: value.isoformat(),
         )
 
 
