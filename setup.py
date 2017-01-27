@@ -18,6 +18,8 @@ setuptools.setup(
     license="MIT",
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
+    include_package_data=True,
+    zip_safe=False,
     install_requires=[
         "zope.interface",
         "attr",
@@ -26,6 +28,7 @@ setuptools.setup(
         "twisted[tls]",
         "pem",
         "eliot",
+        "python-dateutil",
         "pykube",
     ],
     extras_require={
