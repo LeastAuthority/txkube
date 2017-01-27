@@ -147,24 +147,78 @@ class Swagger(PClass):
 
 
 
+class IRangeModel(Interface):
+    """
+    An ``IRangeModel`` provider models the range of values a type can take on.
+    """
+    def pyrsistent_invariant():
+        """
+        :return: A pyrsistent invariant which enforces the range.  It accepts one
+            argument (a value to validate) and returns a two-tuple.  The first
+            element is ``True`` if the value is in the range, ``False`` otherwise.
+            If it is ``False``, the second element gives a human-readable
+            description of how the value fell out of the range.
+        """
+
+
 class ITypeModel(Interface):
+    """
+    An ``ITypeModel`` provider models the type of a value.
+
+    Such types could be associated with the value of a property or a value
+    found in an array or mapping.
+    """
     python_types = Attribute("tuple of python types compatible with this type")
     factory = Attribute("An optional callable for converting values to this type.")
 
     def pclass_field_for_type(required):
         """
         Create a pyrsistent field for this model object for use with a PClass.
+
+        :param bool required: Whether the field should be mandatory or
+            optional.
+
+        :return: A pyrsistent field descriptor for an attribute which is
+            usable with values of this type.
         """
 
 
 
 @implementer(ITypeModel)
 class _BasicTypeModel(PClass):
+    """
+    A ``_BasicTypeModel`` represents a type composed (roughly) of a "single"
+    value.
+
+    Specifically, this is used for Swagger types of *boolean*, *integer*,
+    *string* (except *date-time*), and references to other *object*\ s.
+
+    :ivar tuple(type) python_types: The Python types which correspond to this
+        the modeled Swagger type.
+
+    :ivar IRangeModel range: Optionally, a model of the range of values
+        allowed (necessary because, for example, a Python integer type can
+        hold arbitrarily large values but the modeled type may be limited to
+        the range representable in 32 bits).
+
+    :ivar factory: A one-argument callable which can convert non-canonical
+        representations to canonical representations (and which will be
+        applied to values provided for use with this type).
+    """
     python_types = field(mandatory=True)
     range = field(mandatory=True, initial=None)
     factory = field(mandatory=True, initial=None)
 
     def _pyrsistent_invariant(self, required):
+        """
+        Create a pyrsistent invariant which reflects this model.
+
+        :param bool required: ``True`` if the invariant will require a
+            non-``None`` value, ``False`` if ``None`` is allowed in addition
+            to whatever ``self.range`` describes.
+
+        :return: A callable suitable for use as a pyrsistent invariant.
+        """
         if self.range is None:
             return None
         invariant = self.range.pyrsistent_invariant()
@@ -178,6 +232,15 @@ class _BasicTypeModel(PClass):
 
 
     def _pyrsistent_factory(self, required):
+        """
+        Create a pyrsistent field factory which reflects this model.
+
+        :param bool required: ``True`` if the factory will require a
+            non-``None`` value, ``False`` if ``None`` is allowed to bypass
+            ``self.factory``.
+
+        :return: A callable suitable for use as a pyrsistent factory.
+        """
         if self.factory is None:
             return None
         if required:
@@ -190,6 +253,14 @@ class _BasicTypeModel(PClass):
 
 
     def pclass_field_for_type(self, required):
+        """
+        Construct a pyrsistent field reflecting this model.
+
+        The field uses the model's invariant and factory.  If ``required`` is
+        ``False``, an initial value of ``None`` is also supplied.
+
+        :return: The field descriptor.
+        """
         extra = {}
         python_types = self.python_types
 
@@ -211,11 +282,29 @@ class _BasicTypeModel(PClass):
 
 
 
+# TODO This diverges from _BasicTypeModel in some pointless ways - such as
+# initial value.
 @implementer(ITypeModel)
 class _DatetimeTypeModel(object):
+    """
+    A ``_DatetimeTypeModel`` represents the *date-time* format of the Swagger
+    *string* type.
+
+    The string value is exposed to the Python level as a ``datetime.datetime``
+    instance in UTC.
+    """
     python_types = datetime
 
     def _parse(self, value):
+        """
+        Maybe parse an ISO8601 datetime string into a datetime.
+
+        :param value: Either a string to parse or a datetime object to pass
+            through.
+
+        :return: A ``datetime.datetime`` representing ``value``.  If ``value``
+            was an inappropriate type, ``value`` is returned.
+        """
         if isinstance(value, self.python_types):
             return value
         if isinstance(value, unicode):
@@ -237,7 +326,12 @@ class _DatetimeTypeModel(object):
         )
 
 
+
 def itypemodel_field():
+    """
+    :return: A pyrsistent field for an attribute which much refer to an
+        ``ITypeModel`` provider.
+    """
     return field(
         invariant=lambda o: (
             ITypeModel.providedBy(o),
@@ -249,6 +343,17 @@ def itypemodel_field():
 
 @implementer(ITypeModel)
 class _ArrayTypeModel(PClass):
+    """
+    An ``_ArrayTypeModel`` represents a type which is a homogeneous array.
+
+    Specifically, this is used for the Swagger type *array*.
+
+    :ivar tuple(type) python_types: The Python types which correspond to this
+        the modeled Swagger type.
+
+    :ivar ITypeModel element_type: The type model that applies to elements of
+        the array.
+    """
     element_type = itypemodel_field()
 
     @property
@@ -258,14 +363,29 @@ class _ArrayTypeModel(PClass):
         # okay to put it back in to field again.
         return freeze(self.pclass_field_for_type(True).type)
 
+
     def pclass_field_for_type(self, required):
         # XXX ignores the range's pyrsistent_invariant
         return pvector_field(self.element_type.python_types, optional=not required)
 
 
 
+# TODO It might make more sense to handle this the same way as a reference to
+# another object.  The current implementation makes it tricky because it's not
+# straightforward to name these inline/nested objects (as it is
+# straightforward to name a top-level definition).
 @implementer(ITypeModel)
 class _MappingTypeModel(PClass):
+    """
+    A ``_MappingTypeModel`` represents a type which is a homogeneous mapping
+    with ``unicode`` keys.
+
+    Specifically, this is used for the Swagger type *object* when it occurs
+    inline in another definition.
+
+    :ivar ITypeModel value_field: The type model that applies to values in the
+        mapping.
+    """
     value_type = itypemodel_field()
 
     def pclass_field_for_type(self, required):
@@ -277,38 +397,99 @@ class _MappingTypeModel(PClass):
         )
 
 
+
 class _AttributeModel(PClass):
+    """
+    An ``_AttributeModel`` models an attribute of a class-like definition.
+
+    Specifically, this is used for an item in a Swagger *object*\ s
+    *properties*.
+
+    :ivar unicode name: The name of the attribute.
+
+    :ivar unicode descriptor: The human-meaningful description of the
+        attribute.
+
+    :ivar itypemodel_field type_model: The type model for values this
+        attribute can reference.
+
+    :ivar bool required: ``True`` if a value conforming to ``type_model`` must
+        be supplied.  ``False`` if ``None`` is allowed in addition to values
+        allowed by ``type_model``.
+    """
     name = field(type=unicode)
     description = field(type=unicode)
-    type_model = field(invariant=lambda o: (ITypeModel.providedBy(o), "does not provide ITypeModel"))
+    type_model = itypemodel_field()
     required = field(type=bool)
 
     def pclass_field_for_attribute(self):
+        """
+        :return: A pyrsistent field reflecting this attribute and its type model.
+        """
         return self.type_model.pclass_field_for_type(required=self.required)
 
 
+
 class _ConstantModel(PClass):
+    """
+    A ``_ConstantModel`` models a constant valued attribute.
+
+    This does not correspond to any part of a Swagger specification.  Instead,
+    it's part of how a Swagger definition is usefully exposed to Python.  It
+    can be used to override certain fields from a Swagger definition (for
+    example, when there is a known constant value which the Swagger
+    specification can't formally represent).
+
+    :ivar unicode name: The name of the attribute.
+    :ivar value: The value of the attribute.
+    """
     name = field(type=unicode)
     value = field()
 
     def pclass_field_for_attribute(self):
+        """
+        :return: Exactly this model's value, creating a constant-valued attribute
+        on a class it is used with.
+        """
         return self.value
 
 
+
+@implementer(IRangeModel)
 class _IntegerRange(PClass):
+    """
+    ``_IntegerRange`` represents a contiguous range of integer values between
+    two boundaries.
+
+    :ivar int min: The lower bound, inclusive.
+    :ivar int max: The upper bound, inclusive.
+    """
     min = field(type=(int, long))
     max = field(type=(int, long))
 
+
     @classmethod
     def from_unsigned_bits(cls, n):
+        """
+        Create a range corresponding to that of an unsigned integer of ``n``
+        bits.
+        """
         return cls(min=0, max=2 ** n - 1)
 
     @classmethod
     def from_signed_bits(cls, n):
+        """
+        Create a range corresponding to that of a two's complement signed integer
+        of ``n`` bits.
+        """
         m = n - 1
         return cls(min=-2 ** m, max=2 ** m - 1)
 
+
     def pyrsistent_invariant(self):
+        """
+        :return: An invariant which rejects values outside of *(min, max)*.
+        """
         return lambda v: (
             self.min <= v <= self.max,
             "{!r} out of required range ({}, {})".format(v, self.min, self.max),
@@ -317,6 +498,20 @@ class _IntegerRange(PClass):
 
 
 class _ClassModel(PClass):
+    """
+    A ``_ClassModel`` represents a type with a number of named, heterogeneous
+    fields - something like a Python class.
+
+    Specifically, this is used to represent top-level Swagger definitions of
+    type *object*.
+
+    :cvar _basic_types: A mapping from the simpler Swagger types to
+        ``ITypeModel`` providers which represent them.
+
+    :ivar unicode name: The name of the definition.
+    :ivar unicode doc: The description of the definition.
+    :ivar PVector attributes: Models for the fields of the definition.
+    """
     _basic_types = {
         (u"boolean", None): _BasicTypeModel(python_types=(bool,)),
         (u"integer", u"int32"): _BasicTypeModel(
@@ -410,6 +605,22 @@ class _ClassModel(PClass):
 
     @classmethod
     def from_swagger(cls, pclass_for_definition, name, definition, constant_fields):
+        """
+        Create a new ``_ClassModel`` from a single Swagger definition.
+
+        :param pclass_for_definition: A callable like
+            ``Swagger.pclass_for_definition`` which can be used to resolve
+            type references encountered in the definition.
+
+        :param unicode name: The name of the definition.
+
+        :param definition: The Swagger definition to model.  This will be a
+            value like the one found at ``spec["definitions"][name]``.
+
+        :param constant_fields: A mapping of properties overrides.
+
+        :return: A new model for the given definition.
+        """
         return cls(
             name=name,
             doc=definition.get(u"description", name),
@@ -428,7 +639,7 @@ class _ClassModel(PClass):
 
     def pclass(self):
         """
-        Create a PClass representing this class.
+        Create a ``pyrsistent.PClass`` subclass representing this class.
         """
         content = {
             attr.name: attr.pclass_field_for_attribute()
