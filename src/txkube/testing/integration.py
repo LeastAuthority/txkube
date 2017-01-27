@@ -25,7 +25,6 @@ from ..testing import TestCase
 
 from .. import (
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
-    ObjectMetadata,
 )
 from .strategies import creatable_namespaces, configmaps
 
@@ -177,7 +176,7 @@ def kubernetes_client_tests(get_kubernetes):
             namespace = creatable_namespaces().example()
             # Move the object into the namespace we're going to create.
             obj = configmaps().example().transform(
-                [u"metadata", u"items", u"namespace"],
+                [u"metadata", u"namespace"],
                 namespace.metadata.name,
             )
             d = self.client.create(namespace)
@@ -204,9 +203,9 @@ def kubernetes_client_tests(get_kubernetes):
             objs = [strategy.example(), strategy.example()]
             ns = list(
                 Namespace(
-                    metadata=ObjectMetadata(items={
+                    metadata={
                         u"name": obj.metadata.namespace, u"uid": None,
-                    }),
+                    },
                     status=None,
                 )
                 for obj

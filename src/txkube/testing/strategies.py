@@ -11,13 +11,17 @@ from pyrsistent import pmap
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries,
+    dictionaries, just,
 )
 
 from .. import (
     NamespaceStatus,
-    ObjectMetadata, NamespacedObjectMetadata, Namespace, ConfigMap,
+    Namespace, ConfigMap,
     ObjectCollection,
+)
+
+from .._model import (
+    ObjectMeta,
 )
 
 # Without some attempt to cap the size of collection strategies (lists,
@@ -30,6 +34,7 @@ from .. import (
 # enough.
 _QUICK_AVERAGE_SIZE = 3
 _QUICK_MAX_SIZE = 10
+
 
 def object_name():
     # https://kubernetes.io/docs/user-guide/identifiers/#names
@@ -44,24 +49,22 @@ def object_name():
 
 def object_metadatas():
     """
-    Strategy to build ``ObjectMetadata``.
+    Strategy to build **v1.ObjectMeta** without a namespace.
     """
-    return builds(
-        ObjectMetadata,
-        items=fixed_dictionaries({
-            u"name": object_name(),
-            u"uid": none(),
-        }).map(pmap),
-    )
+    return fixed_dictionaries({
+        u"name": object_name(),
+        u"uid": just(u""),
+    }).map(ObjectMeta.create)
+
 
 
 def namespaced_object_metadatas():
     """
-    Strategy to build ``NamespacedObjectMetadata``.
+    Strategy to build **v1.ObjectMeta** including a namespace.
     """
     return builds(
-        lambda obj_metadata, namespace: NamespacedObjectMetadata(
-            items=obj_metadata.items.set(u"namespace", namespace),
+        lambda obj_metadata, namespace: obj_metadata.set(
+            u"namespace", namespace,
         ),
         obj_metadata=object_metadatas(),
         namespace=object_name(),
@@ -155,8 +158,13 @@ def objectcollections(namespaces=creatable_namespaces()):
     """
     Strategy to build ``ObjectCollection``.
     """
+    def collection(items):
+        if items:
+            return ObjectCollection.of(type(items[0]), items=items)
+        return ObjectCollection.of(Namespace)
+
     return builds(
-        ObjectCollection,
+        collection,
         items=one_of(
             lists(
                 namespaces,

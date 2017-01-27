@@ -8,11 +8,11 @@ A Kubernetes client.
 __all__ = [
     "version",
     "IObject", "IObjectLoader", "IKubernetes", "IKubernetesClient",
+    "INamespacedObject",
     "network_client", "memory_client",
 
+    "any_object_from_raw",
     "NamespaceStatus",
-    "ObjectMetadata", "NamespacedObjectMetadata",
-    "object_from_raw",
     "Namespace", "ConfigMap",
     "ObjectCollection",
 
@@ -26,12 +26,14 @@ from incremental import Version
 from ._metadata import version_tuple as _version_tuple
 version = Version("txkube", *_version_tuple)
 
-from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
+from ._interface import (
+    IObject, IObjectLoader, IKubernetes, IKubernetesClient,
+    INamespacedObject,
+)
 
 from ._model import (
     NamespaceStatus,
-    ObjectMetadata, NamespacedObjectMetadata,
-    object_from_raw,
+    any_object_from_raw,
     Namespace, ConfigMap,
     ObjectCollection,
 )

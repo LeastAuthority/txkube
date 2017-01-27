@@ -79,8 +79,8 @@ def _kubernetes_resource(state):
 
 @attr.s
 class _KubernetesState(object):
-    namespaces = attr.ib(default=ObjectCollection())
-    configmaps = attr.ib(default=ObjectCollection())
+    namespaces = attr.ib(default=ObjectCollection.of(Namespace))
+    configmaps = attr.ib(default=ObjectCollection.of(ConfigMap))
 
 
 def terminate(obj):

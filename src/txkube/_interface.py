@@ -34,6 +34,15 @@ class IObject(Interface):
         """
 
 
+
+class INamespacedObject(Interface):
+    """
+    ``INamespacedObject`` indicates an ``IObject`` which must be put into a
+    namespace.  The object's namespace can be found in the object's metadata.
+    """
+
+
+
 class IObjectLoader(Interface):
     """
     ``IObjectLoader`` providers can take a marshalled dump of a Kubernetes

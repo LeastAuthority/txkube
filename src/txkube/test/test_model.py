@@ -5,17 +5,15 @@
 Tests for ``txkube._model``.
 """
 
-from testtools.matchers import Equals, LessThan, MatchesStructure, raises
+from json import loads, dumps
 
-from pyrsistent import InvariantException
+from testtools.matchers import Equals, LessThan, MatchesStructure
 
 from hypothesis import given, assume
-from hypothesis.strategies import choices
 
 from ..testing import TestCase
 from ..testing.strategies import (
     object_name,
-    object_metadatas, namespaced_object_metadatas,
     retrievable_namespaces, creatable_namespaces,
     configmaps,
     objectcollections,
@@ -24,65 +22,6 @@ from ..testing.strategies import (
 from .. import (
     Namespace, ConfigMap, ObjectCollection,
 )
-
-def object_metadata_tests(metadatas, accessors):
-    """
-    Generate a test case for testing a metadata type.
-
-    :param metadatas: A strategy for generating instances of the metadata type
-        to be tested.
-
-    :param accessors: A list of metadata keys which have corresponding
-        accessors.
-
-    :return: A new ``ITestCase``.
-    """
-    class Tests(TestCase):
-        """
-        Tests common to the two different metadata types.
-        """
-        @given(metadata=metadatas())
-        def test_accessors(self, metadata):
-            """
-            The metadata object has several read-only properties which access common
-            fields of the metadata mapping.
-            """
-            for name in accessors:
-                self.expectThat(metadata.items[name], Equals(getattr(metadata, name)))
-
-
-        @given(metadata=metadatas(), choice=choices())
-        def test_required(self, metadata, choice):
-            """
-            The metadata object requires values corresponding to each of its
-            accessors.
-            """
-            arbitrary_key = choice(accessors)
-            missing_one = metadata.items.discard(arbitrary_key)
-            self.expectThat(
-                lambda: metadata.set(items=missing_one),
-                raises(InvariantException),
-            )
-
-    return Tests
-
-
-
-class ObjectMetadataTests(
-    object_metadata_tests(object_metadatas, [u"name", u"uid"])
-):
-    """
-    Tests for ``ObjectMetadata``.
-    """
-
-
-
-class NamespacedObjectMetadataTests(
-    object_metadata_tests(namespaced_object_metadatas, [u"name", u"uid", u"namespace"])
-):
-    """
-    Tests for ``NamespacedObjectMetadata``.
-    """
 
 
 def iobject_tests(loader, strategy):
@@ -97,10 +36,26 @@ def iobject_tests(loader, strategy):
             using ``IObject.to_raw`` and ``IObjectLoader.from_raw``.
             """
             marshalled = obj.to_raw()
+
+            # ``IObject`` providers include *kind* and *apiVersion* in their
+            # serialized forms.
+            self.expectThat(marshalled[u"kind"], Equals(obj.kind))
+            self.expectThat(marshalled[u"apiVersion"], Equals(obj.apiVersion))
+
             reloaded = loader.from_raw(marshalled)
             remarshalled = reloaded.to_raw()
             self.expectThat(obj, Equals(reloaded))
             self.expectThat(marshalled, Equals(remarshalled))
+
+            # The serialized form can also be round-tripped through JSON.
+            self.expectThat(marshalled, Equals(loads(dumps(marshalled))))
+
+
+        @given(obj=strategy())
+        def test_kind_and_version(self, obj):
+            """
+            """
+            marshalled = obj.to_raw()
 
     return Tests
 
@@ -176,11 +131,22 @@ class ObjectCollectionTests(iobject_tests(ObjectCollection, objectcollections)):
             != (b.metadata.namespace, b.metadata.name)
         )
 
-        collection = ObjectCollection(items=[a, b])
+        collection = ObjectCollection.of(ConfigMap, items=[a, b])
         first = collection.items[0].metadata
         second = collection.items[1].metadata
 
         self.assertThat(
             (first.namespace, first.name),
             LessThan((second.namespace, second.name)),
+        )
+
+    def test_kind(self):
+        """
+        ``ObjectCollection.kind`` always reflects the type of its items.
+        """
+        self.expectThat(
+            ObjectCollection.of(Namespace).kind, Equals(u"NamespaceList"),
+        )
+        self.expectThat(
+            ObjectCollection.of(ConfigMap).kind, Equals(u"ConfigMapList"),
         )

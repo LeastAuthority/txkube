@@ -7,49 +7,27 @@ state.
 """
 
 from uuid import uuid4
+from pprint import pformat
 
 from zope.interface import provider, implementer
 
-from pyrsistent import CheckedPVector, PClass, field, pmap_field, pset, freeze, thaw
+from twisted.python.filepath import FilePath
 
-from . import IObject, IObjectLoader
+from pyrsistent import (
+    CheckedPVector, PClass, field, pmap_field, pset, pmap, freeze, thaw, mutant,
+)
+
+from . import IObject, IObjectLoader, INamespacedObject
 from ._invariants import instance_of, provider_of
+from ._swagger import Swagger
+
+k8s_spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
 
 
-class ObjectMetadata(PClass):
-    _required = pset({u"name", u"uid"})
-
-    items = pmap_field(unicode, object)
-    __invariant__ = lambda m: (
-        len(m._required - pset(m.items)) == 0,
-        u"Required metadata missing: {}".format(m._required - pset(m.items)),
-    )
-
-    @property
-    def name(self):
-        return self.items[u"name"]
-
-    @property
-    def uid(self):
-        return self.items[u"uid"]
+ObjectMeta = k8s_spec.pclass_for_definition(u"v1.ObjectMeta")
 
 
-class NamespacedObjectMetadata(ObjectMetadata):
-    _required = ObjectMetadata._required.add(u"namespace")
-
-    @property
-    def namespace(self):
-        return self.items[u"namespace"]
-
-
-
-class NamespaceStatus(PClass):
-    """
-    ``NamespaceStatus`` instances model `Kubernetes namespace status
-    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
-    """
-    phase = field(mandatory=True)
-
+class NamespaceStatus(k8s_spec.pclass_for_definition(u"v1.NamespaceStatus")):
     @classmethod
     def active(cls):
         return cls(phase=u"Active")
@@ -61,31 +39,40 @@ class NamespaceStatus(PClass):
 
 
     @classmethod
-    def from_raw(cls, status):
-        return cls(phase=status[u"phase"])
+    def from_raw(cls, raw):
+        return cls(**raw)
 
 
     def to_raw(self):
-        return {u"phase": self.phase}
+        return self.serialize()
+
+
+
+@classmethod
+@mutant
+def object_from_raw(cls, raw):
+    apiVersion, kind = raw.get(u"apiVersion", None), raw.get(u"kind", None)
+    if (apiVersion, kind) != (None, None):
+        if (apiVersion, kind) != (cls.apiVersion, cls.kind):
+            raise ValueError("{} cannot load data for {}.{}".format(cls, apiVersion, kind))
+        raw = raw.discard(u"apiVersion").discard(u"kind")
+    return cls(**raw)
+
+
+
+def object_to_raw(self):
+    d = {
+        u"kind": self.kind,
+        u"apiVersion": self.apiVersion,
+    }
+    d.update(self.serialize())
+    return d
 
 
 
 @provider(IObjectLoader)
 @implementer(IObject)
-class Namespace(PClass):
-    """
-    ``Namespace`` instances model `Kubernetes namespaces
-    <https://kubernetes.io/docs/user-guide/namespaces/>`_.
-    """
-    kind = u"Namespace"
-
-    metadata = field(
-        mandatory=True,
-        invariant=instance_of(ObjectMetadata),
-    )
-
-    status = field(mandatory=True, type=(NamespaceStatus, type(None)))
-
+class Namespace(k8s_spec.pclass_for_definition(u"v1.Namespace", constant_fields={u"kind": u"Namespace", u"apiVersion": u"v1"})):
     @classmethod
     def default(cls):
         """
@@ -95,97 +82,39 @@ class Namespace(PClass):
 
 
     @classmethod
-    def from_raw(cls, raw):
-        try:
-            status_raw = raw[u"status"]
-        except KeyError:
-            status = None
-        else:
-            status = NamespaceStatus.from_raw(status_raw)
-        return cls(
-            metadata=ObjectMetadata(
-                items=freeze(raw[u"metadata"]),
-            ),
-            status=status,
-        )
-
-
-    @classmethod
     def named(cls, name):
         """
         Create an object with only the name metadata item.
         """
         return cls(
-            metadata=ObjectMetadata(items={u"name": name, u"uid": None}),
+            metadata=ObjectMeta(name=name),
             status=None,
         )
+
+
+    from_raw = object_from_raw
+    to_raw = object_to_raw
 
 
     def fill_defaults(self):
         return self.transform(
             # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
-            [u"metadata", u"items", u"uid"], unicode(uuid4()),
+            [u"metadata", u"uid"], unicode(uuid4()),
             [u"status"], NamespaceStatus.active(),
         )
 
 
-    def to_raw(self):
-        result = {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": thaw(self.metadata.items),
-            u"spec": {},
-        }
-        if self.status is not None:
-            result[u"status"] = self.status.to_raw()
-        return result
-
-
 
 @provider(IObjectLoader)
+@implementer(INamespacedObject)
 @implementer(IObject)
-class ConfigMap(PClass):
-    """
-    ``ConfigMap`` instances model `ConfigMap objects
-    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
-    """
-    kind = u"ConfigMap"
-
-    metadata = field(
-        mandatory=True,
-        invariant=instance_of(NamespacedObjectMetadata),
-    )
-
-    data = pmap_field(unicode, unicode, optional=True)
-
-    @classmethod
-    def from_raw(cls, raw):
-        return cls(
-            metadata=NamespacedObjectMetadata(
-                items=freeze(raw[u"metadata"]),
-            ),
-            data=raw.get(u"data", None),
-        )
-
+class ConfigMap(k8s_spec.pclass_for_definition(u"v1.ConfigMap", constant_fields={u"kind": u"ConfigMap", u"apiVersion": u"v1"})):
+    from_raw = object_from_raw
+    to_raw = object_to_raw
 
     def fill_defaults(self):
         # TODO Surely some stuff to fill.
         return self
-
-
-    def to_raw(self):
-        result = {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": thaw(self.metadata.items),
-        }
-        if self.data is not None:
-            # Kubernetes only includes the item if there is some data.
-            #
-            # XXX I'm not sure if there's a difference between no data and
-            # data with no items.
-            result[u"data"] = thaw(self.data)
-        return result
 
 
 
@@ -196,8 +125,7 @@ def object_sort_key(obj):
     This should be the same ordering that Kubernetes itself imposes.
     """
     return (
-        # Not all objects have a namespace.
-        getattr(obj.metadata, "namespace", None),
+        obj.metadata.namespace,
         obj.metadata.name,
     )
 
@@ -228,29 +156,45 @@ class ObjectCollection(PClass):
 
     :ivar pvector items: The objects belonging to this collection.
     """
-    kind = u"List"
+    item_type = field(mandatory=True)
     items = _pvector_field(IObject)
+
+    @property
+    def kind(self):
+        return self.item_type.kind + u"List"
+
+    @property
+    def apiVersion(self):
+        return self.item_type.apiVersion
+
+    @classmethod
+    def of(cls, objtype, **kw):
+        return cls(item_type=objtype, **kw)
+
 
     @classmethod
     def from_raw(cls, raw):
+        kind = raw[u"kind"]
+        item_kind = kind[:-len(u"List")]
+        item_type = _loaders[item_kind]
         items = (
             # Unfortunately `kind` is an optional field.  Fortunately, the
             # top-level `kind` is something like `ConfigMapList` if you
             # asked for `.../configmaps/`.  So pass that down as a hint.
-            object_from_raw(obj, raw[u"kind"][:-len(u"List")])
+            any_object_from_raw(obj, item_kind)
             for obj
             in raw[u"items"]
         )
-        return cls(items=items)
+        return cls(item_type=item_type, items=items)
 
 
     def to_raw(self):
         return {
             u"kind": self.kind,
-            u"apiVersion": u"v1",
+            u"apiVersion": self.apiVersion,
             u"metadata": {},
             u"items": list(
-                obj.to_raw()
+                thaw(freeze(obj.to_raw()).remove(u"kind").remove(u"apiVersion"))
                 for obj
                 in self.items
             ),
@@ -303,8 +247,7 @@ _loaders = {
 }
 
 
-
-def object_from_raw(raw, kind_hint=None):
+def any_object_from_raw(raw, kind_hint=None):
     """
     Load an object of unspecified type from the raw representation of it.
 
@@ -313,6 +256,8 @@ def object_from_raw(raw, kind_hint=None):
     :return IObject: The loaded object.
     """
     kind = raw.get(u"kind", kind_hint)
+    if kind is None:
+        raise ValueError("Cannot decode serialized object: {}".format(pformat(raw)))
     if kind.endswith(u"List"):
         loader = ObjectCollection
     else:

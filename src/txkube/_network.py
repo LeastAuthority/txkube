@@ -27,8 +27,8 @@ from eliot import start_action
 from eliot.twisted import DeferredContext
 
 from . import (
-    IKubernetes, IKubernetesClient,
-    object_from_raw,
+    IKubernetes, IKubernetesClient, INamespacedObject,
+    any_object_from_raw,
 )
 
 def network_kubernetes(**kw):
@@ -114,7 +114,7 @@ class _NetworkClient(object):
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(object_from_raw)
+            d.addCallback(any_object_from_raw)
             return d.addActionFinish()
 
 
@@ -138,7 +138,7 @@ class _NetworkClient(object):
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(object_from_raw)
+            d.addCallback(any_object_from_raw)
             return d.addActionFinish()
 
 
@@ -175,7 +175,7 @@ class _NetworkClient(object):
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(object_from_raw)
+            d.addCallback(any_object_from_raw)
             return d.addActionFinish()
 
 
@@ -205,11 +205,11 @@ def collection_location(obj):
         given.
     """
     collection = obj.kind.lower() + u"s"
-    try:
+    if INamespacedObject.providedBy(obj):
         namespace = obj.metadata.namespace
-    except AttributeError:
-        return (u"api", u"v1", collection)
-    return (u"api", u"v1", u"namespaces", namespace, collection)
+        return (u"api", u"v1", u"namespaces", namespace, collection)
+    return (u"api", u"v1", collection)
+
 
 
 @implementer(IKubernetes)
