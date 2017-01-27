@@ -5,7 +5,9 @@
 Tests for ``txkube._model``.
 """
 
-from testtools.matchers import Equals, LessThan, MatchesStructure, raises
+from testtools.matchers import (
+    Equals, LessThan, MatchesStructure, Not, Is, raises,
+)
 
 from pyrsistent import InvariantException
 
@@ -22,67 +24,9 @@ from ..testing.strategies import (
 )
 
 from .. import (
-    Namespace, ConfigMap, ObjectCollection,
+    Namespace, NamespaceStatus, ConfigMap, ObjectCollection,
 )
 
-def object_metadata_tests(metadatas, accessors):
-    """
-    Generate a test case for testing a metadata type.
-
-    :param metadatas: A strategy for generating instances of the metadata type
-        to be tested.
-
-    :param accessors: A list of metadata keys which have corresponding
-        accessors.
-
-    :return: A new ``ITestCase``.
-    """
-    class Tests(TestCase):
-        """
-        Tests common to the two different metadata types.
-        """
-        @given(metadata=metadatas())
-        def test_accessors(self, metadata):
-            """
-            The metadata object has several read-only properties which access common
-            fields of the metadata mapping.
-            """
-            for name in accessors:
-                self.expectThat(metadata.items[name], Equals(getattr(metadata, name)))
-
-
-        @given(metadata=metadatas(), choice=choices())
-        def test_required(self, metadata, choice):
-            """
-            The metadata object requires values corresponding to each of its
-            accessors.
-            """
-            arbitrary_key = choice(accessors)
-            missing_one = metadata.items.discard(arbitrary_key)
-            self.expectThat(
-                lambda: metadata.set(items=missing_one),
-                raises(InvariantException),
-            )
-
-    return Tests
-
-
-
-class ObjectMetadataTests(
-    object_metadata_tests(object_metadatas, [u"name", u"uid"])
-):
-    """
-    Tests for ``ObjectMetadata``.
-    """
-
-
-
-class NamespacedObjectMetadataTests(
-    object_metadata_tests(namespaced_object_metadatas, [u"name", u"uid", u"namespace"])
-):
-    """
-    Tests for ``NamespacedObjectMetadata``.
-    """
 
 
 def iobject_tests(loader, strategy):
@@ -152,6 +96,26 @@ class NamespaceTests(TestCase):
                 ),
             ),
         )
+
+    def test_fill_defaults(self):
+        """
+        ``Namespace.fill_defaults`` returns a ``Namespace`` with *uid* metadata
+        and an active *status*.
+        """
+        # If they are not set already, a uid is generated and put into the
+        # metadata and the status is set to active.
+        sparse = Namespace.named(u"foo")
+        filled = sparse.fill_defaults()
+        self.expectThat(
+            filled,
+            MatchesStructure(
+                metadata=MatchesStructure(
+                    uid=Not(Is(None)),
+                ),
+                status=Equals(NamespaceStatus.active()),
+            ),
+        )
+
 
 
 class ConfigMapTests(iobject_tests(ConfigMap, configmaps)):

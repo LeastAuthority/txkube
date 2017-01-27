@@ -12,34 +12,18 @@ from zope.interface import provider, implementer
 
 from pyrsistent import CheckedPVector, PClass, field, pmap_field, pset, freeze, thaw
 
+from twisted.python.filepath import FilePath
+
 from . import IObject, IObjectLoader
 from ._invariants import instance_of, provider_of
+from ._swagger import Swagger
 
 
-class ObjectMetadata(PClass):
-    _required = pset({u"name", u"uid"})
-
-    items = pmap_field(unicode, object)
-    __invariant__ = lambda m: (
-        len(m._required - pset(m.items)) == 0,
-        u"Required metadata missing: {}".format(m._required - pset(m.items)),
-    )
-
-    @property
-    def name(self):
-        return self.items[u"name"]
-
-    @property
-    def uid(self):
-        return self.items[u"uid"]
+spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
 
 
-class NamespacedObjectMetadata(ObjectMetadata):
-    _required = ObjectMetadata._required.add(u"namespace")
-
-    @property
-    def namespace(self):
-        return self.items[u"namespace"]
+class ObjectMeta(spec.pclass_for_definition(u"v1.ObjectMeta")):
+    pass
 
 
 
@@ -81,7 +65,7 @@ class Namespace(PClass):
 
     metadata = field(
         mandatory=True,
-        invariant=instance_of(ObjectMetadata),
+        invariant=instance_of(ObjectMeta),
     )
 
     status = field(mandatory=True, type=(NamespaceStatus, type(None)))
@@ -103,9 +87,7 @@ class Namespace(PClass):
         else:
             status = NamespaceStatus.from_raw(status_raw)
         return cls(
-            metadata=ObjectMetadata(
-                items=freeze(raw[u"metadata"]),
-            ),
+            metadata=ObjectMeta(**raw[u"metadata"]),
             status=status,
         )
 
@@ -116,7 +98,7 @@ class Namespace(PClass):
         Create an object with only the name metadata item.
         """
         return cls(
-            metadata=ObjectMetadata(items={u"name": name, u"uid": None}),
+            metadata=ObjectMeta(name=name),
             status=None,
         )
 
@@ -124,7 +106,8 @@ class Namespace(PClass):
     def fill_defaults(self):
         return self.transform(
             # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
-            [u"metadata", u"items", u"uid"], unicode(uuid4()),
+            # Also, should this clobber existing values or leave them alone?
+            [u"metadata", u"uid"], unicode(uuid4()),
             [u"status"], NamespaceStatus.active(),
         )
 
@@ -133,7 +116,7 @@ class Namespace(PClass):
         result = {
             u"kind": self.kind,
             u"apiVersion": u"v1",
-            u"metadata": thaw(self.metadata.items),
+            u"metadata": self.metadata.serialize(),
             u"spec": {},
         }
         if self.status is not None:
@@ -153,7 +136,7 @@ class ConfigMap(PClass):
 
     metadata = field(
         mandatory=True,
-        invariant=instance_of(NamespacedObjectMetadata),
+        invariant=instance_of(ObjectMeta),
     )
 
     data = pmap_field(unicode, unicode, optional=True)
@@ -161,9 +144,7 @@ class ConfigMap(PClass):
     @classmethod
     def from_raw(cls, raw):
         return cls(
-            metadata=NamespacedObjectMetadata(
-                items=freeze(raw[u"metadata"]),
-            ),
+            metadata=ObjectMeta(**raw[u"metadata"]),
             data=raw.get(u"data", None),
         )
 
@@ -177,7 +158,7 @@ class ConfigMap(PClass):
         result = {
             u"kind": self.kind,
             u"apiVersion": u"v1",
-            u"metadata": thaw(self.metadata.items),
+            u"metadata": self.metadata.serialize(),
         }
         if self.data is not None:
             # Kubernetes only includes the item if there is some data.

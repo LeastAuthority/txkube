@@ -27,7 +27,7 @@ from eliot import start_action
 from eliot.twisted import DeferredContext
 
 from . import (
-    IKubernetes, IKubernetesClient,
+    IObject, IKubernetes, IKubernetesClient,
     object_from_raw,
 )
 
@@ -204,11 +204,24 @@ def collection_location(obj):
         construct the location of the collection of objects like the one
         given.
     """
-    collection = obj.kind.lower() + u"s"
-    try:
+    # TODO kind is not part of IObjectLoader and we should really be loading
+    # apiVersion off of this object too.
+    kind = obj.kind
+
+    collection = kind.lower() + u"s"
+
+    if IObject.providedBy(obj):
+        # Actual objects *could* have a namespace...
         namespace = obj.metadata.namespace
-    except AttributeError:
+    else:
+        # Types representing a kind couldn't possible.
+        namespace = None
+
+    if namespace is None:
+        # If there's no namespace, look in the un-namespaced area.
         return (u"api", u"v1", collection)
+
+    # If there is, great, look there.
     return (u"api", u"v1", u"namespaces", namespace, collection)
 
 
