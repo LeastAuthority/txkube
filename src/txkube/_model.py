@@ -107,6 +107,7 @@ class Namespace(PClass):
         return self.transform(
             # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
             # Also, should this clobber existing values or leave them alone?
+            # See https://github.com/LeastAuthority/txkube/issues/36
             [u"metadata", u"uid"], unicode(uuid4()),
             [u"status"], NamespaceStatus.active(),
         )
