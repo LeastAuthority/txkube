@@ -20,7 +20,7 @@ from ._swagger import Swagger, PClasses, UsePrefix
 
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
-v1 = PClasses(specification=spec, name_translator=UsePrefix(u"v1."))
+v1 = PClasses(specification=spec, name_translator=UsePrefix(prefix=u"v1."))
 
 
 class ObjectMeta(v1[u"ObjectMeta"]):
