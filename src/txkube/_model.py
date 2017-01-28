@@ -152,6 +152,7 @@ class ConfigMap(PClass):
 
     def fill_defaults(self):
         # TODO Surely some stuff to fill.
+        # See https://github.com/LeastAuthority/txkube/issues/36
         return self
 
 
