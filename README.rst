@@ -25,13 +25,14 @@ Usage Sample
 
    from __future__ import print_function
    from twisted.internet.task import react
-   from txkube import network_kubernetes
+   from txkube import ConfigMap, network_kubernetes
 
    @react
    def main(reactor):
-       k8s = network_kubernetes(base_url=URL.fromText(u"https://kubernetes/"))
+       agent = authenticate_with_serviceaccount(reactor)
+       k8s = network_kubernetes(base_url=URL.fromText(u"https://kubernetes/"), agent=agent)
        client = k8s.client()
-       d = client.list_deployments()
+       d = client.list(ConfigMap)
        d.addCallback(print)
        return d
 
