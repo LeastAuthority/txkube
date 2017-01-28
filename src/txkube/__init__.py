@@ -11,7 +11,7 @@ __all__ = [
     "network_client", "memory_client",
 
     "NamespaceStatus",
-    "ObjectMetadata", "NamespacedObjectMetadata",
+    "ObjectMeta",
     "object_from_raw",
     "Namespace", "ConfigMap",
     "ObjectCollection",
@@ -30,7 +30,7 @@ from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 
 from ._model import (
     NamespaceStatus,
-    ObjectMetadata, NamespacedObjectMetadata,
+    ObjectMeta,
     object_from_raw,
     Namespace, ConfigMap,
     ObjectCollection,
