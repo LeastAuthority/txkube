@@ -130,9 +130,10 @@ class _Kubernetes(object):
                 apiVersion=u"v1",
                 kind=u"Status",
                 status=u"Failure",
-                message=u"{} {!r} already exists".format(collection_name, obj.metadata.name),
+                message=u"{} \"{!s}\" already exists".format(collection_name, obj.metadata.name),
                 reason=u"AlreadyExists",
                 details={u"name": obj.metadata.name, u"kind": collection_name},
+                metadata={},
                 code=CONFLICT,
             ).serialize())
 
