@@ -10,6 +10,8 @@ __all__ = [
     "IObject", "IObjectLoader", "IKubernetes", "IKubernetesClient",
     "network_client", "memory_client",
 
+    "KubernetesError",
+
     "NamespaceStatus",
     "ObjectMeta",
     "object_from_raw",
@@ -26,6 +28,7 @@ from incremental import Version
 from ._metadata import version_tuple as _version_tuple
 version = Version("txkube", *_version_tuple)
 
+from ._exception import KubernetesError
 from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 
 from ._model import (

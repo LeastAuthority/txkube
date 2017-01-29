@@ -27,7 +27,7 @@ from eliot import start_action
 from eliot.twisted import DeferredContext
 
 from . import (
-    IObject, IKubernetes, IKubernetesClient,
+    IObject, IKubernetes, IKubernetesClient, KubernetesError,
     object_from_raw,
 )
 
@@ -240,21 +240,6 @@ class _NetworkKubernetes(object):
 
     def client(self):
         return _NetworkClient(self, self._agent)
-
-
-
-class KubernetesError(Exception):
-    def __init__(self, code, response):
-        self.code = code
-        self.response = response
-
-
-    def __repr__(self):
-        return "<KubernetesError: code = {}; response = {}>".format(
-            self.code, self.response,
-        )
-
-    __str__ = __repr__
 
 
 
