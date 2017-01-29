@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from zope.interface import provider, implementer
 
-from pyrsistent import CheckedPVector, PClass, field, pmap_field, pset, freeze, thaw
+from pyrsistent import CheckedPVector, PClass, field, pmap_field, thaw
 
 from twisted.python.filepath import FilePath
 

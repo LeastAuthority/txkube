@@ -9,8 +9,6 @@ from zope.interface import Interface, implementer
 
 from pyrsistent import InvariantException, PClass, field
 
-from testtools.matchers import IsInstance
-
 from ..testing import TestCase
 from .._invariants import instance_of, provider_of
 
