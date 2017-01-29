@@ -7,6 +7,7 @@ state.
 """
 
 from uuid import uuid4
+from functools import partial
 
 from zope.interface import provider, implementer
 
@@ -191,7 +192,7 @@ def object_sort_key(obj):
 
 
 
-def _pvector_field(iface):
+def _pvector_field(iface, invariant=None):
     class _CheckedIObjectPVector(CheckedPVector):
         __invariant__ = provider_of(iface)
 
@@ -200,7 +201,31 @@ def _pvector_field(iface):
         type=_CheckedIObjectPVector,
         factory=lambda v: _CheckedIObjectPVector.create(sorted(v, key=object_sort_key)),
         initial=_CheckedIObjectPVector(),
+        invariant=invariant,
     )
+
+
+
+def required_unique(objects, key):
+    """
+    A pyrsistent invariant which requires all objects in the given iterable to
+    have a unique key.
+
+    :param objects: The objects to check.
+    :param key: A one-argument callable to compute the key of an object.
+
+    :return: An invariant failure if any two or more objects have the same key
+        computed.  An invariant success otherwise.
+    """
+    keys = {}
+    duplicate = set()
+    for k in map(key, objects):
+        keys[k] = keys.get(k, 0) + 1
+        if keys[k] > 1:
+            duplicate.add(k)
+    if duplicate:
+        return (False, u"Duplicate object keys: {}".format(duplicate))
+    return (True, u"")
 
 
 
@@ -217,7 +242,9 @@ class ObjectCollection(PClass):
     :ivar pvector items: The objects belonging to this collection.
     """
     kind = u"List"
-    items = _pvector_field(IObject)
+    items = _pvector_field(
+        IObject, invariant=partial(required_unique, key=object_sort_key),
+    )
 
     @classmethod
     def from_raw(cls, raw):

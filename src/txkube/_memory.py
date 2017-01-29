@@ -11,14 +11,15 @@ from json import dumps, loads
 
 import attr
 
-from pyrsistent import pset
+from pyrsistent import InvariantException, pset
 
 from zope.interface import implementer
 
 from twisted.python.url import URL
 
+from twisted.python.compat import nativeString
 from twisted.web.resource import Resource, NoResource
-from twisted.web.http import CREATED
+from twisted.web.http import CREATED, CONFLICT
 
 from klein import Klein
 
@@ -28,6 +29,7 @@ from eliot import Message
 
 from treq.testing import RequestTraversalAgent
 
+from ._model import Status
 from . import (
     IKubernetes, network_kubernetes,
     NamespaceStatus,
@@ -117,9 +119,24 @@ class _Kubernetes(object):
         return dumps(obj.to_raw())
 
     def _create(self, request, type, collection, collection_name):
-        obj = type.from_raw(loads(request.content.read())).fill_defaults()
-        setattr(self.state, collection_name, collection.add(obj))
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+
+        obj = type.from_raw(loads(request.content.read())).fill_defaults()
+        try:
+            added = collection.add(obj)
+        except InvariantException:
+            request.setResponseCode(CONFLICT)
+            return dumps(Status(
+                apiVersion=u"v1",
+                kind=u"Status",
+                status=u"Failure",
+                message=u"{} {!r} already exists".format(collection_name, obj.metadata.name),
+                reason=u"AlreadyExists",
+                details={u"name": obj.metadata.name, u"kind": collection_name},
+                code=CONFLICT,
+            ).serialize())
+
+        setattr(self.state, nativeString(collection_name), added)
         request.setResponseCode(CREATED)
         return dumps(obj.to_raw())
 
@@ -164,7 +181,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(request, Namespace, self.state.namespaces, "namespaces")
+            return self._create(request, Namespace, self.state.namespaces, u"namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request, namespace=None):
@@ -185,4 +202,4 @@ class _Kubernetes(object):
             """
             Create a new ConfigMap.
             """
-            return self._create(request, ConfigMap, self.state.configmaps, "configmaps")
+            return self._create(request, ConfigMap, self.state.configmaps, u"configmaps")
