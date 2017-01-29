@@ -30,6 +30,8 @@ from .. import (
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
     ObjectMeta,
 )
+from .._model import Status, StatusDetails
+
 from .strategies import creatable_namespaces, configmaps
 
 
@@ -144,19 +146,19 @@ def kubernetes_client_tests(get_kubernetes):
                     reason.value,
                     MatchesStructure(
                         code=Equals(CONFLICT),
-                        response=Equals({
-                            u"kind": u"Status",
-                            u"apiVersion": u"v1",
-                            u"metadata": {},
-                            u"status": u"Failure",
-                            u"message": u"namespaces \"{}\" already exists".format(obj.metadata.name),
-                            u"reason": u"AlreadyExists",
-                            u"details": {
-                                u"name": obj.metadata.name,
-                                u"kind": u"namespaces",
-                            },
-                            u"code": CONFLICT,
-                        }),
+                        response=Equals(Status(
+                            kind=u"Status",
+                            apiVersion=u"v1",
+                            metadata={},
+                            status=u"Failure",
+                            message=u"namespaces \"{}\" already exists".format(obj.metadata.name),
+                            reason=u"AlreadyExists",
+                            details=dict(
+                                name=obj.metadata.name,
+                                kind=u"namespaces",
+                            ),
+                            code=CONFLICT,
+                        )),
                     ),
                 )
             d.addBoth(failed)

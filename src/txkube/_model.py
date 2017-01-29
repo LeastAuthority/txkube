@@ -23,13 +23,9 @@ from ._swagger import Swagger
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
 
 
-class Status(spec.pclass_for_definition(u"v1.Status")):
-    pass
-
-
-
-class ObjectMeta(spec.pclass_for_definition(u"v1.ObjectMeta")):
-    pass
+Status = spec.pclass_for_definition(u"v1.Status")
+StatusDetails = spec.pclass_for_definition(u"v1.StatusDetails")
+ObjectMeta = spec.pclass_for_definition(u"v1.ObjectMeta")
 
 
 
