@@ -18,12 +18,15 @@ from testtools.matchers import (
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from testtools import run_test_with
 
+from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
 from twisted.internet.task import deferLater
+from twisted.web.http import CONFLICT
 
 from ..testing import TestCase
 
 from .. import (
+    KubernetesError,
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
     ObjectMeta,
 )
@@ -119,6 +122,44 @@ def kubernetes_client_tests(get_kubernetes):
                     AnyMatch(MatchesAll(matches_namespace(obj), has_uid(), is_active())),
                 )
             d.addCallback(check_namespaces)
+            return d
+
+
+        @async
+        def test_duplicate_namespace_rejected(self):
+            """
+            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+            ``KubernetesClient`` if it is called with a ``Namespace`` object
+            with the same name as a *Namespace* which already exists.
+            """
+            obj = creatable_namespaces().example()
+            d = self.client.create(obj)
+            def created(ignored):
+                return self.client.create(obj)
+            d.addCallback(created)
+            def failed(reason):
+                self.assertThat(reason, IsInstance(Failure))
+                reason.trap(KubernetesError)
+                self.assertThat(
+                    reason.value,
+                    MatchesStructure(
+                        code=Equals(CONFLICT),
+                        response=Equals({
+                            u"kind": u"Status",
+                            u"apiVersion": u"v1",
+                            u"metadata": {},
+                            u"status": u"Failure",
+                            u"message": u"namespaces \"{}\" already exists".format(obj.metadata.name),
+                            u"reason": u"AlreadyExists",
+                            u"details": {
+                                u"name": obj.metadata.name,
+                                u"kind": u"namespaces",
+                            },
+                            u"code": CONFLICT,
+                        }),
+                    ),
+                )
+            d.addBoth(failed)
             return d
 
 
