@@ -261,7 +261,7 @@ def log_response_object(document, action):
 
 def check_status(response, expected):
     if response.code not in expected:
-        d = readBody(response)
-        d.addCallback(lambda body: Failure(KubernetesError(response.code, loads(body))))
+        d = KubernetesError.from_response(response)
+        d.addCallback(Failure)
         return d
     return response
