@@ -122,6 +122,22 @@ class ConfigMapTests(iobject_tests(ConfigMap, configmaps)):
     """
     Tests for ``ConfigMap``.
     """
+    @given(namespace=object_name(), name=object_name())
+    def test_named(self, namespace, name):
+        """
+        ``ConfigMap.named`` returns a ``ConfigMap`` model object with the given
+        namespace and name.
+        """
+        self.assertThat(
+            ConfigMap.named(namespace, name),
+            MatchesStructure(
+                metadata=MatchesStructure(
+                    namespace=Equals(namespace),
+                    name=Equals(name),
+                ),
+            ),
+        )
+
 
 
 
