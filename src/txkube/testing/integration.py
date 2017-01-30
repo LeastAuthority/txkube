@@ -165,7 +165,7 @@ def kubernetes_client_tests(get_kubernetes):
                     reason.value,
                     MatchesStructure(
                         code=Equals(CONFLICT),
-                        response=Equals(Status(
+                        status=Equals(Status(
                             kind=u"Status",
                             apiVersion=u"v1",
                             metadata={},

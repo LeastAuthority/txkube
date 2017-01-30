@@ -7,9 +7,15 @@ from twisted.web.client import readBody
 
 
 class KubernetesError(Exception):
-    def __init__(self, code, response):
+    """
+    Kubernetes has returned an error for some attempted operation.
+
+    :ivar int code: The HTTP response code.
+    :ivar Status status: The *v1.Status* returned in the response.
+    """
+    def __init__(self, code, status):
         self.code = code
-        self.response = response
+        self.status = status
 
 
     @classmethod
@@ -36,8 +42,8 @@ class KubernetesError(Exception):
 
 
     def __repr__(self):
-        return "<KubernetesError: code = {}; response = {}>".format(
-            self.code, self.response,
+        return "<KubernetesError: code = {}; status = {}>".format(
+            self.code, self.status,
         )
 
     __str__ = __repr__
