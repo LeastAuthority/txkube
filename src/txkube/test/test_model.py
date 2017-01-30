@@ -6,18 +6,14 @@ Tests for ``txkube._model``.
 """
 
 from testtools.matchers import (
-    Equals, LessThan, MatchesStructure, Not, Is, raises,
+    Equals, LessThan, MatchesStructure, Not, Is,
 )
 
-from pyrsistent import InvariantException
-
 from hypothesis import given, assume
-from hypothesis.strategies import choices
 
 from ..testing import TestCase
 from ..testing.strategies import (
     object_name,
-    object_metadatas, namespaced_object_metadatas,
     retrievable_namespaces, creatable_namespaces,
     configmaps,
     objectcollections,
@@ -122,6 +118,22 @@ class ConfigMapTests(iobject_tests(ConfigMap, configmaps)):
     """
     Tests for ``ConfigMap``.
     """
+    @given(namespace=object_name(), name=object_name())
+    def test_named(self, namespace, name):
+        """
+        ``ConfigMap.named`` returns a ``ConfigMap`` model object with the given
+        namespace and name.
+        """
+        self.assertThat(
+            ConfigMap.named(namespace, name),
+            MatchesStructure(
+                metadata=MatchesStructure(
+                    namespace=Equals(namespace),
+                    name=Equals(name),
+                ),
+            ),
+        )
+
 
 
 

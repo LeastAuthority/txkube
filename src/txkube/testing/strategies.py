@@ -7,8 +7,6 @@ Hypothesis strategies useful for testing ``pykube``.
 
 from string import ascii_lowercase, digits
 
-from pyrsistent import pmap
-
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
     dictionaries,

@@ -14,17 +14,20 @@ from eliot import Message
 
 from pyrsistent import (
     InvariantException, CheckedKeyTypeError, CheckedValueTypeError,
-    PTypeError, PClass,
+    PTypeError, PClass, freeze,
 )
 
 from twisted.python.filepath import FilePath
 
 from testtools.matchers import (
     Equals, MatchesPredicate, MatchesStructure, Raises,
-    IsInstance, MatchesAll, AfterPreprocessing, Is,
+    IsInstance, MatchesAll, AfterPreprocessing, Is, raises,
 )
 
-from .._swagger import NotClassLike, Swagger, _IntegerRange
+from .._swagger import (
+    NotClassLike, Swagger, _IntegerRange,
+    PClasses, UsePrefix,
+)
 
 from ..testing import TestCase
 
@@ -529,3 +532,67 @@ def raises_exception(cls, **attributes):
             ),
         ),
     )
+
+
+
+class PClassesTests(TestCase):
+    """
+    Tests for ``PClasses``.
+    """
+    def test_useprefix(self):
+        """
+        ``PClasses`` can be used with ``UsePrefix`` to get access to the
+        ``PClass``\ s representing Swagger definitions without repetition of
+        the definition version prefix commonly used.
+        """
+        template = freeze({
+            u"type": u"object",
+            u"properties": {},
+        })
+        spec = Swagger.from_document({
+            u"definitions": {
+                u"a.X": template,
+                u"b.X": template,
+            },
+        })
+        pclasses = PClasses(
+            specification=spec,
+            name_translator=UsePrefix(prefix=u"a."),
+        )
+        self.assertThat(
+            pclasses[u"X"], Is(spec.pclass_for_definition(u"a.X")),
+        )
+
+
+    def test_no_definition(self):
+        """
+        If there is no definition matching the requested name,
+        ``PClasses.__getitem__`` raises ``KeyError``.
+        """
+        pclasses = PClasses(specification=Swagger.from_document({
+            u"definitions": {},
+        }))
+        self.assertThat(
+            lambda: pclasses[u"Foo"],
+            raises(KeyError(u"Foo")),
+        )
+
+
+    def test_default_translator(self):
+        """
+        If no name translator is provided, ``PClasses`` looks up a definition
+        exactly matching the name passed to ``PClasses.__getitem__``.
+        """
+        spec = Swagger.from_document({
+            u"definitions": {
+                u"foo": {
+                    u"type": u"object",
+                    u"properties": {},
+                },
+            },
+        })
+        pclasses = PClasses(specification=spec)
+        self.assertThat(
+            pclasses[u"foo"],
+            Is(spec.pclass_for_definition(u"foo")),
+        )
