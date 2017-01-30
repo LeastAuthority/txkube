@@ -284,10 +284,28 @@ def kubernetes_client_tests(get_kubernetes):
                     kind.named(bogus_namespace, obj.metadata.name),
                 )
             d.addCallback(got_object)
-            def check_error(result):
-                self.assertThat(result, IsInstance(Failure))
-                result.trap(KubernetesError)
-                self.assertThat(result.value.code, Equals(NOT_FOUND))
+            def check_error(reason):
+                self.assertThat(reason, IsInstance(Failure))
+                reason.trap(KubernetesError)
+                self.assertThat(
+                    reason.value,
+                    MatchesStructure(
+                        code=Equals(NOT_FOUND),
+                        status=Equals(Status(
+                            kind=u"Status",
+                            apiVersion=u"v1",
+                            metadata={},
+                            status=u"Failure",
+                            message=u"configmaps \"{}\" not found".format(obj.metadata.name),
+                            reason=u"NotFound",
+                            details=dict(
+                                kind=u"configmaps",
+                                name=obj.metadata.name,
+                            ),
+                            code=NOT_FOUND,
+                        )),
+                    ),
+                )
             d.addBoth(check_error)
             return d
 

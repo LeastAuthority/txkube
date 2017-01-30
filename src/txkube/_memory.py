@@ -112,7 +112,7 @@ class _Kubernetes(object):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps(collection.to_raw())
 
-    def _get(self, request, collection, namespace, name):
+    def _get(self, request, collection, collection_name, namespace, name):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
@@ -120,9 +120,16 @@ class _Kubernetes(object):
             obj = collection.item_by_name(name)
         except KeyError:
             request.setResponseCode(NOT_FOUND)
-            # TODO https://github.com/LeastAuthority/txkube/issues/42
-            # This is definitely not the right result.
-            return dumps({})
+            return dumps(Status(
+                apiVersion=u"v1",
+                kind=u"Status",
+                status=u"Failure",
+                message=u"{} \"{!s}\" not found".format(collection_name, name),
+                reason=u"NotFound",
+                details={u"name": name, u"kind": collection_name},
+                metadata={},
+                code=NOT_FOUND,
+            ).serialize())
         else:
             return dumps(obj.to_raw())
 
@@ -175,7 +182,7 @@ class _Kubernetes(object):
             """
             Get one Namespace by name.
             """
-            return self._get(request, self.state.namespaces, None, namespace)
+            return self._get(request, self.state.namespaces, u"namespaces", None, namespace)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
         def delete_namespace(self, request, namespace):
@@ -205,7 +212,7 @@ class _Kubernetes(object):
             """
             Get one ConfigMap by name.
             """
-            return self._get(request, self.state.configmaps, namespace, configmap)
+            return self._get(request, self.state.configmaps, u"configmaps", namespace, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
         def create_configmap(self, request, namespace):
