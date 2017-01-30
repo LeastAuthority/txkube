@@ -21,13 +21,11 @@ from ._swagger import Swagger, VersionedPClasses
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
 v1 = VersionedPClasses(spec, u"v1", name_field=u"kind", version_field=u"apiVersion")
 
-class NamespaceStatus(PClass):
+class NamespaceStatus(v1.NamespaceStatus):
     """
     ``NamespaceStatus`` instances model `Kubernetes namespace status
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
     """
-    phase = field(mandatory=True)
-
     @classmethod
     def active(cls):
         return cls(phase=u"Active")
@@ -44,7 +42,7 @@ class NamespaceStatus(PClass):
 
 
     def to_raw(self):
-        return {u"phase": self.phase}
+        return self.serialize()
 
 
 
