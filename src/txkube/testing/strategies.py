@@ -12,10 +12,7 @@ from hypothesis.strategies import (
     dictionaries,
 )
 
-from .. import (
-    v1, ConfigMap,
-    ObjectCollection,
-)
+from .. import v1, ObjectCollection
 
 # Without some attempt to cap the size of collection strategies (lists,
 # dictionaries), the slowness health check fails intermittently.  Here are
@@ -142,7 +139,7 @@ def configmaps():
     Strategy to build ``ConfigMap``.
     """
     return builds(
-        ConfigMap,
+        v1.ConfigMap,
         metadata=namespaced_object_metadatas(),
         data=configmap_datas(),
     )

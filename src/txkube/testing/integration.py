@@ -28,7 +28,7 @@ from ..testing import TestCase
 # TODO #18 this moved to txkube/__init__.py
 from .._network import KubernetesError
 from .. import (
-    IKubernetesClient, ConfigMap, ObjectCollection,
+    IKubernetesClient, ObjectCollection,
     v1,
 )
 from .strategies import creatable_namespaces, configmaps
@@ -205,7 +205,7 @@ def kubernetes_client_tests(get_kubernetes):
             d.addCallback(created_namespace)
             def created_configmap(created):
                 self.assertThat(created, matches_configmap(obj))
-                return self.client.list(ConfigMap)
+                return self.client.list(v1.ConfigMap)
             d.addCallback(created_configmap)
             def check_configmaps(collection):
                 self.assertThat(collection, IsInstance(ObjectCollection))
@@ -261,7 +261,7 @@ def kubernetes_client_tests(get_kubernetes):
             """
             return self._namespaced_object_retrieval_by_name_test(
                 configmaps(),
-                ConfigMap,
+                v1.ConfigMap,
                 matches_configmap,
             )
 
@@ -284,7 +284,7 @@ def kubernetes_client_tests(get_kubernetes):
             )
             d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
             def created_configmaps(ignored):
-                return self.client.list(ConfigMap)
+                return self.client.list(v1.ConfigMap)
             d.addCallback(created_configmaps)
             def check_configmaps(collection):
                 self.expectThat(collection, items_are_sorted())

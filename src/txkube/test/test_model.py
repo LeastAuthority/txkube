@@ -19,10 +19,7 @@ from ..testing.strategies import (
     objectcollections,
 )
 
-from .. import (
-    v1, ConfigMap, ObjectCollection,
-)
-
+from .. import v1, ObjectCollection
 
 
 def iobject_tests(loader, strategy):
@@ -114,7 +111,7 @@ class NamespaceTests(TestCase):
 
 
 
-class ConfigMapTests(iobject_tests(ConfigMap, configmaps)):
+class ConfigMapTests(iobject_tests(v1.ConfigMap, configmaps)):
     """
     Tests for ``ConfigMap``.
     """
@@ -125,7 +122,7 @@ class ConfigMapTests(iobject_tests(ConfigMap, configmaps)):
         namespace and name.
         """
         self.assertThat(
-            ConfigMap.named(namespace, name),
+            v1.ConfigMap.named(namespace, name),
             MatchesStructure(
                 metadata=MatchesStructure(
                     namespace=Equals(namespace),

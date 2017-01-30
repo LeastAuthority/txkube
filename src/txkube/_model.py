@@ -114,20 +114,11 @@ v1.Namespace = Namespace
 
 @provider(IObjectLoader)
 @implementer(IObject)
-class ConfigMap(PClass):
+class ConfigMap(v1.ConfigMap):
     """
     ``ConfigMap`` instances model `ConfigMap objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
     """
-    kind = u"ConfigMap"
-
-    metadata = field(
-        mandatory=True,
-        invariant=instance_of(v1.ObjectMeta),
-    )
-
-    data = pmap_field(unicode, unicode, optional=True)
-
     @classmethod
     def from_raw(cls, raw):
         return cls(
@@ -166,6 +157,7 @@ class ConfigMap(PClass):
             result[u"data"] = thaw(self.data)
         return result
 
+v1.ConfigMap = ConfigMap
 
 
 def object_sort_key(obj):

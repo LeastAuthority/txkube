@@ -11,9 +11,7 @@ __all__ = [
     "network_client", "memory_client",
 
     "v1",
-    "ObjectMeta",
     "object_from_raw",
-    "ConfigMap",
     "ObjectCollection",
 
     "network_kubernetes", "memory_kubernetes",
@@ -31,7 +29,6 @@ from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 from ._model import (
     v1,
     object_from_raw,
-    ConfigMap,
     ObjectCollection,
 )
 

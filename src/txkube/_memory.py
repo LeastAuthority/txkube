@@ -25,7 +25,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
-    v1, ObjectCollection, ConfigMap,
+    v1, ObjectCollection,
 )
 
 
@@ -192,4 +192,4 @@ class _Kubernetes(object):
             """
             Create a new ConfigMap.
             """
-            return self._create(request, ConfigMap, self.state.configmaps, "configmaps")
+            return self._create(request, v1.ConfigMap, self.state.configmaps, "configmaps")
