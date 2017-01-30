@@ -151,6 +151,16 @@ class ConfigMap(PClass):
         )
 
 
+    @classmethod
+    def named(cls, namespace, name):
+        """
+        Create an object with only namespace and name metadata items.
+        """
+        return cls(
+            metadata=ObjectMeta(namespace=namespace, name=name),
+        )
+
+
     def fill_defaults(self):
         # TODO Surely some stuff to fill.
         # See https://github.com/LeastAuthority/txkube/issues/36
