@@ -29,7 +29,7 @@ from ..testing import TestCase
 from .._network import KubernetesError
 from .. import (
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
-    ObjectMeta,
+    v1,
 )
 from .strategies import creatable_namespaces, configmaps
 
@@ -276,7 +276,7 @@ def kubernetes_client_tests(get_kubernetes):
             objs = [strategy.example(), strategy.example()]
             ns = list(
                 Namespace(
-                    metadata=ObjectMeta(name=obj.metadata.namespace),
+                    metadata=v1.ObjectMeta(name=obj.metadata.namespace),
                     status=None,
                 )
                 for obj

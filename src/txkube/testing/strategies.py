@@ -14,7 +14,7 @@ from hypothesis.strategies import (
 
 from .. import (
     NamespaceStatus,
-    ObjectMeta, Namespace, ConfigMap,
+    v1, Namespace, ConfigMap,
     ObjectCollection,
 )
 
@@ -42,10 +42,10 @@ def object_name():
 
 def object_metadatas():
     """
-    Strategy to build ``ObjectMeta`` without a namespace.
+    Strategy to build ``v1.ObjectMeta`` without a namespace.
     """
     return builds(
-        ObjectMeta.create,
+        v1.ObjectMeta.create,
         fixed_dictionaries({
             u"name": object_name(),
             u"uid": none(),
@@ -55,7 +55,7 @@ def object_metadatas():
 
 def namespaced_object_metadatas():
     """
-    Strategy to build ``ObjectMeta`` with a namespace.
+    Strategy to build ``v1.ObjectMeta`` with a namespace.
     """
     return builds(
         lambda obj_metadata, namespace: obj_metadata.set(

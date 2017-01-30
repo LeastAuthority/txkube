@@ -16,17 +16,10 @@ from twisted.python.filepath import FilePath
 
 from . import IObject, IObjectLoader
 from ._invariants import instance_of, provider_of
-from ._swagger import Swagger, PClasses, UsePrefix
-
+from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
-v1 = PClasses(specification=spec, name_translator=UsePrefix(prefix=u"v1."))
-
-
-class ObjectMeta(v1[u"ObjectMeta"]):
-    pass
-
-
+v1 = VersionedPClasses(spec, u"v1", name_field=u"kind", version_field=u"apiVersion")
 
 class NamespaceStatus(PClass):
     """
@@ -66,7 +59,7 @@ class Namespace(PClass):
 
     metadata = field(
         mandatory=True,
-        invariant=instance_of(ObjectMeta),
+        invariant=instance_of(v1.ObjectMeta),
     )
 
     status = field(mandatory=True, type=(NamespaceStatus, type(None)))
@@ -88,7 +81,7 @@ class Namespace(PClass):
         else:
             status = NamespaceStatus.from_raw(status_raw)
         return cls(
-            metadata=ObjectMeta(**raw[u"metadata"]),
+            metadata=v1.ObjectMeta(**raw[u"metadata"]),
             status=status,
         )
 
@@ -99,7 +92,7 @@ class Namespace(PClass):
         Create an object with only the name metadata item.
         """
         return cls(
-            metadata=ObjectMeta(name=name),
+            metadata=v1.ObjectMeta(name=name),
             status=None,
         )
 
@@ -138,7 +131,7 @@ class ConfigMap(PClass):
 
     metadata = field(
         mandatory=True,
-        invariant=instance_of(ObjectMeta),
+        invariant=instance_of(v1.ObjectMeta),
     )
 
     data = pmap_field(unicode, unicode, optional=True)
@@ -146,7 +139,7 @@ class ConfigMap(PClass):
     @classmethod
     def from_raw(cls, raw):
         return cls(
-            metadata=ObjectMeta(**raw[u"metadata"]),
+            metadata=v1.ObjectMeta(**raw[u"metadata"]),
             data=raw.get(u"data", None),
         )
 
@@ -157,7 +150,7 @@ class ConfigMap(PClass):
         Create an object with only namespace and name metadata items.
         """
         return cls(
-            metadata=ObjectMeta(namespace=namespace, name=name),
+            metadata=v1.ObjectMeta(namespace=namespace, name=name),
         )
 
 
