@@ -25,8 +25,6 @@ from twisted.web.http import NOT_FOUND, CONFLICT
 
 from ..testing import TestCase
 
-# TODO #18 this moved to txkube/__init__.py
-from .._network import KubernetesError
 from .. import (
     KubernetesError,
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
