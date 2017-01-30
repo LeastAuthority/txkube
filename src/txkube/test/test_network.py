@@ -10,8 +10,6 @@ See ``get_kubernetes`` for pre-requisites.
 from os import environ
 from os.path import expanduser
 
-from yaml import safe_load
-
 from pem import parse
 
 from twisted.python.url import URL

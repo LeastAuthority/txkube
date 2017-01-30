@@ -5,8 +5,6 @@
 An in-memory implementation of the Kubernetes client interface.
 """
 
-from functools import partial
-
 from json import dumps, loads
 
 import attr
@@ -17,14 +15,11 @@ from zope.interface import implementer
 
 from twisted.python.url import URL
 
-from twisted.web.resource import Resource, NoResource
-from twisted.web.http import CREATED
+from twisted.web.http import CREATED, NOT_FOUND
 
 from klein import Klein
 
 from werkzeug.exceptions import NotFound
-
-from eliot import Message
 
 from treq.testing import RequestTraversalAgent
 
@@ -100,21 +95,33 @@ class _Kubernetes(object):
     """
     state = attr.ib()
 
+    def _reduce_to_namespace(self, collection, namespace):
+        # Unfortunately pset does not support transform. :( Use this more
+        # verbose .set() operation.
+        return collection.set(
+            u"items",
+            pset(obj for obj in collection.items if obj.metadata.namespace == namespace),
+        )
+
     def _list(self, request, namespace, collection):
         if namespace is not None:
-            # Unfortunately pset does not support transform. :( Use this more
-            # verbose .set() operation.
-            collection = collection.set(
-                u"items",
-                pset(obj for obj in collection.items if obj.metadata.namespace == namespace),
-            )
+            collection = self._reduce_to_namespace(collection, namespace)
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps(collection.to_raw())
 
-    def _get(self, request, collection, name):
-        obj = collection.item_by_name(name)
+    def _get(self, request, collection, namespace, name):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(obj.to_raw())
+        if namespace is not None:
+            collection = self._reduce_to_namespace(collection, namespace)
+        try:
+            obj = collection.item_by_name(name)
+        except KeyError:
+            request.setResponseCode(NOT_FOUND)
+            # TODO https://github.com/LeastAuthority/txkube/issues/42
+            # This is definitely not the right result.
+            return dumps({})
+        else:
+            return dumps(obj.to_raw())
 
     def _create(self, request, type, collection, collection_name):
         obj = type.from_raw(loads(request.content.read())).fill_defaults()
@@ -132,7 +139,8 @@ class _Kubernetes(object):
     app = Klein()
     @app.handle_errors(NotFound)
     def not_found(self, request, name):
-        request.responseHeaders.setRawHeader(u"content-type", [u"application/json"])
+        # XXX Untested - https://github.com/LeastAuthority/txkube/issues/42
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps({u"message": u"boo"})
 
     with app.subroute(u"/api/v1") as app:
@@ -148,7 +156,7 @@ class _Kubernetes(object):
             """
             Get one Namespace by name.
             """
-            return self._get(request, self.state.namespaces, namespace)
+            return self._get(request, self.state.namespaces, None, namespace)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
         def delete_namespace(self, request, namespace):
@@ -173,12 +181,12 @@ class _Kubernetes(object):
             """
             return self._list(request, namespace, self.state.configmaps)
 
-        @app.route(u"/configmaps/<configmap>", methods=[u"GET"])
-        def get_configmap(self, request, configmap):
+        @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"GET"])
+        def get_configmap(self, request, namespace, configmap):
             """
             Get one ConfigMap by name.
             """
-            return self._get(request, self.state.configmaps, configmap)
+            return self._get(request, self.state.configmaps, namespace, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
         def create_configmap(self, request, namespace):

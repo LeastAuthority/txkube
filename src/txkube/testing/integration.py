@@ -5,8 +5,8 @@
 Integration test generator for ``txkube.IKubernetesClient``.
 """
 
-from operator import attrgetter
-from functools import partial
+from operator import attrgetter, setitem
+from functools import partial, wraps
 
 from zope.interface.verify import verifyObject
 
@@ -18,11 +18,15 @@ from testtools.matchers import (
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from testtools import run_test_with
 
+from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
-from twisted.internet.task import deferLater
+from twisted.internet.task import deferLater, cooperate
+from twisted.web.http import NOT_FOUND
 
 from ..testing import TestCase
 
+# TODO #18 this moved to txkube/__init__.py
+from .._network import KubernetesError
 from .. import (
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
     ObjectMeta,
@@ -122,21 +126,36 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
+        def _global_object_retrieval_by_name_test(self, strategy, kind, matches):
+            """
+            Verify that a particular kind of non-namespaced Kubernetes object (such as
+            *Namespace* or *PersistentVolume*) can be retrieved by name by
+            calling ``IKubernetesClient.get`` with the ``IObject``
+            corresponding to that kind as long as the object has its *name*
+            metadata populated.
+            """
+            obj = strategy.example()
+            d = self.client.create(obj)
+            def created_object(created):
+                return self.client.get(kind.named(obj.metadata.name))
+            d.addCallback(created_object)
+            def got_object(retrieved):
+                self.assertThat(retrieved, matches(obj))
+            d.addCallback(got_object)
+            return d
+
+
         @async
         def test_namespace_retrieval(self):
             """
             A specific ``Namespace`` object can be retrieved by name using
             ``IKubernetesClient.get``.
             """
-            obj = creatable_namespaces().example()
-            d = self.client.create(obj)
-            def created_namespace(created):
-                return self.client.get(Namespace.named(obj.metadata.name))
-            d.addCallback(created_namespace)
-            def got_namespace(namespace):
-                self.assertThat(namespace, matches_namespace(obj))
-            d.addCallback(got_namespace)
-            return d
+            return self._global_object_retrieval_by_name_test(
+                creatable_namespaces(),
+                Namespace,
+                matches_namespace,
+            )
 
 
         @async
@@ -194,6 +213,59 @@ def kubernetes_client_tests(get_kubernetes):
             d.addCallback(check_configmaps)
             return d
 
+
+        @needs(namespace=creatable_namespaces().example())
+        def _namespaced_object_retrieval_by_name_test(self, strategy, kind, matches, namespace):
+            """
+            Verify that a particular kind of namespaced Kubernetes object (such as
+            *ConfigMap* or *PersistentVolumeClaim*) can be retrieved by name
+            by by calling ``IKubernetesClient.get`` with the ``IObject``
+            corresponding to that kind as long as the object has its *name*
+            metadata populated.
+            """
+            obj = strategy.example()
+            # Move it to the namespace for this test.
+            obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
+            d = self.client.create(obj)
+            def created_object(created):
+                return self.client.get(kind.named(obj.metadata.namespace, obj.metadata.name))
+            d.addCallback(created_object)
+            def got_object(retrieved):
+                self.expectThat(retrieved, matches(obj))
+                # Try retrieving an object with the same name but a different
+                # namespace.  We shouldn't find it.
+                #
+                # First, compute a legal but non-existing namespace name.
+                bogus_namespace = obj.metadata.namespace
+                if len(bogus_namespace) > 1:
+                    bogus_namespace = bogus_namespace[:-1]
+                else:
+                    bogus_namespace += u"x"
+                return self.client.get(
+                    kind.named(bogus_namespace, obj.metadata.name),
+                )
+            d.addCallback(got_object)
+            def check_error(result):
+                self.assertThat(result, IsInstance(Failure))
+                result.trap(KubernetesError)
+                self.assertThat(result.value.code, Equals(NOT_FOUND))
+            d.addBoth(check_error)
+            return d
+
+
+        @async
+        def test_configmap_retrieval(self):
+            """
+            A specific ``ConfigMap`` object can be retrieved by name using
+            ``IKubernetesClient.get``.
+            """
+            return self._namespaced_object_retrieval_by_name_test(
+                configmaps(),
+                ConfigMap,
+                matches_configmap,
+            )
+
+
         @async
         def test_configmaps_sorted(self):
             """
@@ -244,3 +316,62 @@ def items_are_sorted():
             u"%s is not sorted by namespace, name",
         ),
     )
+
+
+def needs(**to_create):
+    """
+    Create a function decorator which will create certain Kubernetes objects
+    before calling the decorated function and delete them after it completes.
+
+    This requires the decorated functions accept a first argument with a
+    ``client`` attribute bound to an ``IKubernetesClient``.
+
+    :param to_create: Keyword arguments with ``IObject`` providers as values.
+        After being created, these objects will be passed to the decorated
+        function using the same keyword arguments.
+
+    :return: A function decorator.
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapper(self, *a, **kw):
+            # Check to make sure there aren't keyword argument conflicts.  I
+            # doubt this is an exhaustive safety check.
+            overlap = set(to_create) & set(kw)
+            if overlap:
+                raise TypeError(
+                    "Conflict between @needs() and **kw: {}".format(overlap)
+                )
+
+            # Create the objects.
+            created = {}
+            task = cooperate(
+                self.client.create(
+                    obj
+                ).addCallback(
+                    partial(setitem, created, name)
+                )
+                for (name, obj)
+                in sorted(to_create.items())
+            )
+            d = task.whenDone()
+
+            # Call the decorated function.
+            d.addCallback(lambda ignored: kw.update(created))
+            d.addCallback(lambda ignored: f(self, *a, **kw))
+
+            # Delete the created objects.
+            def cleanup(passthrough):
+                task = cooperate(
+                    self.client.delete(created[name])
+                    for name
+                    in sorted(to_create, reverse=True)
+                    if name in created
+                )
+                d = task.whenDone()
+                d.addCallback(lambda ignored: passthrough)
+                return d
+            d.addBoth(cleanup)
+            return d
+        return wrapper
+    return decorator
