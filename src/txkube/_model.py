@@ -44,6 +44,8 @@ class NamespaceStatus(v1.NamespaceStatus):
     def to_raw(self):
         return self.serialize()
 
+# Eeek?
+v1.NamespaceStatus = NamespaceStatus
 
 
 @provider(IObjectLoader)

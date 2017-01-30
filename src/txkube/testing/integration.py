@@ -28,7 +28,7 @@ from ..testing import TestCase
 # TODO #18 this moved to txkube/__init__.py
 from .._network import KubernetesError
 from .. import (
-    IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
+    IKubernetesClient, Namespace, ConfigMap, ObjectCollection,
     v1,
 )
 from .strategies import creatable_namespaces, configmaps
@@ -70,7 +70,7 @@ def has_uid():
 
 def is_active():
     return MatchesStructure(
-        status=Equals(NamespaceStatus.active()),
+        status=Equals(v1.NamespaceStatus.active()),
     )
 
 

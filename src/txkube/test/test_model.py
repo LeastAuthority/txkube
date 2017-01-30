@@ -20,7 +20,7 @@ from ..testing.strategies import (
 )
 
 from .. import (
-    Namespace, NamespaceStatus, ConfigMap, ObjectCollection,
+    v1, Namespace, ConfigMap, ObjectCollection,
 )
 
 
@@ -108,7 +108,7 @@ class NamespaceTests(TestCase):
                 metadata=MatchesStructure(
                     uid=Not(Is(None)),
                 ),
-                status=Equals(NamespaceStatus.active()),
+                status=Equals(v1.NamespaceStatus.active()),
             ),
         )
 
