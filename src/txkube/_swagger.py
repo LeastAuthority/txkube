@@ -747,10 +747,9 @@ class VersionedPClasses(object):
 
        spec = Swagger.from_path(...)
        v1beta1 = VersionedPClasses(
-           spec, u"v1beta1.", u"kind", u"apiVersion",
+           spec, u"v1beta1", u"kind", u"apiVersion",
        )
-       class Deployment(v1beta1.Deployment):
-           ...
+       deployment = v1beta1.Deployment(...)
     """
     def __init__(self, spec, version, name_field=None, version_field=None):
         self.spec = spec
