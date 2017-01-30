@@ -30,7 +30,10 @@ from .. import (
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
     ObjectMeta,
 )
-from .._model import Status, StatusDetails
+
+# TODO: Expose v1 (and others) in txkube package instead of individual model
+# objects.  There are toooo many of them!
+from .._model import Status
 
 from .strategies import creatable_namespaces, configmaps
 

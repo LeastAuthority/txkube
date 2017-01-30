@@ -16,7 +16,6 @@ from zope.interface import implementer
 from twisted.python.url import URL
 
 from twisted.python.compat import nativeString
-from twisted.web.resource import Resource, NoResource
 from twisted.web.http import CREATED, CONFLICT, NOT_FOUND
 
 from klein import Klein
