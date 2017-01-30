@@ -1,0 +1,5 @@
+codecov:
+  disable_default_path_fixes: yes
+
+fixes:
+  - "home/travis/virtualenv/python2.7.9/lib/python2.7/site-packages/txkube/::src/txkube/"
