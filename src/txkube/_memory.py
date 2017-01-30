@@ -24,10 +24,9 @@ from werkzeug.exceptions import NotFound
 
 from treq.testing import RequestTraversalAgent
 
-from ._model import Status
 from . import (
     IKubernetes, network_kubernetes,
-    NamespaceStatus,
+    v1, NamespaceStatus,
     ObjectCollection, Namespace, ConfigMap,
 )
 
@@ -133,9 +132,7 @@ class _Kubernetes(object):
             added = collection.add(obj)
         except InvariantException:
             request.setResponseCode(CONFLICT)
-            return dumps(Status(
-                apiVersion=u"v1",
-                kind=u"Status",
+            return dumps(v1.Status(
                 status=u"Failure",
                 message=u"{} \"{!s}\" already exists".format(collection_name, obj.metadata.name),
                 reason=u"AlreadyExists",

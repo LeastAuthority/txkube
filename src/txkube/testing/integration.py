@@ -31,10 +31,6 @@ from .. import (
     v1,
 )
 
-# TODO: Expose v1 (and others) in txkube package instead of individual model
-# objects.  There are toooo many of them!
-from .._model import Status
-
 from .strategies import creatable_namespaces, configmaps
 
 
@@ -168,9 +164,7 @@ def kubernetes_client_tests(get_kubernetes):
                     reason.value,
                     MatchesStructure(
                         code=Equals(CONFLICT),
-                        status=Equals(Status(
-                            kind=u"Status",
-                            apiVersion=u"v1",
+                        status=Equals(v1.Status(
                             metadata={},
                             status=u"Failure",
                             message=u"namespaces \"{}\" already exists".format(obj.metadata.name),
