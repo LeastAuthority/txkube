@@ -64,6 +64,17 @@ After installing the development dependencies, you can run the test suite with t
   $ pip install txkube[dev]
   $ trial txkube
 
+txkube also includes integration tests.
+It is **not** recommended that you run these against anything but a dedicated *testing* Kubernetes cluster.
+`Minikube`_ is an easy way to obtain such a thing.
+Once running::
+
+  $ pip install txkube[dev]
+  $ TXKUBE_INTEGRATION_CLUSTER_NAME=minikube trial txkube
+
+This will run the full test suite which includes the integration tests.
+It will interact with (and *make destructive changes to*) the named Kubernetes cluster.
+
 License
 -------
 
@@ -73,3 +84,4 @@ See the LICENSE file for more details.
 
 
 .. _Kubernetes: https://kubernetes.io/
+.. _Minikube: https://kubernetes.io/docs/getting-started-guides/minikube/
