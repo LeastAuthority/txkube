@@ -646,3 +646,13 @@ class VersionedPClassesTests(TestCase):
         """
         a = VersionedPClasses(self.spec, u"a", version_field=u"version")
         self.assertThat(a.foo().version, Equals(u"a"))
+
+
+    def test_missing(self):
+        """
+        An attribute access on ``VersionedPClasses`` for which there is no
+        corresponding Swagger definition results in ``AttributeError`` being
+        raised.
+        """
+        a = VersionedPClasses(self.spec, u"a", version_field=u"version")
+        self.assertThat(lambda: a.bar, raises(AttributeError("bar")))
