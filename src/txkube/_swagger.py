@@ -734,3 +734,37 @@ class PClasses(PClass):
         """
         name = self.name_translator.translate(name)
         return self.specification.pclass_for_definition(name)
+
+
+
+class VersionedPClasses(object):
+    """
+    ``VersionedPClasses`` provides a somewhat easier to use interface to
+    PClasses representing definitions from a Swagger definition.  For
+    example::
+
+    .. code-block: python
+
+       spec = Swagger.from_path(...)
+       v1beta1 = VersionedPClasses(
+           spec, u"v1beta1.", u"kind", u"apiVersion",
+       )
+       class Deployment(v1beta1.Deployment):
+           ...
+    """
+    def __init__(self, spec, version, name_field=None, version_field=None):
+        self.spec = spec
+        self.version = version
+        self.name_field = name_field
+        self.version_field = version_field
+
+
+    def __getattr__(self, name):
+        constant_fields = {}
+        if self.name_field is not None:
+            constant_fields[self.name_field] = name
+        if self.version_field is not None:
+            constant_fields[self.version_field] = self.version
+        return self.spec.pclass_for_definition(
+            self.version + u"." + name, constant_fields=constant_fields,
+        )
