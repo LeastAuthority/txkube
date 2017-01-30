@@ -30,12 +30,15 @@ _QUICK_AVERAGE_SIZE = 3
 _QUICK_MAX_SIZE = 10
 
 def object_name():
-    # https://kubernetes.io/docs/user-guide/identifiers/#names
+    # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/identifiers.md
+    # TODO This is kind of broken.  Rewrite it entirely.
+    # https://github.com/LeastAuthority/txkube/issues/49
+
     # [a-z0-9]([-a-z0-9]*[a-z0-9])?
     alphabet = ascii_lowercase + digits + b"-"
     return builds(
         lambda parts: b"".join(parts).decode("ascii"),
-        lists(sampled_from(alphabet), min_size=1, average_size=10, max_size=253),
+        lists(sampled_from(alphabet), min_size=1, average_size=10, max_size=63),
     ).filter(
         lambda value: not (value.startswith(b"-") or value.endswith(b"-"))
     )
