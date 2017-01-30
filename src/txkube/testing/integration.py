@@ -18,11 +18,15 @@ from testtools.matchers import (
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from testtools import run_test_with
 
+from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
 from twisted.internet.task import deferLater, cooperate
+from twisted.web.http import NOT_FOUND
 
 from ..testing import TestCase
 
+# TODO #18 this moved to txkube/__init__.py
+from .._network import KubernetesError
 from .. import (
     IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
     ObjectMeta,
@@ -227,8 +231,25 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.get(kind.named(obj.metadata.namespace, obj.metadata.name))
             d.addCallback(created_object)
             def got_object(retrieved):
-                self.assertThat(retrieved, matches(obj))
+                self.expectThat(retrieved, matches(obj))
+                # Try retrieving an object with the same name but a different
+                # namespace.  We shouldn't find it.
+                #
+                # First, compute a legal but non-existing namespace name.
+                bogus_namespace = obj.metadata.namespace
+                if len(bogus_namespace) > 1:
+                    bogus_namespace = bogus_namespace[:-1]
+                else:
+                    bogus_namespace += u"x"
+                return self.client.get(
+                    kind.named(bogus_namespace, obj.metadata.name),
+                )
             d.addCallback(got_object)
+            def check_error(result):
+                self.assertThat(result, IsInstance(Failure))
+                result.trap(KubernetesError)
+                self.assertThat(result.value.code, Equals(NOT_FOUND))
+            d.addBoth(check_error)
             return d
 
 

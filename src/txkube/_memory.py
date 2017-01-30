@@ -15,7 +15,7 @@ from zope.interface import implementer
 
 from twisted.python.url import URL
 
-from twisted.web.http import CREATED
+from twisted.web.http import CREATED, NOT_FOUND
 
 from klein import Klein
 
@@ -110,11 +110,18 @@ class _Kubernetes(object):
         return dumps(collection.to_raw())
 
     def _get(self, request, collection, namespace, name):
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
-        obj = collection.item_by_name(name)
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(obj.to_raw())
+        try:
+            obj = collection.item_by_name(name)
+        except KeyError:
+            request.setResponseCode(NOT_FOUND)
+            # TODO https://github.com/LeastAuthority/txkube/issues/42
+            # This is definitely not the right result.
+            return dumps({})
+        else:
+            return dumps(obj.to_raw())
 
     def _create(self, request, type, collection, collection_name):
         obj = type.from_raw(loads(request.content.read())).fill_defaults()
