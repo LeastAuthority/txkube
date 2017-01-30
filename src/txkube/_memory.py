@@ -5,8 +5,6 @@
 An in-memory implementation of the Kubernetes client interface.
 """
 
-from functools import partial
-
 from json import dumps, loads
 
 import attr
@@ -17,14 +15,11 @@ from zope.interface import implementer
 
 from twisted.python.url import URL
 
-from twisted.web.resource import Resource, NoResource
 from twisted.web.http import CREATED
 
 from klein import Klein
 
 from werkzeug.exceptions import NotFound
-
-from eliot import Message
 
 from treq.testing import RequestTraversalAgent
 

@@ -22,10 +22,11 @@ cache:
     - "$HOME/.cache/pip"
 
 install:
-  - "pip install --upgrade pip setuptools wheel coverage codecov"
+  - "pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
   - "pip install .[dev]"
 
 script:
+  - "pyflakes src"
   - "coverage run --rcfile=${PWD}/.coveragerc $(type -p trial) txkube"
 
 after_success:

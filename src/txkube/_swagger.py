@@ -25,6 +25,7 @@ from pyrsistent import (
 )
 
 from twisted.python.compat import nativeString
+from twisted.python.reflect import fullyQualifiedName
 
 
 class NotClassLike(Exception):
@@ -327,17 +328,26 @@ class _DatetimeTypeModel(object):
 
 
 
+def provider_invariant(interface):
+    """
+    :param zope.interface.Interface interface: An interface to require.
+
+    :return: A pyrsistent invariant which requires that values provide the
+        given interface.
+    """
+    return lambda o: (
+        interface.providedBy(o),
+        "does not provide {}".format(fullyQualifiedName(interface)),
+    )
+
+
+
 def itypemodel_field():
     """
     :return: A pyrsistent field for an attribute which much refer to an
         ``ITypeModel`` provider.
     """
-    return field(
-        invariant=lambda o: (
-            ITypeModel.providedBy(o),
-            "does not provide ITypeModel",
-        ),
-    )
+    return field(invariant=provider_invariant(ITypeModel))
 
 
 
@@ -648,3 +658,79 @@ class _ClassModel(PClass):
         }
         content["__doc__"] = nativeString(self.doc)
         return type(nativeString(self.name), (PClass,), content)
+
+
+
+class INameTranslator(Interface):
+    """
+    An ``INameTranslator`` translates from a name convenient for use in Python
+    to a name used in a Swagger definition.
+    """
+    def translate(name):
+        """
+        Translate the name from Python to Swagger.
+
+        :param unicode name: The Python name.
+        :return unicode: The Swagger name.
+        """
+
+
+
+@implementer(INameTranslator)
+class IdentityTranslator(object):
+    """
+    ``IdentityTranslator`` provides the identity translation.  In other words,
+    it is a no-op.
+    """
+    def translate(self, name):
+        return name
+
+
+
+@implementer(INameTranslator)
+class UsePrefix(PClass):
+    """
+    ``UsePrefix`` provides a translation which prepends a prefix.  This is
+    useful, for example, for a versioning convention where many definition
+    names have a prefix like *v1*.
+
+    :ivar unicode prefix: The prefix to prepend.
+    """
+    prefix = field(mandatory=True, type=unicode)
+
+    def translate(self, name):
+        return self.prefix + name
+
+
+
+class PClasses(PClass):
+    """
+    ``PClasses`` provides a somewhat easier to use interface to PClasses
+    representing definitions from a Swagger definition.  For example::
+
+    .. code-block: python
+
+       spec = Swagger.from_path(...)
+       v1beta1 = PClasses(
+           specification=spec,
+           name_translator=UsePrefix(u"v1beta1."),
+       )
+       class Deployment(v1beta1[u"Deployment"]):
+           ...
+    """
+    specification = field(mandatory=True, type=Swagger)
+    name_translator = field(
+        mandatory=True, initial=IdentityTranslator(),
+        invariant=provider_invariant(INameTranslator),
+    )
+
+    def __getitem__(self, name):
+        """
+        Get a PClass for the translation of the given name.
+
+        :param unicode name: The Python name to translate and look up.
+
+        :return: A ``PClass`` subclass for the identified Swagger definition.
+        """
+        name = self.name_translator.translate(name)
+        return self.specification.pclass_for_definition(name)
