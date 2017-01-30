@@ -21,6 +21,20 @@ from ._swagger import Swagger, VersionedPClasses
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
 v1 = VersionedPClasses(spec, u"v1", name_field=u"kind", version_field=u"apiVersion")
 
+
+def behavior(namespace):
+    """
+    Create a class decorator which adds the resulting class to the given
+    namespace-y thing.
+    """
+    def decorator(cls):
+        setattr(namespace, cls.__name__, cls)
+        return cls
+    return decorator
+
+
+
+@behavior(v1)
 class NamespaceStatus(v1.NamespaceStatus):
     """
     ``NamespaceStatus`` instances model `Kubernetes namespace status
@@ -44,10 +58,9 @@ class NamespaceStatus(v1.NamespaceStatus):
     def to_raw(self):
         return self.serialize()
 
-# Eeek?
-v1.NamespaceStatus = NamespaceStatus
 
 
+@behavior(v1)
 @provider(IObjectLoader)
 @implementer(IObject)
 class Namespace(v1.Namespace):
@@ -109,9 +122,9 @@ class Namespace(v1.Namespace):
             result[u"status"] = self.status.to_raw()
         return result
 
-v1.Namespace = Namespace
 
 
+@behavior(v1)
 @provider(IObjectLoader)
 @implementer(IObject)
 class ConfigMap(v1.ConfigMap):
@@ -157,7 +170,6 @@ class ConfigMap(v1.ConfigMap):
             result[u"data"] = thaw(self.data)
         return result
 
-v1.ConfigMap = ConfigMap
 
 
 def object_sort_key(obj):
