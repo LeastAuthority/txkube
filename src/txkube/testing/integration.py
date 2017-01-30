@@ -28,7 +28,7 @@ from ..testing import TestCase
 # TODO #18 this moved to txkube/__init__.py
 from .._network import KubernetesError
 from .. import (
-    IKubernetesClient, Namespace, ConfigMap, ObjectCollection,
+    IKubernetesClient, ConfigMap, ObjectCollection,
     v1,
 )
 from .strategies import creatable_namespaces, configmaps
@@ -112,7 +112,7 @@ def kubernetes_client_tests(get_kubernetes):
             d = self.client.create(obj)
             def created_namespace(created):
                 self.assertThat(created, matches_namespace(obj))
-                return self.client.list(Namespace)
+                return self.client.list(v1.Namespace)
             d.addCallback(created_namespace)
             def check_namespaces(namespaces):
                 self.assertThat(namespaces, IsInstance(ObjectCollection))
@@ -153,7 +153,7 @@ def kubernetes_client_tests(get_kubernetes):
             """
             return self._global_object_retrieval_by_name_test(
                 creatable_namespaces(),
-                Namespace,
+                v1.Namespace,
                 matches_namespace,
             )
 
@@ -170,7 +170,7 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.delete(created)
             d.addCallback(created_namespace)
             def deleted_namespace(ignored):
-                return self.client.list(Namespace)
+                return self.client.list(v1.Namespace)
             d.addCallback(deleted_namespace)
             def check_namespaces(collection):
                 active = list(
@@ -275,7 +275,7 @@ def kubernetes_client_tests(get_kubernetes):
             strategy = configmaps()
             objs = [strategy.example(), strategy.example()]
             ns = list(
-                Namespace(
+                v1.Namespace(
                     metadata=v1.ObjectMeta(name=obj.metadata.namespace),
                     status=None,
                 )

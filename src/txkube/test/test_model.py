@@ -20,7 +20,7 @@ from ..testing.strategies import (
 )
 
 from .. import (
-    v1, Namespace, ConfigMap, ObjectCollection,
+    v1, ConfigMap, ObjectCollection,
 )
 
 
@@ -46,14 +46,14 @@ def iobject_tests(loader, strategy):
 
 
 
-class RetrievableNamespaceTests(iobject_tests(Namespace, retrievable_namespaces)):
+class RetrievableNamespaceTests(iobject_tests(v1.Namespace, retrievable_namespaces)):
     """
     Tests for ``Namespace`` based on a strategy for fully-populated objects.
     """
 
 
 
-class CreatableNamespaceTests(iobject_tests(Namespace, creatable_namespaces)):
+class CreatableNamespaceTests(iobject_tests(v1.Namespace, creatable_namespaces)):
     """
     Tests for ``Namespace`` based on a strategy for objects just detailed
     enough to be created.
@@ -69,7 +69,7 @@ class NamespaceTests(TestCase):
         ``Namespace.default`` returns the *default* namespace.
         """
         self.assertThat(
-            Namespace.default(),
+            v1.Namespace.default(),
             MatchesStructure(
                 metadata=MatchesStructure(
                     name=Equals(u"default"),
@@ -85,7 +85,7 @@ class NamespaceTests(TestCase):
         name.
         """
         self.assertThat(
-            Namespace.named(name),
+            v1.Namespace.named(name),
             MatchesStructure(
                 metadata=MatchesStructure(
                     name=Equals(name),
@@ -100,7 +100,7 @@ class NamespaceTests(TestCase):
         """
         # If they are not set already, a uid is generated and put into the
         # metadata and the status is set to active.
-        sparse = Namespace.named(u"foo")
+        sparse = v1.Namespace.named(u"foo")
         filled = sparse.fill_defaults()
         self.expectThat(
             filled,

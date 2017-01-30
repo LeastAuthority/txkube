@@ -50,20 +50,11 @@ v1.NamespaceStatus = NamespaceStatus
 
 @provider(IObjectLoader)
 @implementer(IObject)
-class Namespace(PClass):
+class Namespace(v1.Namespace):
     """
     ``Namespace`` instances model `Kubernetes namespaces
     <https://kubernetes.io/docs/user-guide/namespaces/>`_.
     """
-    kind = u"Namespace"
-
-    metadata = field(
-        mandatory=True,
-        invariant=instance_of(v1.ObjectMeta),
-    )
-
-    status = field(mandatory=True, type=(NamespaceStatus, type(None)))
-
     @classmethod
     def default(cls):
         """
@@ -118,6 +109,7 @@ class Namespace(PClass):
             result[u"status"] = self.status.to_raw()
         return result
 
+v1.Namespace = Namespace
 
 
 @provider(IObjectLoader)

@@ -13,7 +13,7 @@ from hypothesis.strategies import (
 )
 
 from .. import (
-    v1, Namespace, ConfigMap,
+    v1, ConfigMap,
     ObjectCollection,
 )
 
@@ -81,7 +81,7 @@ def creatable_namespaces():
     cluster.
     """
     return builds(
-        Namespace,
+        v1.Namespace,
         metadata=object_metadatas(),
         status=none(),
     )

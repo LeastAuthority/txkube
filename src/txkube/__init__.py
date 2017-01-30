@@ -13,7 +13,7 @@ __all__ = [
     "v1",
     "ObjectMeta",
     "object_from_raw",
-    "Namespace", "ConfigMap",
+    "ConfigMap",
     "ObjectCollection",
 
     "network_kubernetes", "memory_kubernetes",
@@ -31,7 +31,7 @@ from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 from ._model import (
     v1,
     object_from_raw,
-    Namespace, ConfigMap,
+    ConfigMap,
     ObjectCollection,
 )
 

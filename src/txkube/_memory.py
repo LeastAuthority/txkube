@@ -25,7 +25,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
-    v1, ObjectCollection, Namespace, ConfigMap,
+    v1, ObjectCollection, ConfigMap,
 )
 
 
@@ -171,7 +171,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(request, Namespace, self.state.namespaces, "namespaces")
+            return self._create(request, v1.Namespace, self.state.namespaces, "namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request, namespace=None):
