@@ -26,7 +26,7 @@ from testtools.matchers import (
 
 from .._swagger import (
     NotClassLike, Swagger, _IntegerRange,
-    PClasses, UsePrefix,
+    UsePrefix, PClasses, VersionedPClasses,
 )
 
 from ..testing import TestCase
@@ -596,3 +596,53 @@ class PClassesTests(TestCase):
             pclasses[u"foo"],
             Is(spec.pclass_for_definition(u"foo")),
         )
+
+
+
+class VersionedPClassesTests(TestCase):
+    """
+    Tests for ``VersionedPClasses``.
+    """
+    def setUp(self):
+        super(VersionedPClassesTests, self).setUp()
+        self.spec = Swagger.from_document({
+            u"definitions": {
+                u"a.foo": {
+                    u"type": u"object",
+                    u"properties": {},
+                },
+            },
+        })
+
+
+    def test_attribute_access(self):
+        """
+        Accessing an attribute of a ``VersionedPClasses`` instance gets a
+        ``PClass`` subclass for a Swagger definition matching the
+        ``VersionedPClasses`` version and the name of the attribute.
+        """
+        a = VersionedPClasses(self.spec, u"a")
+        self.assertThat(
+            a.foo,
+            Is(self.spec.pclass_for_definition(u"a.foo")),
+        )
+
+
+    def test_name(self):
+        """
+        The classes retrieved via ``VersionedPClasses`` attribute access have
+        their name exposed at the attribute specified to
+        ``VersionedPClasses``.
+        """
+        a = VersionedPClasses(self.spec, u"a", name_field=u"name")
+        self.assertThat(a.foo().name, Equals(u"foo"))
+
+
+    def test_version(self):
+        """
+        The classes retrieved via ``VersionedPClasses`` attribute access have
+        their version exposed at the attribute specified to
+        ``VersionedPClasses``.
+        """
+        a = VersionedPClasses(self.spec, u"a", version_field=u"version")
+        self.assertThat(a.foo().version, Equals(u"a"))

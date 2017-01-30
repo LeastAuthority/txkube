@@ -12,6 +12,7 @@ __all__ = [
 
     "KubernetesError",
 
+    "v1",
     "NamespaceStatus",
     "ObjectMeta",
     "object_from_raw",
@@ -32,8 +33,8 @@ from ._exception import KubernetesError
 from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 
 from ._model import (
+    v1,
     NamespaceStatus,
-    ObjectMeta,
     object_from_raw,
     Namespace, ConfigMap,
     ObjectCollection,
