@@ -6,6 +6,7 @@ A Kubernetes client which uses Twisted to interact with Kubernetes
 via HTTP.
 """
 
+from os.path import expanduser
 from json import loads, dumps
 
 from zope.interface import implementer
@@ -13,9 +14,12 @@ from zope.interface import implementer
 import attr
 from attr import validators
 
+from pem import parse
+
 from twisted.python.reflect import namedAny
-from twisted.python.url import URL
 from twisted.python.failure import Failure
+from twisted.python.url import URL
+from twisted.python.filepath import FilePath
 
 from twisted.internet.defer import succeed
 
@@ -26,13 +30,69 @@ from twisted.web.client import Agent, readBody
 from eliot import start_action
 from eliot.twisted import DeferredContext
 
+from pykube import KubeConfig
+
 from . import (
     IObject, IKubernetes, IKubernetesClient, KubernetesError,
-    object_from_raw,
+    object_from_raw, authenticate_with_certificate,
 )
 
 def network_kubernetes(**kw):
+    """
+    Create a new ``IKubernetes`` provider which can be used to create clients.
+
+    :param twisted.python.url.URL base_url: The root of the Kubernetes HTTPS
+        API to interact with.
+
+    :param twisted.web.iweb.IAgent agent: An HTTP agent to use to issue
+        requests.  Defaults to a new ``twisted.web.client.Agent`` instance.
+        See ``txkube.authenticate_with_serviceaccount`` and
+        ``txkube.authenticate_with_certificate`` for helpers for creating
+        agents that interact well with Kubernetes servers.
+
+    :return IKubernetes: The Kubernetes service.
+    """
     return _NetworkKubernetes(**kw)
+
+
+
+def network_kubernetes_from_context(reactor, context, path=None):
+    """
+    Create a new ``IKubernetes`` provider based on a kube config file.
+
+    :param reactor: A Twisted reactor which will be used for I/O and
+        scheduling.
+
+    :param unicode context: The name of the kube config context from which to
+        load configuration details.
+
+    :param FilePath path: The location of the kube config file to use.
+
+    :return IKubernetes: The Kubernetes service described by the named
+        context.
+    """
+    if path is None:
+        path = FilePath(expanduser(u"~/.kube/config"))
+
+    config = KubeConfig.from_file(path.path)
+    context = config.contexts[context]
+    cluster = config.clusters[context[u"cluster"]]
+    user = config.users[context[u"user"]]
+
+    base_url = URL.fromText(cluster[u"server"].decode("ascii"))
+    [ca_cert] = parse(cluster[u"certificate-authority"].bytes())
+
+    [client_cert] = parse(user[u"client-certificate"].bytes())
+    [client_key] = parse(user[u"client-key"].bytes())
+
+    agent = authenticate_with_certificate(
+        reactor, base_url, client_cert, client_key, ca_cert,
+    )
+
+    return network_kubernetes(
+        base_url=base_url,
+        agent=agent,
+    )
 
 
 # It would be simpler to use FileBodyProducer(BytesIO(...)) but:
