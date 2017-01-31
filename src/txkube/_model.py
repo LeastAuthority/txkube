@@ -10,12 +10,12 @@ from uuid import uuid4
 
 from zope.interface import provider, implementer
 
-from pyrsistent import CheckedPVector, PClass, field, pmap_field, thaw
+from pyrsistent import CheckedPVector, PClass, field, thaw
 
 from twisted.python.filepath import FilePath
 
 from . import IObject, IObjectLoader
-from ._invariants import instance_of, provider_of
+from ._invariants import provider_of
 from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
