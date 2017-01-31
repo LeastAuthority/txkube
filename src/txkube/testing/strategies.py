@@ -12,11 +12,7 @@ from hypothesis.strategies import (
     dictionaries,
 )
 
-from .. import (
-    NamespaceStatus,
-    ObjectMeta, Namespace, ConfigMap,
-    ObjectCollection,
-)
+from .. import v1, ObjectCollection
 
 # Without some attempt to cap the size of collection strategies (lists,
 # dictionaries), the slowness health check fails intermittently.  Here are
@@ -42,10 +38,10 @@ def object_name():
 
 def object_metadatas():
     """
-    Strategy to build ``ObjectMeta`` without a namespace.
+    Strategy to build ``v1.ObjectMeta`` without a namespace.
     """
     return builds(
-        ObjectMeta.create,
+        v1.ObjectMeta.create,
         fixed_dictionaries({
             u"name": object_name(),
             u"uid": none(),
@@ -55,7 +51,7 @@ def object_metadatas():
 
 def namespaced_object_metadatas():
     """
-    Strategy to build ``ObjectMeta`` with a namespace.
+    Strategy to build ``v1.ObjectMeta`` with a namespace.
     """
     return builds(
         lambda obj_metadata, namespace: obj_metadata.set(
@@ -71,7 +67,7 @@ def namespace_statuses():
     Strategy to build ``Namespace.status``.
     """
     return builds(
-        NamespaceStatus,
+        v1.NamespaceStatus,
         phase=sampled_from({u"Active", u"Terminating"}),
     )
 
@@ -82,7 +78,7 @@ def creatable_namespaces():
     cluster.
     """
     return builds(
-        Namespace,
+        v1.Namespace,
         metadata=object_metadatas(),
         status=none(),
     )
@@ -143,7 +139,7 @@ def configmaps():
     Strategy to build ``ConfigMap``.
     """
     return builds(
-        ConfigMap,
+        v1.ConfigMap,
         metadata=namespaced_object_metadatas(),
         data=configmap_datas(),
     )

@@ -10,13 +10,12 @@ __all__ = [
     "IObject", "IObjectLoader", "IKubernetes", "IKubernetesClient",
     "network_client", "memory_client",
 
-    "NamespaceStatus",
-    "ObjectMeta",
+    "v1",
     "object_from_raw",
-    "Namespace", "ConfigMap",
     "ObjectCollection",
 
-    "network_kubernetes", "memory_kubernetes",
+    "memory_kubernetes",
+    "network_kubernetes",  "network_kubernetes_from_context",
     "authenticate_with_serviceaccount",
     "authenticate_with_certificate",
 ]
@@ -29,15 +28,13 @@ version = Version("txkube", *_version_tuple)
 from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
 
 from ._model import (
-    NamespaceStatus,
-    ObjectMeta,
+    v1,
     object_from_raw,
-    Namespace, ConfigMap,
     ObjectCollection,
 )
 
-from ._network import network_kubernetes
-from ._memory import memory_kubernetes
 from ._authentication import (
     authenticate_with_serviceaccount, authenticate_with_certificate,
 )
+from ._network import network_kubernetes, network_kubernetes_from_context
+from ._memory import memory_kubernetes

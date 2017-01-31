@@ -10,31 +10,36 @@ from uuid import uuid4
 
 from zope.interface import provider, implementer
 
-from pyrsistent import CheckedPVector, PClass, field, pmap_field, thaw
+from pyrsistent import CheckedPVector, PClass, field, thaw
 
 from twisted.python.filepath import FilePath
 
 from . import IObject, IObjectLoader
-from ._invariants import instance_of, provider_of
-from ._swagger import Swagger, PClasses, UsePrefix
-
+from ._invariants import provider_of
+from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
-v1 = PClasses(specification=spec, name_translator=UsePrefix(prefix=u"v1."))
+v1 = VersionedPClasses(spec, u"v1", name_field=u"kind", version_field=u"apiVersion")
 
 
-class ObjectMeta(v1[u"ObjectMeta"]):
-    pass
+def behavior(namespace):
+    """
+    Create a class decorator which adds the resulting class to the given
+    namespace-y thing.
+    """
+    def decorator(cls):
+        setattr(namespace, cls.__name__, cls)
+        return cls
+    return decorator
 
 
 
-class NamespaceStatus(PClass):
+@behavior(v1)
+class NamespaceStatus(v1.NamespaceStatus):
     """
     ``NamespaceStatus`` instances model `Kubernetes namespace status
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
     """
-    phase = field(mandatory=True)
-
     @classmethod
     def active(cls):
         return cls(phase=u"Active")
@@ -51,26 +56,18 @@ class NamespaceStatus(PClass):
 
 
     def to_raw(self):
-        return {u"phase": self.phase}
+        return self.serialize()
 
 
 
+@behavior(v1)
 @provider(IObjectLoader)
 @implementer(IObject)
-class Namespace(PClass):
+class Namespace(v1.Namespace):
     """
     ``Namespace`` instances model `Kubernetes namespaces
     <https://kubernetes.io/docs/user-guide/namespaces/>`_.
     """
-    kind = u"Namespace"
-
-    metadata = field(
-        mandatory=True,
-        invariant=instance_of(ObjectMeta),
-    )
-
-    status = field(mandatory=True, type=(NamespaceStatus, type(None)))
-
     @classmethod
     def default(cls):
         """
@@ -88,7 +85,7 @@ class Namespace(PClass):
         else:
             status = NamespaceStatus.from_raw(status_raw)
         return cls(
-            metadata=ObjectMeta(**raw[u"metadata"]),
+            metadata=v1.ObjectMeta(**raw[u"metadata"]),
             status=status,
         )
 
@@ -99,7 +96,7 @@ class Namespace(PClass):
         Create an object with only the name metadata item.
         """
         return cls(
-            metadata=ObjectMeta(name=name),
+            metadata=v1.ObjectMeta(name=name),
             status=None,
         )
 
@@ -127,26 +124,18 @@ class Namespace(PClass):
 
 
 
+@behavior(v1)
 @provider(IObjectLoader)
 @implementer(IObject)
-class ConfigMap(PClass):
+class ConfigMap(v1.ConfigMap):
     """
     ``ConfigMap`` instances model `ConfigMap objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
     """
-    kind = u"ConfigMap"
-
-    metadata = field(
-        mandatory=True,
-        invariant=instance_of(ObjectMeta),
-    )
-
-    data = pmap_field(unicode, unicode, optional=True)
-
     @classmethod
     def from_raw(cls, raw):
         return cls(
-            metadata=ObjectMeta(**raw[u"metadata"]),
+            metadata=v1.ObjectMeta(**raw[u"metadata"]),
             data=raw.get(u"data", None),
         )
 
@@ -157,7 +146,7 @@ class ConfigMap(PClass):
         Create an object with only namespace and name metadata items.
         """
         return cls(
-            metadata=ObjectMeta(namespace=namespace, name=name),
+            metadata=v1.ObjectMeta(namespace=namespace, name=name),
         )
 
 
