@@ -24,23 +24,15 @@ Usage Sample
 .. code-block:: python
 
    from __future__ import print_function
-   from os import environ
    from twisted.internet.task import react
-   from twisted.python.url import URL
 
-   from txkube import Namespace, network_kubernetes, authenticate_with_serviceaccount
+   from txkube import v1, network_kubernetes_from_context
 
    @react
    def main(reactor):
-       agent = authenticate_with_serviceaccount(reactor)
-       base_url = URL(
-           scheme=u"https",
-           host=environ["KUBERNETES_SERVICE_HOST"].decode("ascii"),
-           port=int(environ["KUBERNETES_SERVICE_PORT"]),
-       )
-       k8s = network_kubernetes(base_url=base_url, agent=agent)
+       k8s = network_kubernetes_from_context(reactor, u"minikube")
        client = k8s.client()
-       d = client.list(Namespace)
+       d = client.list(v1.Namespace)
        d.addCallback(print)
        return d
 
