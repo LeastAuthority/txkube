@@ -24,6 +24,7 @@ cache:
 install:
   - "pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
   - "pip install .[dev]"
+  - "curl -O https://storage.googleapis.com/minikube/k8sReleases/v1.5.1/localkube-linux-amd64"
 
 script:
   - "pyflakes src"
