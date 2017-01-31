@@ -65,7 +65,7 @@ Once running::
   $ TXKUBE_INTEGRATION_CONTEXT=minikube trial txkube
 
 This will run the full test suite which includes the integration tests.
-It will interact with (and *make destructive changes to*) the named Kubernetes cluster.
+It will interact with (and *make destructive changes to*) the identified Kubernetes cluster.
 
 License
 -------
