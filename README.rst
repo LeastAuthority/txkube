@@ -62,7 +62,7 @@ It is **not** recommended that you run these against anything but a dedicated *t
 Once running::
 
   $ pip install txkube[dev]
-  $ TXKUBE_INTEGRATION_CLUSTER_NAME=minikube trial txkube
+  $ TXKUBE_INTEGRATION_CONTEXT=minikube trial txkube
 
 This will run the full test suite which includes the integration tests.
 It will interact with (and *make destructive changes to*) the named Kubernetes cluster.
