@@ -17,7 +17,8 @@ __all__ = [
     "Namespace", "ConfigMap",
     "ObjectCollection",
 
-    "network_kubernetes", "memory_kubernetes",
+    "memory_kubernetes",
+    "network_kubernetes",  "network_kubernetes_from_context",
     "authenticate_with_serviceaccount",
     "authenticate_with_certificate",
 ]
@@ -37,8 +38,8 @@ from ._model import (
     ObjectCollection,
 )
 
-from ._network import network_kubernetes
-from ._memory import memory_kubernetes
 from ._authentication import (
     authenticate_with_serviceaccount, authenticate_with_certificate,
 )
+from ._network import network_kubernetes, network_kubernetes_from_context
+from ._memory import memory_kubernetes
