@@ -28,7 +28,7 @@ from ..testing import TestCase
 # TODO #18 this moved to txkube/__init__.py
 from .._network import KubernetesError
 from .. import (
-    IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
+    IKubernetesClient, ObjectCollection,
     v1,
 )
 from .strategies import creatable_namespaces, configmaps
@@ -70,7 +70,7 @@ def has_uid():
 
 def is_active():
     return MatchesStructure(
-        status=Equals(NamespaceStatus.active()),
+        status=Equals(v1.NamespaceStatus.active()),
     )
 
 
@@ -112,7 +112,7 @@ def kubernetes_client_tests(get_kubernetes):
             d = self.client.create(obj)
             def created_namespace(created):
                 self.assertThat(created, matches_namespace(obj))
-                return self.client.list(Namespace)
+                return self.client.list(v1.Namespace)
             d.addCallback(created_namespace)
             def check_namespaces(namespaces):
                 self.assertThat(namespaces, IsInstance(ObjectCollection))
@@ -153,7 +153,7 @@ def kubernetes_client_tests(get_kubernetes):
             """
             return self._global_object_retrieval_by_name_test(
                 creatable_namespaces(),
-                Namespace,
+                v1.Namespace,
                 matches_namespace,
             )
 
@@ -170,7 +170,7 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.delete(created)
             d.addCallback(created_namespace)
             def deleted_namespace(ignored):
-                return self.client.list(Namespace)
+                return self.client.list(v1.Namespace)
             d.addCallback(deleted_namespace)
             def check_namespaces(collection):
                 active = list(
@@ -205,7 +205,7 @@ def kubernetes_client_tests(get_kubernetes):
             d.addCallback(created_namespace)
             def created_configmap(created):
                 self.assertThat(created, matches_configmap(obj))
-                return self.client.list(ConfigMap)
+                return self.client.list(v1.ConfigMap)
             d.addCallback(created_configmap)
             def check_configmaps(collection):
                 self.assertThat(collection, IsInstance(ObjectCollection))
@@ -261,7 +261,7 @@ def kubernetes_client_tests(get_kubernetes):
             """
             return self._namespaced_object_retrieval_by_name_test(
                 configmaps(),
-                ConfigMap,
+                v1.ConfigMap,
                 matches_configmap,
             )
 
@@ -275,7 +275,7 @@ def kubernetes_client_tests(get_kubernetes):
             strategy = configmaps()
             objs = [strategy.example(), strategy.example()]
             ns = list(
-                Namespace(
+                v1.Namespace(
                     metadata=v1.ObjectMeta(name=obj.metadata.namespace),
                     status=None,
                 )
@@ -284,7 +284,7 @@ def kubernetes_client_tests(get_kubernetes):
             )
             d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
             def created_configmaps(ignored):
-                return self.client.list(ConfigMap)
+                return self.client.list(v1.ConfigMap)
             d.addCallback(created_configmaps)
             def check_configmaps(collection):
                 self.expectThat(collection, items_are_sorted())

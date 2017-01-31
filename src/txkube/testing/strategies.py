@@ -12,11 +12,7 @@ from hypothesis.strategies import (
     dictionaries,
 )
 
-from .. import (
-    NamespaceStatus,
-    v1, Namespace, ConfigMap,
-    ObjectCollection,
-)
+from .. import v1, ObjectCollection
 
 # Without some attempt to cap the size of collection strategies (lists,
 # dictionaries), the slowness health check fails intermittently.  Here are
@@ -71,7 +67,7 @@ def namespace_statuses():
     Strategy to build ``Namespace.status``.
     """
     return builds(
-        NamespaceStatus,
+        v1.NamespaceStatus,
         phase=sampled_from({u"Active", u"Terminating"}),
     )
 
@@ -82,7 +78,7 @@ def creatable_namespaces():
     cluster.
     """
     return builds(
-        Namespace,
+        v1.Namespace,
         metadata=object_metadatas(),
         status=none(),
     )
@@ -143,7 +139,7 @@ def configmaps():
     Strategy to build ``ConfigMap``.
     """
     return builds(
-        ConfigMap,
+        v1.ConfigMap,
         metadata=namespaced_object_metadatas(),
         data=configmap_datas(),
     )

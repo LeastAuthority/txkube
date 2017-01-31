@@ -764,6 +764,10 @@ class VersionedPClasses(object):
             constant_fields[self.name_field] = name
         if self.version_field is not None:
             constant_fields[self.version_field] = self.version
-        return self.spec.pclass_for_definition(
-            self.version + u"." + name, constant_fields=constant_fields,
-        )
+        definition_name = self.version + u"." + name
+        try:
+            return self.spec.pclass_for_definition(
+                definition_name, constant_fields=constant_fields,
+            )
+        except KeyError:
+            raise AttributeError(name)

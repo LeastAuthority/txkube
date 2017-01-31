@@ -25,8 +25,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
-    NamespaceStatus,
-    ObjectCollection, Namespace, ConfigMap,
+    v1, ObjectCollection,
 )
 
 
@@ -81,7 +80,7 @@ class _KubernetesState(object):
 def terminate(obj):
     # TODO: Add deletionTimestamp?  See #24
     return obj.transform(
-        [u"status"], NamespaceStatus.terminating(),
+        [u"status"], v1.NamespaceStatus.terminating(),
     )
 
 
@@ -172,7 +171,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(request, Namespace, self.state.namespaces, "namespaces")
+            return self._create(request, v1.Namespace, self.state.namespaces, "namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request, namespace=None):
@@ -193,4 +192,4 @@ class _Kubernetes(object):
             """
             Create a new ConfigMap.
             """
-            return self._create(request, ConfigMap, self.state.configmaps, "configmaps")
+            return self._create(request, v1.ConfigMap, self.state.configmaps, "configmaps")
