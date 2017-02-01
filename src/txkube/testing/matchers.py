@@ -38,11 +38,11 @@ class MappingLikeEquals(PClass):
         return "%s(%r)" % (self.__class__.__name__, self.expected)
 
 
-    def match(self, other):
-        if self.comparator(other, self.expected):
+    def match(self, actual):
+        if self.comparator(actual, self.expected):
             return None
         return _MappingLikeMismatch(
-            self.fields, self.get_field, other, self.mismatch_string,
+            self.fields, self.get_field, actual, self.mismatch_string,
             self.expected,
         )
 
@@ -74,7 +74,18 @@ class PClassEquals(MappingLikeEquals):
 
 
     def get_field(self, obj, key):
-        return getattr(obj, key)
+        try:
+            return getattr(obj, key)
+        except AttributeError:
+            raise KeyError(key)
+
+
+
+class _Missing(object):
+    def __repr__(self):
+        return "<<missing>>"
+
+_missing = _Missing()
 
 
 
@@ -103,24 +114,34 @@ class _MappingLikeMismatch(Mismatch):
         mismatched = []
         fields = self._get_fields(self._actual)
         for a_field in sorted(fields):
-            actual = self._get_field(self._actual, a_field)
+            try:
+                actual = self._get_field(self._actual, a_field)
+            except KeyError:
+                actual = _missing
             try:
                 reference = self._get_field(self._reference, a_field)
             except KeyError:
-                mismatched.append((a_field, actual, "<<missing>>"))
-            else:
-                if actual != reference:
-                    mismatched.append((a_field, actual, reference))
+                reference = _missing
+            if actual != reference:
+                mismatched.append(dict(
+                    field=a_field,
+                    actual=actual,
+                    reference=reference,
+                ))
 
         extra = set(self._get_fields(self._reference)) - set(fields)
         for a_field in sorted(extra):
             reference = self._get_field(self._reference, a_field)
-            mismatched.append((a_field, "<<missing>>", reference))
+            mismatched.append(dict(
+                field=a_field,
+                reference=reference,
+                actual=_missing,
+            ))
 
         return "field mismatch:\n" + "".join(
-            "field: %s\n"
-            "reference = %s\n"
-            "actual    = %s\n" % mismatch
+            "field: %(field)s\n"
+            "reference = %(reference)s\n"
+            "actual    = %(actual)s\n" % mismatch
             for mismatch
             in mismatched
         )
