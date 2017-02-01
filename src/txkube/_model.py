@@ -7,7 +7,6 @@ state.
 """
 
 from uuid import uuid4
-from functools import partial
 
 from zope.interface import implementer
 
@@ -209,6 +208,7 @@ class NamespaceList(_List, v1.NamespaceList):
 @implementer(IObject)
 class ConfigMapList(v1.ConfigMapList, _List):
     pass
+
 
 
 def iobject_to_raw(obj):
