@@ -146,17 +146,16 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @async
-        def test_duplicate_namespace_rejected(self):
+        @needs(obj=creatable_namespaces().example())
+        def test_duplicate_namespace_rejected(self, obj):
             """
             ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
             ``KubernetesClient`` if it is called with a ``Namespace`` object
             with the same name as a *Namespace* which already exists.
             """
-            obj = creatable_namespaces().example()
-            d = self.client.create(obj)
-            def created(ignored):
-                return self.client.create(obj)
-            d.addCallback(created)
+            # Create another object with the same name as the one just created
+            # by `@needs`.
+            d = self.client.create(v1.Namespace.named(obj.metadata.name))
             def failed(reason):
                 self.assertThat(reason, IsInstance(Failure))
                 reason.trap(KubernetesError)
