@@ -194,7 +194,7 @@ class ObjectCollection(PClass):
     @classmethod
     def from_raw(cls, raw):
         element_kind = raw[u"kind"][:-len(u"List")]
-        element_version = self.apiVersion
+        element_version = cls.apiVersion
 
         items = (
             # Unfortunately `kind` is an optional field.  Fortunately, the
