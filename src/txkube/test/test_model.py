@@ -7,6 +7,8 @@ Tests for ``txkube._model``.
 
 from json import loads, dumps
 
+from zope.interface.verify import verifyObject
+
 from testtools.matchers import (
     Equals, MatchesStructure, Not, Is, Contains, raises,
 )
@@ -24,7 +26,7 @@ from ..testing.strategies import (
 
 from .. import (
     UnrecognizedVersion, UnrecognizedKind,
-    v1, iobject_to_raw, iobject_from_raw,
+    IObject, v1, iobject_to_raw, iobject_from_raw,
 )
 
 
@@ -32,6 +34,14 @@ class IObjectTests(TestCase):
     """
     Tests for ``IObject``.
     """
+    @given(obj=iobjects())
+    def test_interface(self, obj):
+        """
+        The object provides ``IObject``.
+        """
+        verifyObject(IObject, obj)
+
+
     @given(obj=iobjects())
     def test_serialization_roundtrip(self, obj):
         """
