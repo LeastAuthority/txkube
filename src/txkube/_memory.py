@@ -132,14 +132,14 @@ class _Kubernetes(object):
             added = collection.add(obj)
         except InvariantException:
             request.setResponseCode(CONFLICT)
-            return dumps(v1.Status(
+            return dumps(iobject_to_raw(v1.Status(
                 status=u"Failure",
                 message=u"{} \"{!s}\" already exists".format(collection_name, obj.metadata.name),
                 reason=u"AlreadyExists",
                 details={u"name": obj.metadata.name, u"kind": collection_name},
                 metadata={},
                 code=CONFLICT,
-            ).serialize())
+            )))
 
         setattr(self.state, nativeString(collection_name), added)
         request.setResponseCode(CREATED)
