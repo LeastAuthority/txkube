@@ -25,13 +25,14 @@ Usage Sample
 
    from __future__ import print_function
    from twisted.internet.task import react
-   from txkube import network_kubernetes
+
+   from txkube import v1, network_kubernetes_from_context
 
    @react
    def main(reactor):
-       k8s = network_kubernetes(base_url=URL.fromText(u"https://kubernetes/"))
+       k8s = network_kubernetes_from_context(reactor, u"minikube")
        client = k8s.client()
-       d = client.list_deployments()
+       d = client.list(v1.Namespace)
        d.addCallback(print)
        return d
 
@@ -55,6 +56,17 @@ After installing the development dependencies, you can run the test suite with t
   $ pip install txkube[dev]
   $ trial txkube
 
+txkube also includes integration tests.
+It is **not** recommended that you run these against anything but a dedicated *testing* Kubernetes cluster.
+`Minikube`_ is an easy way to obtain such a thing.
+Once running::
+
+  $ pip install txkube[dev]
+  $ TXKUBE_INTEGRATION_CONTEXT=minikube trial txkube
+
+This will run the full test suite which includes the integration tests.
+It will interact with (and *make destructive changes to*) the identified Kubernetes cluster.
+
 License
 -------
 
@@ -64,3 +76,4 @@ See the LICENSE file for more details.
 
 
 .. _Kubernetes: https://kubernetes.io/
+.. _Minikube: https://kubernetes.io/docs/getting-started-guides/minikube/
