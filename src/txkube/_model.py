@@ -126,20 +126,6 @@ def object_sort_key(obj):
 
 
 
-def _pvector_field(iface, invariant=None):
-    class _CheckedIObjectPVector(CheckedPVector):
-        __invariant__ = provider_of(iface)
-
-    return field(
-        mandatory=True,
-        type=_CheckedIObjectPVector,
-        factory=lambda v: _CheckedIObjectPVector.create(sorted(v, key=object_sort_key)),
-        initial=_CheckedIObjectPVector(),
-        invariant=invariant,
-    )
-
-
-
 def required_unique(objects, key):
     """
     A pyrsistent invariant which requires all objects in the given iterable to
