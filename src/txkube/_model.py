@@ -158,6 +158,10 @@ class _List(object):
         return self.transform([u"items"], add(obj))
 
 
+    def remove(self, obj):
+        return self.transform([u"items"], remove(obj))
+
+
     def replace(self, old, new):
         return self.transform(
             [u"items"], remove(old),

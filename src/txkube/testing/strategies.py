@@ -170,7 +170,7 @@ def namespacelists(namespaces=creatable_namespaces()):
             namespaces,
             average_size=_QUICK_AVERAGE_SIZE,
             max_size=_QUICK_MAX_SIZE,
-            unique_by=_unique_names_with_namespaces,
+            unique_by=_unique_names,
         ),
     )
 

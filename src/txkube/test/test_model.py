@@ -8,16 +8,18 @@ Tests for ``txkube._model``.
 from json import loads, dumps
 
 from testtools.matchers import (
-    Equals, MatchesStructure, Not, Is,
+    Equals, MatchesStructure, Not, Is, Contains, raises,
 )
 
 from hypothesis import given, assume
+from hypothesis.strategies import choices
 
 from ..testing import TestCase
 from ..testing.matchers import PClassEquals, MappingEquals
 from ..testing.strategies import (
     object_name,
     iobjects,
+    namespacelists,
 )
 
 from .. import v1, iobject_to_raw, iobject_from_raw
@@ -135,4 +137,39 @@ class ConfigMapTests(TestCase):
                     name=Equals(name),
                 ),
             ),
+        )
+
+
+
+class NamespaceListTests(TestCase):
+    """
+    Tests for ``NamespaceList``.
+    """
+    @given(collection=namespacelists(), choose=choices())
+    def test_remove(self, collection, choose):
+        """
+        ``NamespaceList.remove`` creates a new ``NamespaceList`` which does not
+        have the given item.
+        """
+        assume(len(collection.items) > 0)
+        item = choose(collection.items)
+        removed = collection.remove(item)
+        self.assertThat(removed.items, Not(Contains(item)))
+
+
+    @given(collection=namespacelists(), choose=choices())
+    def test_item_by_name(self, collection, choose):
+        """
+        ``NamespaceList.item_by_name`` returns the ``Namespace`` with the matching
+        name.
+        """
+        assume(len(collection.items) > 0)
+        for item in collection.items:
+            self.expectThat(collection.item_by_name(item.metadata.name), Is(item))
+
+        item = choose(collection.items)
+        collection = collection.remove(item)
+        self.expectThat(
+            lambda: collection.item_by_name(item.metadata.name),
+            raises(KeyError(item.metadata.name)),
         )
