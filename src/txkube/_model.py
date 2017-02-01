@@ -14,7 +14,7 @@ from pyrsistent import mutant
 
 from twisted.python.filepath import FilePath
 
-from . import IObject
+from . import UnrecognizedVersion, UnrecognizedKind, IObject
 from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
@@ -125,6 +125,29 @@ def object_sort_key(obj):
 
 
 
+def required_unique(objects, key):
+    """
+    A pyrsistent invariant which requires all objects in the given iterable to
+    have a unique key.
+
+    :param objects: The objects to check.
+    :param key: A one-argument callable to compute the key of an object.
+
+    :return: An invariant failure if any two or more objects have the same key
+        computed.  An invariant success otherwise.
+    """
+    keys = {}
+    duplicate = set()
+    for k in map(key, objects):
+        keys[k] = keys.get(k, 0) + 1
+        if keys[k] > 1:
+            duplicate.add(k)
+    if duplicate:
+        return (False, u"Duplicate object keys: {}".format(duplicate))
+    return (True, u"")
+
+
+
 def add(value):
     def evolver(pvector):
         return sorted(pvector.append(value), key=object_sort_key)
@@ -139,6 +162,10 @@ def remove(value):
 
 
 class _List(object):
+    def __invariant__(self):
+        return required_unique(self.items, object_sort_key)
+
+
     def item_by_name(self, name):
         """
         Find an item in this collection by its name metadata.
@@ -183,6 +210,7 @@ class ConfigMapList(v1.ConfigMapList, _List):
     pass
 
 
+
 def iobject_to_raw(obj):
     result = obj.serialize()
     result.update({
@@ -207,7 +235,13 @@ def iobject_from_raw(obj, kind_hint=None, version_hint=None):
     """
     kind = obj.get(u"kind", kind_hint)
     apiVersion = obj.get(u"apiVersion", version_hint)
-    v = _versions[apiVersion]
-    cls = getattr(v, kind)
+    try:
+        v = _versions[apiVersion]
+    except KeyError:
+        raise UnrecognizedVersion(apiVersion, obj)
+    try:
+        cls = getattr(v, kind)
+    except AttributeError:
+        raise UnrecognizedKind(apiVersion, kind, obj)
     others = obj.discard(u"kind").discard(u"apiVersion")
     return cls.create(others)

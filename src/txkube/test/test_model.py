@@ -22,7 +22,10 @@ from ..testing.strategies import (
     namespacelists,
 )
 
-from .. import v1, iobject_to_raw, iobject_from_raw
+from .. import (
+    UnrecognizedVersion, UnrecognizedKind,
+    v1, iobject_to_raw, iobject_from_raw,
+)
 
 
 class IObjectTests(TestCase):
@@ -61,6 +64,37 @@ class IObjectTests(TestCase):
         serialized = dumps(marshalled)
         deserialized = loads(serialized)
         self.expectThat(marshalled, MappingEquals(deserialized))
+
+
+    def test_unknown_version(self):
+        """
+        ``iobject_from_raw`` raises ``UnrecognizedVersion`` if it does not
+        recognize the *apiVersion* in the given data.
+        """
+        obj = {
+            u"apiVersion": u"invalid.example.txkube",
+            u"kind": u"Service",
+        }
+        self.assertThat(
+            lambda: iobject_from_raw(obj),
+            raises(UnrecognizedVersion(obj[u"apiVersion"], obj)),
+        )
+
+
+    def test_unknown_kind(self):
+        """
+        ``iobject_from_raw`` raises ``UnrecognizedKind`` if it does not recognize
+        the *kind* in the given data.
+        """
+
+        obj = {
+            u"apiVersion": u"v1",
+            u"kind": u"SomethingFictional",
+        }
+        self.assertThat(
+            lambda: iobject_from_raw(obj),
+            raises(UnrecognizedKind(u"v1", u"SomethingFictional", obj)),
+        )
 
 
 

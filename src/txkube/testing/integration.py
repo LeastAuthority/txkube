@@ -21,16 +21,16 @@ from testtools import run_test_with
 from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
 from twisted.internet.task import deferLater, cooperate
-from twisted.web.http import NOT_FOUND
+from twisted.web.http import NOT_FOUND, CONFLICT
 
 from ..testing import TestCase
 
-# TODO #18 this moved to txkube/__init__.py
-from .._network import KubernetesError
 from .. import (
+    KubernetesError,
     IKubernetesClient,
     v1,
 )
+
 from .strategies import creatable_namespaces, configmaps
 
 
@@ -143,6 +143,85 @@ def kubernetes_client_tests(get_kubernetes):
                 self.assertThat(retrieved, matches(obj))
             d.addCallback(got_object)
             return d
+
+
+        def _create_duplicate_rejected_test(self, obj, kind):
+            """
+            Verify an object cannot be created if its name (and maybe namespace) is
+            already taken.
+
+            :param IObject obj: Some object to create.  An object with the
+                same name (and namespace, if it is a namespaced *kind*) is
+                expected to already have been created by the caller.
+
+            :param unicode kind: The name of the collection of the *kind* of
+                ``obj``, lowercase.  For example, *configmaps*.
+            """
+            # obj was already created once.
+            d = self.client.create(obj)
+            def failed(reason):
+                self.assertThat(reason, IsInstance(Failure))
+                reason.trap(KubernetesError)
+                self.assertThat(
+                    reason.value,
+                    MatchesStructure(
+                        code=Equals(CONFLICT),
+                        status=Equals(v1.Status(
+                            metadata={},
+                            status=u"Failure",
+                            # XXX This message is a little janky.  "namespaces
+                            # ... already exists"?  How about "Namespace
+                            # ... already exists"?  Maybe report it to
+                            # Kubernetes.
+                            message=u"{} \"{}\" already exists".format(kind, obj.metadata.name),
+                            reason=u"AlreadyExists",
+                            details=dict(
+                                name=obj.metadata.name,
+                                kind=kind,
+                            ),
+                            code=CONFLICT,
+                        )),
+                    ),
+                )
+            d.addBoth(failed)
+            return d
+
+
+        @async
+        @needs(namespace=creatable_namespaces().example())
+        def test_duplicate_configmap_rejected(self, namespace):
+            """
+            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+            ``KubernetesError`` if it is called with a ``ConfigMap`` object
+            with the same name as a *ConfigMap* which already exists in the
+            same namespace.
+            """
+            obj = configmaps().example()
+            # Put it in the namespace that was created.
+            obj = obj.transform(
+                [u"metadata", u"namespace"],
+                namespace.metadata.name,
+            )
+            d = self.client.create(obj)
+            d.addCallback(
+                lambda ignored: self._create_duplicate_rejected_test(
+                    obj, u"configmaps"
+                )
+            )
+            return d
+
+
+        @async
+        @needs(obj=creatable_namespaces().example())
+        def test_duplicate_namespace_rejected(self, obj):
+            """
+            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+            ``KubernetesError`` if it is called with a ``Namespace`` object
+            with the same name as a *Namespace* which already exists.
+            """
+            return self._create_duplicate_rejected_test(
+                v1.Namespace.named(obj.metadata.name), u"namespaces",
+            )
 
 
         @async

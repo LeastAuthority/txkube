@@ -33,7 +33,7 @@ from eliot.twisted import DeferredContext
 from pykube import KubeConfig
 
 from . import (
-    IObject, IKubernetes, IKubernetesClient,
+    IObject, IKubernetes, IKubernetesClient, KubernetesError,
     iobject_from_raw, iobject_to_raw,
     authenticate_with_certificate,
 )
@@ -304,21 +304,6 @@ class _NetworkKubernetes(object):
 
 
 
-class KubernetesError(Exception):
-    def __init__(self, code, response):
-        self.code = code
-        self.response = response
-
-
-    def __repr__(self):
-        return "<KubernetesError: code = {}; response = {}>".format(
-            self.code, self.response,
-        )
-
-    __str__ = __repr__
-
-
-
 def log_response_object(document, action):
     """
     Emit an Eliot log event belonging to the given action describing the given
@@ -337,7 +322,7 @@ def log_response_object(document, action):
 
 def check_status(response, expected):
     if response.code not in expected:
-        d = readBody(response)
-        d.addCallback(lambda body: Failure(KubernetesError(response.code, body)))
+        d = KubernetesError.from_response(response)
+        d.addCallback(Failure)
         return d
     return response
