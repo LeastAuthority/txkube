@@ -8,13 +8,13 @@ state.
 
 from uuid import uuid4
 
-from zope.interface import provider, implementer
+from zope.interface import implementer
 
-from pyrsistent import CheckedPVector, PClass, field, thaw
+from pyrsistent import CheckedPVector, PClass, field, thaw, mutant
 
 from twisted.python.filepath import FilePath
 
-from . import IObject, IObjectLoader
+from . import IObject
 from ._invariants import provider_of
 from ._swagger import Swagger, VersionedPClasses
 
@@ -50,18 +50,12 @@ class NamespaceStatus(v1.NamespaceStatus):
         return cls(phase=u"Terminating")
 
 
-    @classmethod
-    def from_raw(cls, status):
-        return cls(phase=status[u"phase"])
-
-
     def to_raw(self):
         return self.serialize()
 
 
 
 @behavior(v1)
-@provider(IObjectLoader)
 @implementer(IObject)
 class Namespace(v1.Namespace):
     """
@@ -74,20 +68,6 @@ class Namespace(v1.Namespace):
         Get the default namespace.
         """
         return cls.named(u"default")
-
-
-    @classmethod
-    def from_raw(cls, raw):
-        try:
-            status_raw = raw[u"status"]
-        except KeyError:
-            status = None
-        else:
-            status = NamespaceStatus.from_raw(status_raw)
-        return cls(
-            metadata=v1.ObjectMeta(**raw[u"metadata"]),
-            status=status,
-        )
 
 
     @classmethod
@@ -125,21 +105,12 @@ class Namespace(v1.Namespace):
 
 
 @behavior(v1)
-@provider(IObjectLoader)
 @implementer(IObject)
 class ConfigMap(v1.ConfigMap):
     """
     ``ConfigMap`` instances model `ConfigMap objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
     """
-    @classmethod
-    def from_raw(cls, raw):
-        return cls(
-            metadata=v1.ObjectMeta(**raw[u"metadata"]),
-            data=raw.get(u"data", None),
-        )
-
-
     @classmethod
     def named(cls, namespace, name):
         """
@@ -199,7 +170,6 @@ def _pvector_field(iface):
 
 
 
-@provider(IObjectLoader)
 @implementer(IObject)
 class ObjectCollection(PClass):
     """
@@ -211,16 +181,26 @@ class ObjectCollection(PClass):
 
     :ivar pvector items: The objects belonging to this collection.
     """
-    kind = u"List"
+    @property
+    def kind(self):
+        if self.items:
+            return self.items[0].kind + u"List"
+        return u"NamespaceList"
+
+    apiVersion = u"v1"
+
     items = _pvector_field(IObject)
 
     @classmethod
     def from_raw(cls, raw):
+        element_kind = raw[u"kind"][:-len(u"List")]
+        element_version = self.apiVersion
+
         items = (
             # Unfortunately `kind` is an optional field.  Fortunately, the
             # top-level `kind` is something like `ConfigMapList` if you
             # asked for `.../configmaps/`.  So pass that down as a hint.
-            object_from_raw(obj, raw[u"kind"][:-len(u"List")])
+            object_from_raw(obj, element_kind, element_version)
             for obj
             in raw[u"items"]
         )
@@ -279,15 +259,7 @@ def remove(value):
     return evolver
 
 
-_loaders = {
-    loader.kind: loader
-    for loader
-    in {Namespace, ConfigMap}
-}
-
-
-
-def object_from_raw(raw, kind_hint=None):
+def object_from_raw(raw, kind_hint=None, version_hint=None):
     """
     Load an object of unspecified type from the raw representation of it.
 
@@ -297,7 +269,28 @@ def object_from_raw(raw, kind_hint=None):
     """
     kind = raw.get(u"kind", kind_hint)
     if kind.endswith(u"List"):
-        loader = ObjectCollection
-    else:
-        loader = _loaders[kind]
-    return loader.from_raw(raw)
+        return ObjectCollection.from_raw(raw)
+    return iobject_from_raw(raw, kind_hint, version_hint)
+
+
+def iobject_to_raw(obj):
+    result = obj.serialize()
+    result.update({
+        u"kind": obj.kind,
+        u"apiVersion": obj.apiVersion,
+    })
+    return result
+
+
+_versions = {
+    u"v1": v1,
+}
+
+@mutant
+def iobject_from_raw(obj, kind_hint=None, version_hint=None):
+    kind = obj.get(u"kind", kind_hint)
+    apiVersion = obj.get(u"apiVersion", version_hint)
+    v = _versions[apiVersion]
+    cls = getattr(v, kind)
+    others = obj.discard(u"kind").discard(u"apiVersion")
+    return cls.create(others)

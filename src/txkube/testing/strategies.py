@@ -182,3 +182,15 @@ def _unique_names_with_namespaces(item):
     collection.
     """
     return (item.metadata.name, item.metadata.namespace)
+
+
+def iobjects():
+    """
+    Strategy to build any one of the ``IObject`` implementations.
+    """
+    return one_of(
+        creatable_namespaces(),
+        retrievable_namespaces(),
+        configmaps(),
+        objectcollections(),
+    )
