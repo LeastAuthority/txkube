@@ -17,11 +17,11 @@ from ..testing import TestCase
 from ..testing.matchers import PClassEquals, MappingEquals
 from ..testing.strategies import (
     object_name,
-    configmaps,
     iobjects,
+    creatable_namespaces,
 )
 
-from .. import v1, ObjectCollection, iobject_to_raw, iobject_from_raw
+from .. import v1, iobject_to_raw, iobject_from_raw
 
 
 class IObjectTests(TestCase):
@@ -136,30 +136,4 @@ class ConfigMapTests(TestCase):
                     name=Equals(name),
                 ),
             ),
-        )
-
-
-
-class ObjectCollectionTests(TestCase):
-    """
-    Tests for ``ObjectCollection``.
-    """
-    @given(a=configmaps(), b=configmaps())
-    def test_items_sorted(self, a, b):
-        """
-        ``ObjectCollection.items`` is sorted by (namespace, name) regardless of
-        the order given to the initializer.
-        """
-        assume(
-            (a.metadata.namespace, a.metadata.name)
-            != (b.metadata.namespace, b.metadata.name)
-        )
-
-        collection = ObjectCollection(items=[a, b])
-        first = collection.items[0].metadata
-        second = collection.items[1].metadata
-
-        self.assertThat(
-            (first.namespace, first.name),
-            LessThan((second.namespace, second.name)),
         )

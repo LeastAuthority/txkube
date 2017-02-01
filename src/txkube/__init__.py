@@ -9,12 +9,7 @@ __all__ = [
     "version",
     "IObject", "IKubernetes", "IKubernetesClient",
 
-    "v1",
-    "object_from_raw",
-    "iobject_from_raw",
-    "iobject_to_raw",
-
-    "ObjectCollection",
+    "v1", "iobject_from_raw", "iobject_to_raw",
 
     "memory_kubernetes",
     "network_kubernetes",  "network_kubernetes_from_context",
@@ -31,10 +26,8 @@ from ._interface import IObject, IKubernetes, IKubernetesClient
 
 from ._model import (
     v1,
-    object_from_raw,
     iobject_from_raw,
     iobject_to_raw,
-    ObjectCollection,
 )
 
 from ._authentication import (

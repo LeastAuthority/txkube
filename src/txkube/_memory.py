@@ -25,7 +25,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
-    v1, ObjectCollection,
+    v1,
     iobject_from_raw, iobject_to_raw,
 )
 
@@ -74,8 +74,8 @@ def _kubernetes_resource(state):
 
 @attr.s
 class _KubernetesState(object):
-    namespaces = attr.ib(default=ObjectCollection())
-    configmaps = attr.ib(default=ObjectCollection())
+    namespaces = attr.ib(default=v1.NamespaceList())
+    configmaps = attr.ib(default=v1.ConfigMapList())
 
 
 def terminate(obj):
@@ -107,7 +107,7 @@ class _Kubernetes(object):
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(collection.to_raw())
+        return dumps(iobject_to_raw(collection))
 
     def _get(self, request, collection, namespace, name):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])

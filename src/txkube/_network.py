@@ -34,7 +34,6 @@ from pykube import KubeConfig
 
 from . import (
     IObject, IKubernetes, IKubernetesClient,
-    ObjectCollection,
     iobject_from_raw, iobject_to_raw,
     authenticate_with_certificate,
 )
@@ -237,7 +236,7 @@ class _NetworkClient(object):
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(ObjectCollection.from_raw)
+            d.addCallback(iobject_from_raw)
             return d.addActionFinish()
 
 

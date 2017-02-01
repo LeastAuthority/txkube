@@ -157,69 +157,20 @@ def object_sort_key(obj):
 
 
 
-def _pvector_field(iface):
-    class _CheckedIObjectPVector(CheckedPVector):
-        __invariant__ = provider_of(iface)
-
-    return field(
-        mandatory=True,
-        type=_CheckedIObjectPVector,
-        factory=lambda v: _CheckedIObjectPVector.create(sorted(v, key=object_sort_key)),
-        initial=_CheckedIObjectPVector(),
-    )
+def add(value):
+    def evolver(pvector):
+        return sorted(pvector.append(value), key=object_sort_key)
+    return evolver
 
 
-
-@implementer(IObject)
-class ObjectCollection(PClass):
-    """
-    ``ObjectList`` is a collection of Kubernetes objects.
-
-    This roughly corresponds to the `*List` Kubernetes types.  It's not clear
-    this is actually more useful than a native Python collection such as a set
-    but we'll try it out.
-
-    :ivar pvector items: The objects belonging to this collection.
-    """
-    @property
-    def kind(self):
-        if self.items:
-            return self.items[0].kind + u"List"
-        return u"NamespaceList"
-
-    apiVersion = u"v1"
-
-    items = _pvector_field(IObject)
-
-    @classmethod
-    def from_raw(cls, raw):
-        element_kind = raw[u"kind"][:-len(u"List")]
-        element_version = cls.apiVersion
-
-        items = (
-            # Unfortunately `kind` is an optional field.  Fortunately, the
-            # top-level `kind` is something like `ConfigMapList` if you
-            # asked for `.../configmaps/`.  So pass that down as a hint.
-            object_from_raw(obj, element_kind, element_version)
-            for obj
-            in raw[u"items"]
-        )
-        return cls(items=items)
+def remove(value):
+    def evolver(pset):
+        return pset.remove(value)
+    return evolver
 
 
-    def to_raw(self):
-        return {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": {},
-            u"items": list(
-                obj.to_raw()
-                for obj
-                in self.items
-            ),
-        }
 
-
+class _List(object):
     def item_by_name(self, name):
         """
         Find an item in this collection by its name metadata.
@@ -247,30 +198,17 @@ class ObjectCollection(PClass):
 
 
 
-def add(value):
-    def evolver(pvector):
-        return sorted(pvector.append(value), key=object_sort_key)
-    return evolver
+@behavior(v1)
+@implementer(IObject)
+class NamespaceList(_List, v1.NamespaceList):
+    pass
 
 
-def remove(value):
-    def evolver(pset):
-        return pset.remove(value)
-    return evolver
 
-
-def object_from_raw(raw, kind_hint=None, version_hint=None):
-    """
-    Load an object of unspecified type from the raw representation of it.
-
-    :raise KeyError: If the kind of object is unsupported.
-
-    :return IObject: The loaded object.
-    """
-    kind = raw.get(u"kind", kind_hint)
-    if kind.endswith(u"List"):
-        return ObjectCollection.from_raw(raw)
-    return iobject_from_raw(raw, kind_hint, version_hint)
+@behavior(v1)
+@implementer(IObject)
+class ConfigMapList(v1.ConfigMapList, _List):
+    pass
 
 
 def iobject_to_raw(obj):
@@ -288,6 +226,13 @@ _versions = {
 
 @mutant
 def iobject_from_raw(obj, kind_hint=None, version_hint=None):
+    """
+    Load an object of unspecified type from the raw representation of it.
+
+    :raise KeyError: If the kind of object is unsupported.
+
+    :return IObject: The loaded object.
+    """
     kind = obj.get(u"kind", kind_hint)
     apiVersion = obj.get(u"apiVersion", version_hint)
     v = _versions[apiVersion]
