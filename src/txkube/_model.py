@@ -49,10 +49,6 @@ class NamespaceStatus(v1.NamespaceStatus):
         return cls(phase=u"Terminating")
 
 
-    def to_raw(self):
-        return self.serialize()
-
-
 
 @behavior(v1)
 @implementer(IObject)
@@ -90,18 +86,6 @@ class Namespace(v1.Namespace):
         )
 
 
-    def to_raw(self):
-        result = {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": self.metadata.serialize(),
-            u"spec": {},
-        }
-        if self.status is not None:
-            result[u"status"] = self.status.to_raw()
-        return result
-
-
 
 @behavior(v1)
 @implementer(IObject)
@@ -124,21 +108,6 @@ class ConfigMap(v1.ConfigMap):
         # TODO Surely some stuff to fill.
         # See https://github.com/LeastAuthority/txkube/issues/36
         return self
-
-
-    def to_raw(self):
-        result = {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": self.metadata.serialize(),
-        }
-        if self.data is not None:
-            # Kubernetes only includes the item if there is some data.
-            #
-            # XXX I'm not sure if there's a difference between no data and
-            # data with no items.
-            result[u"data"] = thaw(self.data)
-        return result
 
 
 
