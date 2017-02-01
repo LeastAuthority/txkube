@@ -8,7 +8,7 @@ Tests for ``txkube._model``.
 from json import loads, dumps
 
 from testtools.matchers import (
-    Equals, LessThan, MatchesStructure, Not, Is,
+    Equals, MatchesStructure, Not, Is,
 )
 
 from hypothesis import given, assume
@@ -18,7 +18,6 @@ from ..testing.matchers import PClassEquals, MappingEquals
 from ..testing.strategies import (
     object_name,
     iobjects,
-    creatable_namespaces,
 )
 
 from .. import v1, iobject_to_raw, iobject_from_raw
