@@ -163,6 +163,10 @@ def remove(value):
 
 
 class _List(object):
+    def __invariant__(self):
+        return required_unique(self.items, object_sort_key)
+
+
     def item_by_name(self, name):
         """
         Find an item in this collection by its name metadata.
