@@ -14,7 +14,7 @@ from pyrsistent import mutant
 
 from twisted.python.filepath import FilePath
 
-from . import IObject
+from . import UnrecognizedVersion, UnrecognizedKind, IObject
 from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
@@ -235,7 +235,13 @@ def iobject_from_raw(obj, kind_hint=None, version_hint=None):
     """
     kind = obj.get(u"kind", kind_hint)
     apiVersion = obj.get(u"apiVersion", version_hint)
-    v = _versions[apiVersion]
-    cls = getattr(v, kind)
+    try:
+        v = _versions[apiVersion]
+    except KeyError:
+        raise UnrecognizedVersion(apiVersion, obj)
+    try:
+        cls = getattr(v, kind)
+    except AttributeError:
+        raise UnrecognizedKind(apiVersion, kind, obj)
     others = obj.discard(u"kind").discard(u"apiVersion")
     return cls.create(others)

@@ -9,7 +9,7 @@ __all__ = [
     "version",
     "IObject", "IKubernetes", "IKubernetesClient",
 
-    "KubernetesError",
+    "KubernetesError", "UnrecognizedVersion", "UnrecognizedKind",
     "v1", "iobject_from_raw", "iobject_to_raw",
 
     "memory_kubernetes",
@@ -23,7 +23,7 @@ from incremental import Version
 from ._metadata import version_tuple as _version_tuple
 version = Version("txkube", *_version_tuple)
 
-from ._exception import KubernetesError
+from ._exception import KubernetesError, UnrecognizedVersion, UnrecognizedKind
 from ._interface import IObject, IKubernetes, IKubernetesClient
 
 from ._model import (
