@@ -36,8 +36,8 @@ class KubernetesError(Exception):
         #
         # This is usually what happens with the expose-it-through-__init__
         # style, I guess.
-        from ._model import v1
-        d.addCallback(lambda body: cls(response.code, v1.Status.create(loads(body))))
+        from ._model import iobject_from_raw
+        d.addCallback(lambda body: cls(response.code, iobject_from_raw(loads(body))))
         return d
 
 

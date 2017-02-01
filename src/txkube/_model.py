@@ -9,14 +9,13 @@ state.
 from uuid import uuid4
 from functools import partial
 
-from zope.interface import provider, implementer
+from zope.interface import implementer
 
-from pyrsistent import CheckedPVector, PClass, field, thaw
+from pyrsistent import mutant
 
 from twisted.python.filepath import FilePath
 
-from . import IObject, IObjectLoader
-from ._invariants import provider_of
+from . import IObject
 from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
@@ -51,18 +50,8 @@ class NamespaceStatus(v1.NamespaceStatus):
         return cls(phase=u"Terminating")
 
 
-    @classmethod
-    def from_raw(cls, status):
-        return cls(phase=status[u"phase"])
-
-
-    def to_raw(self):
-        return self.serialize()
-
-
 
 @behavior(v1)
-@provider(IObjectLoader)
 @implementer(IObject)
 class Namespace(v1.Namespace):
     """
@@ -75,20 +64,6 @@ class Namespace(v1.Namespace):
         Get the default namespace.
         """
         return cls.named(u"default")
-
-
-    @classmethod
-    def from_raw(cls, raw):
-        try:
-            status_raw = raw[u"status"]
-        except KeyError:
-            status = None
-        else:
-            status = NamespaceStatus.from_raw(status_raw)
-        return cls(
-            metadata=v1.ObjectMeta(**raw[u"metadata"]),
-            status=status,
-        )
 
 
     @classmethod
@@ -112,35 +87,14 @@ class Namespace(v1.Namespace):
         )
 
 
-    def to_raw(self):
-        result = {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": self.metadata.serialize(),
-            u"spec": {},
-        }
-        if self.status is not None:
-            result[u"status"] = self.status.to_raw()
-        return result
-
-
 
 @behavior(v1)
-@provider(IObjectLoader)
 @implementer(IObject)
 class ConfigMap(v1.ConfigMap):
     """
     ``ConfigMap`` instances model `ConfigMap objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
     """
-    @classmethod
-    def from_raw(cls, raw):
-        return cls(
-            metadata=v1.ObjectMeta(**raw[u"metadata"]),
-            data=raw.get(u"data", None),
-        )
-
-
     @classmethod
     def named(cls, namespace, name):
         """
@@ -155,21 +109,6 @@ class ConfigMap(v1.ConfigMap):
         # TODO Surely some stuff to fill.
         # See https://github.com/LeastAuthority/txkube/issues/36
         return self
-
-
-    def to_raw(self):
-        result = {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": self.metadata.serialize(),
-        }
-        if self.data is not None:
-            # Kubernetes only includes the item if there is some data.
-            #
-            # XXX I'm not sure if there's a difference between no data and
-            # data with no items.
-            result[u"data"] = thaw(self.data)
-        return result
 
 
 
@@ -224,49 +163,20 @@ def required_unique(objects, key):
 
 
 
-@provider(IObjectLoader)
-@implementer(IObject)
-class ObjectCollection(PClass):
-    """
-    ``ObjectList`` is a collection of Kubernetes objects.
-
-    This roughly corresponds to the `*List` Kubernetes types.  It's not clear
-    this is actually more useful than a native Python collection such as a set
-    but we'll try it out.
-
-    :ivar pvector items: The objects belonging to this collection.
-    """
-    kind = u"List"
-    items = _pvector_field(
-        IObject, invariant=partial(required_unique, key=object_sort_key),
-    )
-
-    @classmethod
-    def from_raw(cls, raw):
-        items = (
-            # Unfortunately `kind` is an optional field.  Fortunately, the
-            # top-level `kind` is something like `ConfigMapList` if you
-            # asked for `.../configmaps/`.  So pass that down as a hint.
-            object_from_raw(obj, raw[u"kind"][:-len(u"List")])
-            for obj
-            in raw[u"items"]
-        )
-        return cls(items=items)
+def add(value):
+    def evolver(pvector):
+        return sorted(pvector.append(value), key=object_sort_key)
+    return evolver
 
 
-    def to_raw(self):
-        return {
-            u"kind": self.kind,
-            u"apiVersion": u"v1",
-            u"metadata": {},
-            u"items": list(
-                obj.to_raw()
-                for obj
-                in self.items
-            ),
-        }
+def remove(value):
+    def evolver(pset):
+        return pset.remove(value)
+    return evolver
 
 
+
+class _List(object):
     def item_by_name(self, name):
         """
         Find an item in this collection by its name metadata.
@@ -286,6 +196,10 @@ class ObjectCollection(PClass):
         return self.transform([u"items"], add(obj))
 
 
+    def remove(self, obj):
+        return self.transform([u"items"], remove(obj))
+
+
     def replace(self, old, new):
         return self.transform(
             [u"items"], remove(old),
@@ -294,27 +208,34 @@ class ObjectCollection(PClass):
 
 
 
-def add(value):
-    def evolver(pvector):
-        return sorted(pvector.append(value), key=object_sort_key)
-    return evolver
+@behavior(v1)
+@implementer(IObject)
+class NamespaceList(_List, v1.NamespaceList):
+    pass
 
 
-def remove(value):
-    def evolver(pset):
-        return pset.remove(value)
-    return evolver
+
+@behavior(v1)
+@implementer(IObject)
+class ConfigMapList(v1.ConfigMapList, _List):
+    pass
 
 
-_loaders = {
-    loader.kind: loader
-    for loader
-    in {Namespace, ConfigMap}
+def iobject_to_raw(obj):
+    result = obj.serialize()
+    result.update({
+        u"kind": obj.kind,
+        u"apiVersion": obj.apiVersion,
+    })
+    return result
+
+
+_versions = {
+    u"v1": v1,
 }
 
-
-
-def object_from_raw(raw, kind_hint=None):
+@mutant
+def iobject_from_raw(obj, kind_hint=None, version_hint=None):
     """
     Load an object of unspecified type from the raw representation of it.
 
@@ -322,9 +243,9 @@ def object_from_raw(raw, kind_hint=None):
 
     :return IObject: The loaded object.
     """
-    kind = raw.get(u"kind", kind_hint)
-    if kind.endswith(u"List"):
-        loader = ObjectCollection
-    else:
-        loader = _loaders[kind]
-    return loader.from_raw(raw)
+    kind = obj.get(u"kind", kind_hint)
+    apiVersion = obj.get(u"apiVersion", version_hint)
+    v = _versions[apiVersion]
+    cls = getattr(v, kind)
+    others = obj.discard(u"kind").discard(u"apiVersion")
+    return cls.create(others)

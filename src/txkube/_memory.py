@@ -26,7 +26,8 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
-    v1, ObjectCollection,
+    v1,
+    iobject_from_raw, iobject_to_raw,
 )
 
 
@@ -74,8 +75,8 @@ def _kubernetes_resource(state):
 
 @attr.s
 class _KubernetesState(object):
-    namespaces = attr.ib(default=ObjectCollection())
-    configmaps = attr.ib(default=ObjectCollection())
+    namespaces = attr.ib(default=v1.NamespaceList())
+    configmaps = attr.ib(default=v1.ConfigMapList())
 
 
 def terminate(obj):
@@ -107,7 +108,7 @@ class _Kubernetes(object):
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(collection.to_raw())
+        return dumps(iobject_to_raw(collection))
 
     def _get(self, request, collection, namespace, name):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
@@ -119,14 +120,14 @@ class _Kubernetes(object):
             request.setResponseCode(NOT_FOUND)
             # TODO https://github.com/LeastAuthority/txkube/issues/42
             # This is definitely not the right result.
-            return dumps({})
+            return dumps({u"apiVersion": u"v1", u"kind": u"Status"})
         else:
-            return dumps(obj.to_raw())
+            return dumps(iobject_to_raw(obj))
 
     def _create(self, request, type, collection, collection_name):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
 
-        obj = type.from_raw(loads(request.content.read())).fill_defaults()
+        obj = iobject_from_raw(loads(request.content.read())).fill_defaults()
         try:
             added = collection.add(obj)
         except InvariantException:
@@ -142,13 +143,13 @@ class _Kubernetes(object):
 
         setattr(self.state, nativeString(collection_name), added)
         request.setResponseCode(CREATED)
-        return dumps(obj.to_raw())
+        return dumps(iobject_to_raw(obj))
 
     def _delete(self, request, collection, collection_name, name):
         obj = collection.item_by_name(name)
         setattr(self.state, collection_name, collection.replace(obj, terminate(obj)))
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(obj.to_raw())
+        return dumps(iobject_to_raw(obj))
 
     app = Klein()
     @app.handle_errors(NotFound)
