@@ -28,7 +28,7 @@ from ..testing import TestCase
 # TODO #18 this moved to txkube/__init__.py
 from .._network import KubernetesError
 from .. import (
-    IKubernetesClient, ObjectCollection,
+    IKubernetesClient,
     v1,
 )
 from .strategies import creatable_namespaces, configmaps
@@ -115,7 +115,7 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.list(v1.Namespace)
             d.addCallback(created_namespace)
             def check_namespaces(namespaces):
-                self.assertThat(namespaces, IsInstance(ObjectCollection))
+                self.assertThat(namespaces, IsInstance(v1.NamespaceList))
                 # There are some built-in namespaces that we'll ignore.  If we
                 # find the one we created, that's sufficient.
                 self.assertThat(
@@ -208,7 +208,7 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.list(v1.ConfigMap)
             d.addCallback(created_configmap)
             def check_configmaps(collection):
-                self.assertThat(collection, IsInstance(ObjectCollection))
+                self.assertThat(collection, IsInstance(v1.ConfigMapList))
                 self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
             d.addCallback(check_configmaps)
             return d

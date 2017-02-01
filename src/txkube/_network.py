@@ -34,7 +34,8 @@ from pykube import KubeConfig
 
 from . import (
     IObject, IKubernetes, IKubernetesClient,
-    object_from_raw, authenticate_with_certificate,
+    iobject_from_raw, iobject_to_raw,
+    authenticate_with_certificate,
 )
 
 def network_kubernetes(**kw):
@@ -167,14 +168,14 @@ class _NetworkClient(object):
         )
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(obj))
-            document = obj.to_raw()
+            document = iobject_to_raw(obj)
             action.add_success_fields(submitted_object=document)
             d = DeferredContext(self._post(url, document))
             d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(object_from_raw)
+            d.addCallback(iobject_from_raw)
             return d.addActionFinish()
 
 
@@ -198,7 +199,7 @@ class _NetworkClient(object):
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(object_from_raw)
+            d.addCallback(iobject_from_raw)
             return d.addActionFinish()
 
 
@@ -235,7 +236,7 @@ class _NetworkClient(object):
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
-            d.addCallback(object_from_raw)
+            d.addCallback(iobject_from_raw)
             return d.addActionFinish()
 
 

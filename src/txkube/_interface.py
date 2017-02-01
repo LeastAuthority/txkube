@@ -17,6 +17,10 @@ class IObject(Interface):
         """The Kubernetes *kind* of this object.  For example, ``u"Namespace"``."""
     )
 
+    apiVersion = Attribute(
+        """The Kubernetes *apiVersion* of this object.  For example, ``u"v1"``."""
+    )
+
     metadata = Attribute(
         """
         The metadata for this object.  As either ``ObjectMetadata`` or
@@ -24,29 +28,14 @@ class IObject(Interface):
         """
     )
 
-    def to_raw():
+    def serialize():
         """
         Marshal this object to a JSON- and YAML-compatible object graph.
 
-        This is the inverse of ``IObjectLoader.from_raw``.
-
         :return dict: A JSON-compatible representation of this object.
+            ``kind`` and ``apiVersion`` may be omitted.
         """
 
-
-class IObjectLoader(Interface):
-    """
-    ``IObjectLoader`` providers can take a marshalled dump of a Kubernetes
-    object (ie, the JSON- or YAML-compatible object graph) and create a
-    corresponding ``IObject`` provider with a more convenient Python
-    interface.
-    """
-    def from_raw(raw):
-        """
-        Load the ``IObject``.
-
-        This is the inverse of ``IObject.to_raw``.
-        """
 
 
 class IKubernetes(Interface):
