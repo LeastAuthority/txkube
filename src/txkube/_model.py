@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from zope.interface import implementer
 
-from pyrsistent import thaw, mutant
+from pyrsistent import mutant
 
 from twisted.python.filepath import FilePath
 
