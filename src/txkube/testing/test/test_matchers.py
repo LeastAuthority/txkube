@@ -82,6 +82,12 @@ class MappingEqualsTests(TestCase):
             ),
         )
 
+        # The matcher has a nice string representation.
+        self.expectThat(
+            str(MappingEquals({})),
+            Equals("MappingEquals({})"),
+        )
+
 
 
 class AttrsEqualsTests(TestCase):
@@ -132,6 +138,12 @@ class AttrsEqualsTests(TestCase):
             ),
         )
 
+        # The matcher has a nice string representation.
+        self.expectThat(
+            str(AttrsEquals(self.attrs(u"bar"))),
+            Equals("AttrsEquals(attrs(foo=u'bar'))"),
+        )
+
 
 
 class PClassEqualsTests(TestCase):
@@ -140,6 +152,7 @@ class PClassEqualsTests(TestCase):
     """
     class pclass(PClass):
         foo = field()
+        bar = field()
 
 
     def test_equals(self):
@@ -203,4 +216,10 @@ class PClassEqualsTests(TestCase):
                 u"reference = <<missing>>\n"
                 u"actual    = baz\n"
             ),
+        )
+
+        # The matcher has a nice string representation.
+        self.expectThat(
+            str(PClassEquals(self.pclass(foo=u"bar"))),
+            Equals("PClassEquals(pclass(foo=u'bar'))"),
         )
