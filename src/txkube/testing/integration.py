@@ -103,6 +103,43 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @async
+        def test_not_found(self):
+            """
+            ``IKubernetesClient.list`` returns a ``Deferred`` that fails with
+            ``KubernetesError`` when the server responds with an HTTP NOT
+            FOUND status.
+            """
+            # Invent a type that the server isn't going to recognize.  This
+            # could happen if we're talking to a server that is missing some
+            # extension we thought it had, for example.
+            class Mythical(object):
+                apiVersion = u"v6txkube2"
+                kind = u"Mythical"
+                metadata = v1.ObjectMeta()
+
+            d = self.client.list(Mythical)
+            def failed(reason):
+                self.assertThat(reason, IsInstance(Failure))
+                reason.trap(KubernetesError)
+                self.assertThat(
+                    reason.value,
+                    MatchesStructure(
+                        code=Equals(NOT_FOUND),
+                        status=Equals(v1.Status(
+                            metadata={},
+                            status=u"Failure",
+                            message=u"the server could not find the requested resource",
+                            reason=u"NotFound",
+                            details=dict(),
+                            code=NOT_FOUND,
+                        )),
+                    ),
+                )
+            d.addBoth(failed)
+            return d
+
+
+        @async
         def test_namespace(self):
             """
             ``Namespace`` objects can be created and retrieved using the ``create``

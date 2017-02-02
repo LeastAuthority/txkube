@@ -16,7 +16,9 @@ from zope.interface import implementer
 from twisted.python.url import URL
 
 from twisted.python.compat import nativeString
-from twisted.web.http import CREATED, CONFLICT, NOT_FOUND
+from twisted.web.http import CREATED, CONFLICT, NOT_FOUND, OK
+
+from eliot import start_action
 
 from klein import Klein
 
@@ -86,6 +88,26 @@ def terminate(obj):
     )
 
 
+
+def response(request, status, obj):
+    """
+    Generate a response.
+
+    :param IRequest request: The request being responsed to.
+    :param int status: The response status code to set.
+    :param obj: Something JSON-dumpable to write into the response body.
+
+    :return bytes: The response body to write out.  eg, return this from a
+        *render_* method.
+    """
+    request.setResponseCode(status)
+    request.responseHeaders.setRawHeaders(
+        u"content-type", [u"application/json"],
+    )
+    return dumps(obj)
+
+
+
 @attr.s(frozen=True)
 class _Kubernetes(object):
     """
@@ -105,63 +127,74 @@ class _Kubernetes(object):
         )
 
     def _list(self, request, namespace, collection):
-        if namespace is not None:
-            collection = self._reduce_to_namespace(collection, namespace)
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(iobject_to_raw(collection))
+        with start_action(action_type=u"memory:list", kind=collection.kind):
+            if namespace is not None:
+                collection = self._reduce_to_namespace(collection, namespace)
+            return response(request, OK, iobject_to_raw(collection))
 
     def _get(self, request, collection, collection_name, namespace, name):
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         try:
             obj = collection.item_by_name(name)
         except KeyError:
-            request.setResponseCode(NOT_FOUND)
-            return dumps(iobject_to_raw(v1.Status(
-                status=u"Failure",
-                message=u"{} \"{!s}\" not found".format(collection_name, name),
-                reason=u"NotFound",
-                details={u"name": name, u"kind": collection_name},
-                metadata={},
-                code=NOT_FOUND,
-            )))
+            return response(
+                request,
+                NOT_FOUND,
+                iobject_to_raw(v1.Status(
+                    status=u"Failure",
+                    message=u"{} \"{!s}\" not found".format(collection_name, name),
+                    reason=u"NotFound",
+                    details={u"name": name, u"kind": collection_name},
+                    metadata={},
+                    code=NOT_FOUND,
+                )),
+            )
         else:
-            return dumps(iobject_to_raw(obj))
+            return response(request, OK, iobject_to_raw(obj))
 
-    def _create(self, request, type, collection, collection_name):
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+    def _create(self, request, collection, collection_name):
+        with start_action(action_type=u"memory:create", kind=collection.kind):
+            obj = iobject_from_raw(loads(request.content.read())).fill_defaults()
+            try:
+                added = collection.add(obj)
+            except InvariantException:
+                return response(
+                    request,
+                    CONFLICT,
+                    iobject_to_raw(v1.Status(
+                        status=u"Failure",
+                        message=u"{} \"{!s}\" already exists".format(collection_name, obj.metadata.name),
+                        reason=u"AlreadyExists",
+                        details={u"name": obj.metadata.name, u"kind": collection_name},
+                        metadata={},
+                        code=CONFLICT,
+                    )),
+                )
 
-        obj = iobject_from_raw(loads(request.content.read())).fill_defaults()
-        try:
-            added = collection.add(obj)
-        except InvariantException:
-            request.setResponseCode(CONFLICT)
-            return dumps(iobject_to_raw(v1.Status(
-                status=u"Failure",
-                message=u"{} \"{!s}\" already exists".format(collection_name, obj.metadata.name),
-                reason=u"AlreadyExists",
-                details={u"name": obj.metadata.name, u"kind": collection_name},
-                metadata={},
-                code=CONFLICT,
-            )))
-
-        setattr(self.state, nativeString(collection_name), added)
-        request.setResponseCode(CREATED)
-        return dumps(iobject_to_raw(obj))
+            setattr(self.state, nativeString(collection_name), added)
+            return response(request, CREATED, iobject_to_raw(obj))
 
     def _delete(self, request, collection, collection_name, name):
         obj = collection.item_by_name(name)
         setattr(self.state, collection_name, collection.replace(obj, terminate(obj)))
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(iobject_to_raw(obj))
+        return response(request, OK, iobject_to_raw(obj))
 
     app = Klein()
     @app.handle_errors(NotFound)
     def not_found(self, request, name):
-        # XXX Untested - https://github.com/LeastAuthority/txkube/issues/42
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps({u"message": u"boo"})
+        return response(
+            request,
+            NOT_FOUND,
+            iobject_to_raw(v1.Status(
+                status=u"Failure",
+                message=u"the server could not find the requested resource",
+                reason=u"NotFound",
+                details={},
+                metadata={},
+                code=NOT_FOUND,
+            )),
+        )
 
     with app.subroute(u"/api/v1") as app:
         @app.route(u"/namespaces", methods=[u"GET"])
@@ -192,7 +225,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(request, v1.Namespace, self.state.namespaces, u"namespaces")
+            return self._create(request, self.state.namespaces, u"namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request, namespace=None):
@@ -213,4 +246,4 @@ class _Kubernetes(object):
             """
             Create a new ConfigMap.
             """
-            return self._create(request, v1.ConfigMap, self.state.configmaps, u"configmaps")
+            return self._create(request, self.state.configmaps, u"configmaps")
