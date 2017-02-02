@@ -18,7 +18,12 @@ from . import UnrecognizedVersion, UnrecognizedKind, IObject
 from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
-v1 = VersionedPClasses(spec, u"v1", name_field=u"kind", version_field=u"apiVersion")
+v1 = VersionedPClasses(
+    spec, u"v1", name_field=u"kind", version_field=u"apiVersion",
+)
+v1beta1 = VersionedPClasses(
+    spec, u"v1beta1", name_field=u"kind", version_field=u"apiVersion",
+)
 
 
 def behavior(namespace):
@@ -107,6 +112,18 @@ class ConfigMap(v1.ConfigMap):
     def fill_defaults(self):
         # TODO Surely some stuff to fill.
         # See https://github.com/LeastAuthority/txkube/issues/36
+        return self
+
+
+
+@behavior(v1beta1)
+@implementer(IObject)
+class Deployment(v1beta1.Deployment):
+    """
+    ``Deployment`` instances model ``Deployment objects
+    <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
+    """
+    def fill_defaults(self):
         return self
 
 
@@ -207,6 +224,13 @@ class NamespaceList(_List, v1.NamespaceList):
 @behavior(v1)
 @implementer(IObject)
 class ConfigMapList(v1.ConfigMapList, _List):
+    pass
+
+
+
+@behavior(v1beta1)
+@implementer(IObject)
+class DeploymentList(v1beta1.DeploymentList, _List):
     pass
 
 
