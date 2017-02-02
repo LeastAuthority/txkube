@@ -103,6 +103,43 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @async
+        def test_not_found(self):
+            """
+            ``IKubernetesClient.list`` returns a ``Deferred`` that fails with
+            ``KubernetesError`` when the server responds with an HTTP NOT
+            FOUND status.
+            """
+            # Invent a type that the server isn't going to recognize.  This
+            # could happen if we're talking to a server that is missing some
+            # extension we thought it had, for example.
+            class Mythical(object):
+                apiVersion = u"v6txkube2"
+                kind = u"Mythical"
+                metadata = v1.ObjectMeta()
+
+            d = self.client.list(Mythical)
+            def failed(reason):
+                self.assertThat(reason, IsInstance(Failure))
+                reason.trap(KubernetesError)
+                self.assertThat(
+                    reason.value,
+                    MatchesStructure(
+                        code=Equals(NOT_FOUND),
+                        status=Equals(v1.Status(
+                            metadata={},
+                            status=u"Failure",
+                            message=u"the server could not find the requested resource",
+                            reason=u"NotFound",
+                            details=dict(),
+                            code=NOT_FOUND,
+                        )),
+                    ),
+                )
+            d.addBoth(failed)
+            return d
+
+
+        @async
         def test_namespace(self):
             """
             ``Namespace`` objects can be created and retrieved using the ``create``
@@ -294,20 +331,39 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @needs(namespace=creatable_namespaces().example())
-        def _namespaced_object_retrieval_by_name_test(self, strategy, kind, matches, namespace):
+        def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, namespace):
             """
             Verify that a particular kind of namespaced Kubernetes object (such as
             *ConfigMap* or *PersistentVolumeClaim*) can be retrieved by name
             by by calling ``IKubernetesClient.get`` with the ``IObject``
             corresponding to that kind as long as the object has its *name*
             metadata populated.
+
+            :param strategy: A Hypothesis strategy for building the namespaced
+                object to create and then retrieve.
+
+            :param cls: The ``IObject`` implementation corresponding to the
+                objects ``strategy`` can build.
+
+            :param matches: A one-argument caller which takes the expected
+                object and returns a testtools matcher for it.  Since created
+                objects have some unpredictable server-generated fields, this
+                matcher can compare just the important, predictable parts of
+                the object.
+
+            :param v1.Namespace namespace: An existing namespace into which
+                the probe object can be created.
+
+            :return: A ``Deferred`` that fires when the behavior has been
+                verified.
             """
+            kind = cls.kind.lower()
             obj = strategy.example()
             # Move it to the namespace for this test.
             obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
             d = self.client.create(obj)
             def created_object(created):
-                return self.client.get(kind.named(obj.metadata.namespace, obj.metadata.name))
+                return self.client.get(cls.named(obj.metadata.namespace, obj.metadata.name))
             d.addCallback(created_object)
             def got_object(retrieved):
                 self.expectThat(retrieved, matches(obj))
@@ -321,13 +377,31 @@ def kubernetes_client_tests(get_kubernetes):
                 else:
                     bogus_namespace += u"x"
                 return self.client.get(
-                    kind.named(bogus_namespace, obj.metadata.name),
+                    cls.named(bogus_namespace, obj.metadata.name),
                 )
             d.addCallback(got_object)
-            def check_error(result):
-                self.assertThat(result, IsInstance(Failure))
-                result.trap(KubernetesError)
-                self.assertThat(result.value.code, Equals(NOT_FOUND))
+            def check_error(reason):
+                self.assertThat(reason, IsInstance(Failure))
+                reason.trap(KubernetesError)
+                self.assertThat(
+                    reason.value,
+                    MatchesStructure(
+                        code=Equals(NOT_FOUND),
+                        status=Equals(v1.Status(
+                            metadata={},
+                            status=u"Failure",
+                            message=u"{}s \"{}\" not found".format(
+                                kind, obj.metadata.name,
+                            ),
+                            reason=u"NotFound",
+                            details=dict(
+                                kind=u"{}s".format(kind),
+                                name=obj.metadata.name,
+                            ),
+                            code=NOT_FOUND,
+                        )),
+                    ),
+                )
             d.addBoth(check_error)
             return d
 
