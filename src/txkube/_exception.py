@@ -36,8 +36,8 @@ class KubernetesError(Exception):
         #
         # This is usually what happens with the expose-it-through-__init__
         # style, I guess.
-        from ._model import Status
-        d.addCallback(lambda body: cls(response.code, Status.create(loads(body))))
+        from ._model import iobject_from_raw
+        d.addCallback(lambda body: cls(response.code, iobject_from_raw(loads(body))))
         return d
 
 
@@ -47,3 +47,33 @@ class KubernetesError(Exception):
         )
 
     __str__ = __repr__
+
+
+
+class UnrecognizedVersion(ValueError):
+    """
+    An object *apiVersion* was encountered that we don't know about.
+
+    :ivar unicode apiVersion: The API version encountered.
+    :ivar object obj: The whole marshalled object.
+    """
+    def __init__(self, apiVersion, obj):
+        ValueError.__init__(self, apiVersion)
+        self.apiVersion = apiVersion
+        self.obj = obj
+
+
+
+class UnrecognizedKind(ValueError):
+    """
+    An object *kind* was encountered that we don't know about.
+
+    :ivar unicode apiVersion: The API version encountered.
+    :ivar unicode kind: The object kind encountered.
+    :ivar object obj: The whole marshalled object.
+    """
+    def __init__(self, apiVersion, kind, obj):
+        ValueError.__init__(self, apiVersion, kind)
+        self.apiVersion = apiVersion
+        self.kind = kind
+        self.obj = obj

@@ -8,17 +8,10 @@ See ``get_kubernetes`` for pre-requisites.
 """
 
 from os import environ
-from os.path import expanduser
-
-from pem import parse
-
-from twisted.python.url import URL
-
-from pykube import KubeConfig
 
 from ..testing.integration import kubernetes_client_tests
 
-from .. import network_kubernetes, authenticate_with_certificate
+from .. import network_kubernetes_from_context
 
 
 def get_kubernetes(case):
@@ -26,34 +19,17 @@ def get_kubernetes(case):
     Create a real ``IKubernetes`` provider, taking necessary
     configuration details from the environment.
 
-    To use this set ``TXKUBE_INTEGRATION_CLUSTER_NAME`` to the name of a
-    cluster in your ``kubectl`` configuration.  Corresponding details about
-    connecting to a cluster will be loaded from that configuration.
+    To use this set ``TXKUBE_INTEGRATION_CONTEXT`` to a context in your
+    ``kubectl`` configuration.  Corresponding details about connecting to a
+    cluster will be loaded from that configuration.
     """
     try:
-        cluster_name = environ["TXKUBE_INTEGRATION_CLUSTER_NAME"]
+        context = environ["TXKUBE_INTEGRATION_CONTEXT"]
     except KeyError:
-        case.skipTest("Cannot find TXKUBE_INTEGRATION_CLUSTER_NAME in environment.")
+        case.skipTest("Cannot find TXKUBE_INTEGRATION_CONTEXT in environment.")
     else:
-        config = KubeConfig.from_file(expanduser("~/.kube/config"))
-        cluster = config.clusters[cluster_name]
-        user = config.users[cluster_name]
-
-        base_url = URL.fromText(cluster["server"].decode("ascii"))
-        [ca_cert] = parse(cluster["certificate-authority"].bytes())
-
-        [client_cert] = parse(user["client-certificate"].bytes())
-        [client_key] = parse(user["client-key"].bytes())
-
         from twisted.internet import reactor
-        agent = authenticate_with_certificate(
-            reactor, base_url, client_cert, client_key, ca_cert,
-        )
-
-        return network_kubernetes(
-            base_url=base_url,
-            agent=agent,
-        )
+        return network_kubernetes_from_context(reactor, context)
 
 
 class KubernetesClientIntegrationTests(kubernetes_client_tests(get_kubernetes)):

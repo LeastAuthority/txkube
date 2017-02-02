@@ -27,10 +27,9 @@ from ..testing import TestCase
 
 from .. import (
     KubernetesError,
-    IKubernetesClient, NamespaceStatus, Namespace, ConfigMap, ObjectCollection,
-    ObjectMeta,
+    IKubernetesClient,
+    v1,
 )
-from .._model import Status, StatusDetails
 
 from .strategies import creatable_namespaces, configmaps
 
@@ -71,7 +70,7 @@ def has_uid():
 
 def is_active():
     return MatchesStructure(
-        status=Equals(NamespaceStatus.active()),
+        status=Equals(v1.NamespaceStatus.active()),
     )
 
 
@@ -113,10 +112,10 @@ def kubernetes_client_tests(get_kubernetes):
             d = self.client.create(obj)
             def created_namespace(created):
                 self.assertThat(created, matches_namespace(obj))
-                return self.client.list(Namespace)
+                return self.client.list(v1.Namespace)
             d.addCallback(created_namespace)
             def check_namespaces(namespaces):
-                self.assertThat(namespaces, IsInstance(ObjectCollection))
+                self.assertThat(namespaces, IsInstance(v1.NamespaceList))
                 # There are some built-in namespaces that we'll ignore.  If we
                 # find the one we created, that's sufficient.
                 self.assertThat(
@@ -146,18 +145,20 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        @async
-        def test_duplicate_namespace_rejected(self):
+        def _create_duplicate_rejected_test(self, obj, kind):
             """
-            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
-            ``KubernetesClient`` if it is called with a ``Namespace`` object
-            with the same name as a *Namespace* which already exists.
+            Verify an object cannot be created if its name (and maybe namespace) is
+            already taken.
+
+            :param IObject obj: Some object to create.  An object with the
+                same name (and namespace, if it is a namespaced *kind*) is
+                expected to already have been created by the caller.
+
+            :param unicode kind: The name of the collection of the *kind* of
+                ``obj``, lowercase.  For example, *configmaps*.
             """
-            obj = creatable_namespaces().example()
+            # obj was already created once.
             d = self.client.create(obj)
-            def created(ignored):
-                return self.client.create(obj)
-            d.addCallback(created)
             def failed(reason):
                 self.assertThat(reason, IsInstance(Failure))
                 reason.trap(KubernetesError)
@@ -165,16 +166,18 @@ def kubernetes_client_tests(get_kubernetes):
                     reason.value,
                     MatchesStructure(
                         code=Equals(CONFLICT),
-                        status=Equals(Status(
-                            kind=u"Status",
-                            apiVersion=u"v1",
+                        status=Equals(v1.Status(
                             metadata={},
                             status=u"Failure",
-                            message=u"namespaces \"{}\" already exists".format(obj.metadata.name),
+                            # XXX This message is a little janky.  "namespaces
+                            # ... already exists"?  How about "Namespace
+                            # ... already exists"?  Maybe report it to
+                            # Kubernetes.
+                            message=u"{} \"{}\" already exists".format(kind, obj.metadata.name),
                             reason=u"AlreadyExists",
                             details=dict(
                                 name=obj.metadata.name,
-                                kind=u"namespaces",
+                                kind=kind,
                             ),
                             code=CONFLICT,
                         )),
@@ -185,6 +188,43 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @async
+        @needs(namespace=creatable_namespaces().example())
+        def test_duplicate_configmap_rejected(self, namespace):
+            """
+            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+            ``KubernetesError`` if it is called with a ``ConfigMap`` object
+            with the same name as a *ConfigMap* which already exists in the
+            same namespace.
+            """
+            obj = configmaps().example()
+            # Put it in the namespace that was created.
+            obj = obj.transform(
+                [u"metadata", u"namespace"],
+                namespace.metadata.name,
+            )
+            d = self.client.create(obj)
+            d.addCallback(
+                lambda ignored: self._create_duplicate_rejected_test(
+                    obj, u"configmaps"
+                )
+            )
+            return d
+
+
+        @async
+        @needs(obj=creatable_namespaces().example())
+        def test_duplicate_namespace_rejected(self, obj):
+            """
+            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+            ``KubernetesError`` if it is called with a ``Namespace`` object
+            with the same name as a *Namespace* which already exists.
+            """
+            return self._create_duplicate_rejected_test(
+                v1.Namespace.named(obj.metadata.name), u"namespaces",
+            )
+
+
+        @async
         def test_namespace_retrieval(self):
             """
             A specific ``Namespace`` object can be retrieved by name using
@@ -192,7 +232,7 @@ def kubernetes_client_tests(get_kubernetes):
             """
             return self._global_object_retrieval_by_name_test(
                 creatable_namespaces(),
-                Namespace,
+                v1.Namespace,
                 matches_namespace,
             )
 
@@ -209,7 +249,7 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.delete(created)
             d.addCallback(created_namespace)
             def deleted_namespace(ignored):
-                return self.client.list(Namespace)
+                return self.client.list(v1.Namespace)
             d.addCallback(deleted_namespace)
             def check_namespaces(collection):
                 active = list(
@@ -244,10 +284,10 @@ def kubernetes_client_tests(get_kubernetes):
             d.addCallback(created_namespace)
             def created_configmap(created):
                 self.assertThat(created, matches_configmap(obj))
-                return self.client.list(ConfigMap)
+                return self.client.list(v1.ConfigMap)
             d.addCallback(created_configmap)
             def check_configmaps(collection):
-                self.assertThat(collection, IsInstance(ObjectCollection))
+                self.assertThat(collection, IsInstance(v1.ConfigMapList))
                 self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
             d.addCallback(check_configmaps)
             return d
@@ -318,7 +358,7 @@ def kubernetes_client_tests(get_kubernetes):
             """
             return self._namespaced_object_retrieval_by_name_test(
                 configmaps(),
-                ConfigMap,
+                v1.ConfigMap,
                 matches_configmap,
             )
 
@@ -332,8 +372,8 @@ def kubernetes_client_tests(get_kubernetes):
             strategy = configmaps()
             objs = [strategy.example(), strategy.example()]
             ns = list(
-                Namespace(
-                    metadata=ObjectMeta(name=obj.metadata.namespace),
+                v1.Namespace(
+                    metadata=v1.ObjectMeta(name=obj.metadata.namespace),
                     status=None,
                 )
                 for obj
@@ -341,7 +381,7 @@ def kubernetes_client_tests(get_kubernetes):
             )
             d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
             def created_configmaps(ignored):
-                return self.client.list(ConfigMap)
+                return self.client.list(v1.ConfigMap)
             d.addCallback(created_configmaps)
             def check_configmaps(collection):
                 self.expectThat(collection, items_are_sorted())

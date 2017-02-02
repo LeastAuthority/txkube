@@ -16,7 +16,6 @@ from zope.interface import implementer
 from twisted.python.url import URL
 
 from twisted.python.compat import nativeString
-from twisted.web.resource import Resource, NoResource
 from twisted.web.http import CREATED, CONFLICT, NOT_FOUND
 
 from klein import Klein
@@ -25,11 +24,10 @@ from werkzeug.exceptions import NotFound
 
 from treq.testing import RequestTraversalAgent
 
-from ._model import Status
 from . import (
     IKubernetes, network_kubernetes,
-    NamespaceStatus,
-    ObjectCollection, Namespace, ConfigMap,
+    v1,
+    iobject_from_raw, iobject_to_raw,
 )
 
 
@@ -77,14 +75,14 @@ def _kubernetes_resource(state):
 
 @attr.s
 class _KubernetesState(object):
-    namespaces = attr.ib(default=ObjectCollection())
-    configmaps = attr.ib(default=ObjectCollection())
+    namespaces = attr.ib(default=v1.NamespaceList())
+    configmaps = attr.ib(default=v1.ConfigMapList())
 
 
 def terminate(obj):
     # TODO: Add deletionTimestamp?  See #24
     return obj.transform(
-        [u"status"], NamespaceStatus.terminating(),
+        [u"status"], v1.NamespaceStatus.terminating(),
     )
 
 
@@ -110,7 +108,7 @@ class _Kubernetes(object):
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(collection.to_raw())
+        return dumps(iobject_to_raw(collection))
 
     def _get(self, request, collection, collection_name, namespace, name):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
@@ -120,47 +118,43 @@ class _Kubernetes(object):
             obj = collection.item_by_name(name)
         except KeyError:
             request.setResponseCode(NOT_FOUND)
-            return dumps(Status(
-                apiVersion=u"v1",
-                kind=u"Status",
+            return dumps(iobject_to_raw(v1.Status(
                 status=u"Failure",
                 message=u"{} \"{!s}\" not found".format(collection_name, name),
                 reason=u"NotFound",
                 details={u"name": name, u"kind": collection_name},
                 metadata={},
                 code=NOT_FOUND,
-            ).serialize())
+            )))
         else:
-            return dumps(obj.to_raw())
+            return dumps(iobject_to_raw(obj))
 
     def _create(self, request, type, collection, collection_name):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
 
-        obj = type.from_raw(loads(request.content.read())).fill_defaults()
+        obj = iobject_from_raw(loads(request.content.read())).fill_defaults()
         try:
             added = collection.add(obj)
         except InvariantException:
             request.setResponseCode(CONFLICT)
-            return dumps(Status(
-                apiVersion=u"v1",
-                kind=u"Status",
+            return dumps(iobject_to_raw(v1.Status(
                 status=u"Failure",
                 message=u"{} \"{!s}\" already exists".format(collection_name, obj.metadata.name),
                 reason=u"AlreadyExists",
                 details={u"name": obj.metadata.name, u"kind": collection_name},
                 metadata={},
                 code=CONFLICT,
-            ).serialize())
+            )))
 
         setattr(self.state, nativeString(collection_name), added)
         request.setResponseCode(CREATED)
-        return dumps(obj.to_raw())
+        return dumps(iobject_to_raw(obj))
 
     def _delete(self, request, collection, collection_name, name):
         obj = collection.item_by_name(name)
         setattr(self.state, collection_name, collection.replace(obj, terminate(obj)))
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return dumps(obj.to_raw())
+        return dumps(iobject_to_raw(obj))
 
     app = Klein()
     @app.handle_errors(NotFound)
@@ -198,7 +192,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(request, Namespace, self.state.namespaces, u"namespaces")
+            return self._create(request, v1.Namespace, self.state.namespaces, u"namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request, namespace=None):
@@ -219,4 +213,4 @@ class _Kubernetes(object):
             """
             Create a new ConfigMap.
             """
-            return self._create(request, ConfigMap, self.state.configmaps, u"configmaps")
+            return self._create(request, v1.ConfigMap, self.state.configmaps, u"configmaps")

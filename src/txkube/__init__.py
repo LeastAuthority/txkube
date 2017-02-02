@@ -7,18 +7,13 @@ A Kubernetes client.
 
 __all__ = [
     "version",
-    "IObject", "IObjectLoader", "IKubernetes", "IKubernetesClient",
-    "network_client", "memory_client",
+    "IObject", "IKubernetes", "IKubernetesClient",
 
-    "KubernetesError",
+    "KubernetesError", "UnrecognizedVersion", "UnrecognizedKind",
+    "v1", "iobject_from_raw", "iobject_to_raw",
 
-    "NamespaceStatus",
-    "ObjectMeta",
-    "object_from_raw",
-    "Namespace", "ConfigMap",
-    "ObjectCollection",
-
-    "network_kubernetes", "memory_kubernetes",
+    "memory_kubernetes",
+    "network_kubernetes",  "network_kubernetes_from_context",
     "authenticate_with_serviceaccount",
     "authenticate_with_certificate",
 ]
@@ -28,19 +23,17 @@ from incremental import Version
 from ._metadata import version_tuple as _version_tuple
 version = Version("txkube", *_version_tuple)
 
-from ._exception import KubernetesError
-from ._interface import IObject, IObjectLoader, IKubernetes, IKubernetesClient
+from ._exception import KubernetesError, UnrecognizedVersion, UnrecognizedKind
+from ._interface import IObject, IKubernetes, IKubernetesClient
 
 from ._model import (
-    NamespaceStatus,
-    ObjectMeta,
-    object_from_raw,
-    Namespace, ConfigMap,
-    ObjectCollection,
+    v1,
+    iobject_from_raw,
+    iobject_to_raw,
 )
 
-from ._network import network_kubernetes
-from ._memory import memory_kubernetes
 from ._authentication import (
     authenticate_with_serviceaccount, authenticate_with_certificate,
 )
+from ._network import network_kubernetes, network_kubernetes_from_context
+from ._memory import memory_kubernetes

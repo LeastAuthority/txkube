@@ -28,6 +28,8 @@ install:
 script:
   - "pyflakes src"
   - "coverage run --rcfile=${PWD}/.coveragerc $(type -p trial) txkube"
+  # See .coveragerc for an explanation of this step.
+  - "coverage combine .coverage"
 
 after_success:
   - "codecov"
