@@ -350,9 +350,7 @@ def kubernetes_client_tests(get_kubernetes):
                     reason.value,
                     MatchesStructure(
                         code=Equals(NOT_FOUND),
-                        status=Equals(Status(
-                            kind=u"Status",
-                            apiVersion=u"v1",
+                        status=Equals(v1.Status(
                             metadata={},
                             status=u"Failure",
                             message=u"{}s \"{}\" not found".format(
