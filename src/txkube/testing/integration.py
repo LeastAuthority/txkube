@@ -294,20 +294,39 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @needs(namespace=creatable_namespaces().example())
-        def _namespaced_object_retrieval_by_name_test(self, strategy, kind, matches, namespace):
+        def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, namespace):
             """
             Verify that a particular kind of namespaced Kubernetes object (such as
             *ConfigMap* or *PersistentVolumeClaim*) can be retrieved by name
             by by calling ``IKubernetesClient.get`` with the ``IObject``
             corresponding to that kind as long as the object has its *name*
             metadata populated.
+
+            :param strategy: A Hypothesis strategy for building the namespaced
+                object to create and then retrieve.
+
+            :param cls: The ``IObject`` implementation corresponding to the
+                objects ``strategy`` can build.
+
+            :param matches: A one-argument caller which takes the expected
+                object and returns a testtools matcher for it.  Since created
+                objects have some unpredictable server-generated fields, this
+                matcher can compare just the important, predictable parts of
+                the object.
+
+            :param v1.Namespace namespace: An existing namespace into which
+                the probe object can be created.
+
+            :return: A ``Deferred`` that fires when the behavior has been
+                verified.
             """
+            kind = cls.kind.lower()
             obj = strategy.example()
             # Move it to the namespace for this test.
             obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
             d = self.client.create(obj)
             def created_object(created):
-                return self.client.get(kind.named(obj.metadata.namespace, obj.metadata.name))
+                return self.client.get(cls.named(obj.metadata.namespace, obj.metadata.name))
             d.addCallback(created_object)
             def got_object(retrieved):
                 self.expectThat(retrieved, matches(obj))
@@ -321,7 +340,7 @@ def kubernetes_client_tests(get_kubernetes):
                 else:
                     bogus_namespace += u"x"
                 return self.client.get(
-                    kind.named(bogus_namespace, obj.metadata.name),
+                    cls.named(bogus_namespace, obj.metadata.name),
                 )
             d.addCallback(got_object)
             def check_error(reason):
@@ -336,10 +355,12 @@ def kubernetes_client_tests(get_kubernetes):
                             apiVersion=u"v1",
                             metadata={},
                             status=u"Failure",
-                            message=u"configmaps \"{}\" not found".format(obj.metadata.name),
+                            message=u"{}s \"{}\" not found".format(
+                                kind, obj.metadata.name,
+                            ),
                             reason=u"NotFound",
                             details=dict(
-                                kind=u"configmaps",
+                                kind=u"{}s".format(kind),
                                 name=obj.metadata.name,
                             ),
                             code=NOT_FOUND,
