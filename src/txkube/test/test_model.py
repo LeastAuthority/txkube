@@ -48,9 +48,6 @@ class IObjectTests(TestCase):
         An ``IObject`` provider can be round-trip through JSON using
         ``iobject_to_raw`` and ``iobject_from_raw``.
         """
-        # XXX Fix this!
-        assume(not obj.kind.endswith(u"List"))
-
         marshalled = iobject_to_raw(obj)
 
         # Every IObject has these marshalled fields - and when looking at
