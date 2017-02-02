@@ -12,7 +12,7 @@ from hypothesis.strategies import (
     dictionaries,
 )
 
-from .. import v1
+from .. import v1, v1beta1
 
 # Without some attempt to cap the size of collection strategies (lists,
 # dictionaries), the slowness health check fails intermittently.  Here are
@@ -35,6 +35,10 @@ def object_name():
     ).filter(
         lambda value: not (value.startswith(b"-") or value.endswith(b"-"))
     )
+
+# XXX wrong
+dns_labels = image_names = object_name
+
 
 def object_metadatas():
     """
@@ -145,6 +149,89 @@ def configmaps():
     )
 
 
+def containers():
+    """
+    Strategy to build ``v1.Container``.
+    """
+    return builds(
+        v1.Container,
+        name=dns_labels(),
+        # XXX Spec does not say image is required but it is
+        image=image_names(),
+    )
+
+
+def podspecs():
+    """
+    Strategy to build ``v1.PodSpec``.
+    """
+    return builds(
+        v1.PodSpec,
+        containers=lists(
+            containers(),
+            average_size=_QUICK_MAX_SIZE,
+            max_size=_QUICK_MAX_SIZE,
+        ),
+    )
+
+
+def podtemplatespecs():
+    """
+    Strategy to build ``v1.PodTemplateSpec``.
+    """
+    return builds(
+        v1.PodTemplateSpec,
+        # v1.ObjectMeta for a PodTemplateSpec must include some labels.
+        metadata=object_metadatas().filter(
+            lambda meta: len(meta.labels) > 0,
+        ),
+        spec=podspecs(),
+    )
+
+
+def deploymentspecs():
+    """
+    Strategy to build ``DeploymentSpec``.
+    """
+    return builds(
+        lambda template: v1beta1.DeploymentSpec(
+            template=template,
+            # The selector has to match the PodTemplateSpec.  This is an easy
+            # way to accomplish that but not the only way.
+            selectors={u"matchLabels": template.metadata.labels},
+        ),
+        template=podtemplatespecs(),
+    )
+
+
+def deployments():
+    """
+    Strategy to build ``Deployment``.
+    """
+    return builds(
+        v1beta1.Deployment,
+        metadata=namespaced_object_metadatas(),
+        # XXX Spec is only required if you want to be able to create the
+        # Deployment.
+        spec=deploymentspecs(),
+    )
+
+
+def deploymentlists():
+    """
+    Strategy to build ``DeploymentList``.
+    """
+    return builds(
+        v1beta1.DeploymentList,
+        items=lists(
+            deployments(),
+            average_size=_QUICK_AVERAGE_SIZE,
+            max_size=_QUICK_MAX_SIZE,
+            unique_by=_unique_names_with_namespaces,
+        ),
+    )
+
+
 def configmaplists():
     """
     Strategy to build ``ConfigMapList``.
@@ -182,6 +269,7 @@ def objectcollections(namespaces=creatable_namespaces()):
     return one_of(
         configmaplists(),
         namespacelists(namespaces),
+        deploymentlists(),
     )
 
 
@@ -209,5 +297,6 @@ def iobjects():
         creatable_namespaces(),
         retrievable_namespaces(),
         configmaps(),
+        deployments(),
         objectcollections(),
     )
