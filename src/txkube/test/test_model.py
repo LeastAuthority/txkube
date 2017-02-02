@@ -10,7 +10,7 @@ from json import loads, dumps
 from zope.interface.verify import verifyObject
 
 from testtools.matchers import (
-    Equals, MatchesStructure, Not, Is, Contains, raises,
+    Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
 )
 
 from hypothesis import given, assume
@@ -50,11 +50,12 @@ class IObjectTests(TestCase):
         """
         marshalled = iobject_to_raw(obj)
 
-        # Every IObject has these marshalled fields - and when looking at
-        # the marshalled form, they're necessary to figure out the
-        # schema/definition for the data.
-        self.expectThat(marshalled[u"kind"], Equals(obj.kind))
-        self.expectThat(marshalled[u"apiVersion"], Equals(obj.apiVersion))
+        # Every IObject has these marshalled fields - and when looking at the
+        # marshalled form, they're necessary to figure out the
+        # schema/definition for the data.  We can't say anything in general
+        # about the *values* (because of things like "extensions/v1beta1") but
+        # we can at least assert the keys are present.
+        self.expectThat(marshalled, ContainsAll([u"kind", u"apiVersion"]))
 
         # We should be able to unmarshal the data back to the same model
         # object as we started with.
