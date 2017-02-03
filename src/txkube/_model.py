@@ -235,9 +235,21 @@ class DeploymentList(v1beta1.DeploymentList, _List):
 
 
 
+_versions = {
+    u"v1": v1,
+    u"v1beta1": v1beta1,
+}
+
 def _mutilate(version):
     if version == u"v1beta1":
         return u"extensions/v1beta1"
+    return version
+
+
+
+def _unmutilate(version):
+    if version.startswith(u"extensions/"):
+        return version[len(u"extensions/"):]
     return version
 
 
@@ -250,11 +262,6 @@ def iobject_to_raw(obj):
     })
     return result
 
-
-_versions = {
-    u"v1": v1,
-}
-
 @mutant
 def iobject_from_raw(obj, kind_hint=None, version_hint=None):
     """
@@ -265,7 +272,12 @@ def iobject_from_raw(obj, kind_hint=None, version_hint=None):
     :return IObject: The loaded object.
     """
     kind = obj.get(u"kind", kind_hint)
-    apiVersion = obj.get(u"apiVersion", version_hint)
+    try:
+        apiVersion = obj[u"apiVersion"]
+    except KeyError:
+        apiVersion = version_hint
+    else:
+        apiVersion = _unmutilate(apiVersion)
     try:
         v = _versions[apiVersion]
     except KeyError:

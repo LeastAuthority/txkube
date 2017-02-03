@@ -11,6 +11,7 @@ from zope.interface.verify import verifyObject
 
 from testtools.matchers import (
     Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
+    IsInstance,
 )
 
 from hypothesis import given, assume
@@ -26,8 +27,46 @@ from ..testing.strategies import (
 
 from .. import (
     UnrecognizedVersion, UnrecognizedKind,
-    IObject, v1, iobject_to_raw, iobject_from_raw,
+    IObject, v1, v1beta1, iobject_to_raw, iobject_from_raw,
 )
+
+
+class SerializationTests(TestCase):
+    """
+    Tests for ``iobject_to_raw`` and ``iobject_from_raw``.
+    """
+    def test_v1_apiVersion(self):
+        """
+        Objects from ``v1`` serialize with an *apiVersion* of ``u"v1"``.
+        """
+        obj = v1.ComponentStatus()
+        raw = iobject_to_raw(obj)
+        self.expectThat(
+            raw[u"apiVersion"],
+            Equals(u"v1"),
+        )
+        self.expectThat(
+            iobject_from_raw(raw),
+            IsInstance(v1.ComponentStatus),
+        )
+
+
+    def test_v1beta1_apiVersion(self):
+        """
+        Objects from ``v1beta1`` serialize with an *apiVersion* of
+        ``u"extensions/v1beta1"``.
+        """
+        obj = v1beta1.CertificateSigningRequest()
+        raw = iobject_to_raw(obj)
+        self.expectThat(
+            raw[u"apiVersion"],
+            Equals(u"extensions/v1beta1"),
+        )
+        self.expectThat(
+            iobject_from_raw(raw),
+            IsInstance(v1beta1.CertificateSigningRequest),
+        )
+
 
 
 class IObjectTests(TestCase):
