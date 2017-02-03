@@ -235,11 +235,18 @@ class DeploymentList(v1beta1.DeploymentList, _List):
 
 
 
+def _mutilate(version):
+    if version == u"v1beta1":
+        return u"extensions/v1beta1"
+    return version
+
+
+
 def iobject_to_raw(obj):
     result = obj.serialize()
     result.update({
         u"kind": obj.kind,
-        u"apiVersion": obj.apiVersion,
+        u"apiVersion": _mutilate(obj.apiVersion),
     })
     return result
 
