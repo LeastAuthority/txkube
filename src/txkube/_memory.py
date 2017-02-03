@@ -28,7 +28,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, network_kubernetes,
-    v1,
+    v1, v1beta1,
     iobject_from_raw, iobject_to_raw,
 )
 
@@ -75,10 +75,14 @@ def _kubernetes_resource(state):
     return _Kubernetes(state).app.resource()
 
 
+
 @attr.s
 class _KubernetesState(object):
     namespaces = attr.ib(default=v1.NamespaceList())
     configmaps = attr.ib(default=v1.ConfigMapList())
+
+    deployments = attr.ib(default=v1beta1.DeploymentList())
+
 
 
 def terminate(obj):
@@ -228,11 +232,11 @@ class _Kubernetes(object):
             return self._create(request, self.state.namespaces, u"namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
-        def list_configmaps(self, request, namespace=None):
+        def list_configmaps(self, request):
             """
             Get all existing ConfigMaps.
             """
-            return self._list(request, namespace, self.state.configmaps)
+            return self._list(request, None, self.state.configmaps)
 
         @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"GET"])
         def get_configmap(self, request, namespace, configmap):
@@ -247,3 +251,22 @@ class _Kubernetes(object):
             Create a new ConfigMap.
             """
             return self._create(request, self.state.configmaps, u"configmaps")
+
+    with app.subroute(u"/apis/extensions/v1beta1") as app:
+        @app.route(u"/namespaces/<namespace>/deployments", methods=[u"POST"])
+        def create_deployment(self, request, namespace):
+            """
+            Create a new Deployment.
+            """
+            return self._create(
+                request,
+                self.state.deployments,
+                u"deployments",
+            )
+
+        @app.route(u"/deployments", methods=[u"GET"])
+        def list_deployments(self, request):
+            """
+            Get all existing Deployments.
+            """
+            return self._list(request, None, self.state.deployments)
