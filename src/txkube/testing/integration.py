@@ -23,6 +23,8 @@ from twisted.internet.defer import gatherResults
 from twisted.internet.task import deferLater, cooperate
 from twisted.web.http import NOT_FOUND, CONFLICT
 
+from .._network import version_to_segments
+
 from ..testing import TestCase
 
 from .. import (
@@ -124,6 +126,15 @@ def kubernetes_client_tests(get_kubernetes):
                 apiVersion = u"v6txkube2"
                 kind = u"Mythical"
                 metadata = v1.ObjectMeta()
+
+            # The client won't know where to route the request without this.
+            # There is a more general problem here that the model is missing
+            # some unpredictable information about where the relevant APIs are
+            # exposed in the URL hierarchy.
+            version_to_segments[Mythical.apiVersion] = (
+                u"apis", u"extensions", Mythical.apiVersion,
+            )
+            self.addCleanup(lambda: version_to_segments.pop(Mythical.apiVersion))
 
             d = self.client.list(Mythical)
             def failed(reason):

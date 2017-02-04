@@ -254,6 +254,12 @@ def object_location(obj):
 
 
 
+version_to_segments = {
+    u"v1": (u"api", u"v1"),
+    u"v1beta1": (u"apis", u"extensions", u"v1beta1"),
+}
+
+
 def collection_location(obj):
     """
     Get the URL for the collection of objects like ``obj``.
@@ -270,11 +276,6 @@ def collection_location(obj):
     kind = obj.kind
     apiVersion = obj.apiVersion
 
-    version_to_segments = {
-        u"v1": (u"api", u"v1"),
-        # What is the rhyme or reason?
-        u"v1beta1": (u"apis", u"extensions", u"v1beta1"),
-    }
     prefix = version_to_segments[apiVersion]
 
     collection = kind.lower() + u"s"
