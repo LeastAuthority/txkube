@@ -490,6 +490,13 @@ def _parse_iso8601(text):
 
 
 
+def _maybe_isoformat(format, v):
+    if v is None:
+        return omit
+    return v.isoformat()
+
+
+
 class _ClassModel(PClass):
     """
     A ``_ClassModel`` represents a type with a number of named, heterogeneous
@@ -521,7 +528,7 @@ class _ClassModel(PClass):
         (u"string", u"date-time"): _BasicTypeModel(
             python_types=(datetime,),
             factory=_parse_iso8601,
-            serializer=lambda format, dt: dt.isoformat(),
+            serializer=_maybe_isoformat,
         ),
         (u"string", u"int-or-string"): _BasicTypeModel(
             python_types=(unicode, int, long),
@@ -644,7 +651,18 @@ class _ClassModel(PClass):
             in self.attributes
         }
         content["__doc__"] = nativeString(self.doc)
+        content["serialize"] = _serialize_with_omit
         return type(nativeString(self.name), (PClass,), content)
+
+
+omit = object()
+def _serialize_with_omit(self, format=None):
+    return {
+        key: value
+        for (key, value)
+        in PClass.serialize(self, format).iteritems()
+        if value is not omit
+    }
 
 
 

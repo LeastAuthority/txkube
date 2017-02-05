@@ -322,6 +322,15 @@ class SwaggerTests(TestCase):
             Type(s=now).serialize(),
             Equals({u"s": now.isoformat().decode("ascii")}),
         )
+        # Missing values don't appear in the output.
+        self.expectThat(
+            Type(s=None).serialize(),
+            Equals({}),
+        )
+        self.expectThat(
+            Type().serialize(),
+            Equals({}),
+        )
 
 
     def test_string_int_or_string(self):
