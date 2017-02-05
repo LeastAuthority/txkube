@@ -53,7 +53,7 @@ class Swagger(PClass):
     """
     info = field()
     paths = field()
-    definitions = field(factory=pmap)
+    definitions = field(factory=freeze)
     securityDefinitions = field()
     security = field()
     swagger = field()
