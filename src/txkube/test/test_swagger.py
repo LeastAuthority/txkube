@@ -8,7 +8,7 @@ Tests for ``txkube._swagger``.
 from datetime import datetime
 
 from hypothesis import given
-from hypothesis.strategies import integers
+from hypothesis.strategies import sampled_from, integers
 
 from eliot import Message
 
@@ -32,7 +32,31 @@ from .._swagger import (
 from ..testing import TestCase
 
 
+def swagger_primitive_types():
+    """
+    Hypothesis strategy to build Swagger *primitive* type definitions.
+    """
+    def _swaggered((t, f)):
+        result = {u"type": t}
+        if f is not None:
+            result[u"format"] = f
+        return result
+
+    return sampled_from([
+        (u"integer", u"int32"),
+        (u"integer", u"int64"),
+        (u"string", None),
+        (u"string", u"byte"),
+        (u"string", u"date-time"),
+        (u"boolean", None),
+    ]).map(_swaggered)
+
+
+
 class _IntegerRangeTests(TestCase):
+    """
+    Tests for ``_IntegerRange``.
+    """
     def test_from_signed_bits(self):
         """
         ``_IntegerRange.from_signed_bits`` returns an ``_IntegerRange`` with lower
@@ -186,9 +210,19 @@ class SwaggerTests(TestCase):
         self.assertThat(Type(), IsInstance(Type))
 
 
-    def test_nonrequired_none_default(self):
-        Type = self.spec.pclass_for_definition(u"object-with-simple-ref")
-        self.assertThat(Type().p, Is(None))
+    @given(swagger_primitive_types())
+    def test_nonrequired_none_default(self, swagger_type):
+        spec = Swagger.from_document({
+            u"definitions": {
+                u"object": {
+                    u"properties": {
+                        u"o": swagger_type,
+                    },
+                },
+            },
+        })
+        Type = spec.pclass_for_definition(u"object")
+        self.assertThat(Type().o, Is(None))
 
 
     def test_boolean(self):

@@ -209,6 +209,7 @@ class _BasicTypeModel(PClass):
     python_types = field(mandatory=True)
     range = field(mandatory=True, initial=None)
     factory = field(mandatory=True, initial=None)
+    serializer = field(mandatory=True, initial=None)
 
     def _pyrsistent_invariant(self, required):
         """
@@ -248,6 +249,8 @@ class _BasicTypeModel(PClass):
             return self.factory
         def optional(v):
             if v is None:
+                return None
+            if isinstance(v, self.python_types):
                 return v
             return self.factory(v)
         return optional
@@ -277,53 +280,11 @@ class _BasicTypeModel(PClass):
         if factory is not None:
             extra[u"factory"] = factory
 
+        if self.serializer is not None:
+            extra[u"serializer"] = self.serializer
+
         return field(
             mandatory=required, type=python_types, **extra
-        )
-
-
-
-# TODO This diverges from _BasicTypeModel in some pointless ways - such as
-# initial value.
-@implementer(ITypeModel)
-class _DatetimeTypeModel(object):
-    """
-    A ``_DatetimeTypeModel`` represents the *date-time* format of the Swagger
-    *string* type.
-
-    The string value is exposed to the Python level as a ``datetime.datetime``
-    instance in UTC.
-    """
-    python_types = datetime
-
-    def _parse(self, value):
-        """
-        Maybe parse an ISO8601 datetime string into a datetime.
-
-        :param value: Either a string to parse or a datetime object to pass
-            through.
-
-        :return: A ``datetime.datetime`` representing ``value``.  If ``value``
-            was an inappropriate type, ``value`` is returned.
-        """
-        if isinstance(value, self.python_types):
-            return value
-        if isinstance(value, unicode):
-            try:
-                return parse_iso8601(value)
-            except ValueError:
-                raise CheckedValueTypeError(
-                    None, self.python_types, unicode, value,
-                )
-        # Let pyrsistent reject it.
-        return value
-
-
-    def pclass_field_for_type(self, required):
-        return field(
-            mandatory=required, type=self.python_types,
-            factory=self._parse,
-            serializer=lambda format, value: value.isoformat(),
         )
 
 
@@ -507,6 +468,28 @@ class _IntegerRange(PClass):
 
 
 
+def _parse_iso8601(text):
+    """
+    Maybe parse an ISO8601 datetime string into a datetime.
+
+    :param text: Either a ``unicode`` string to parse or any other object
+        (ideally a ``datetime`` instance) to pass through.
+
+    :return: A ``datetime.datetime`` representing ``text``.  Or ``text`` if it
+        was anything but a ``unicode`` string.
+    """
+    if isinstance(text, unicode):
+        try:
+            return parse_iso8601(text)
+        except ValueError:
+            raise CheckedValueTypeError(
+                None, (datetime,), unicode, text,
+            )
+    # Let pyrsistent reject it down the line.
+    return text
+
+
+
 class _ClassModel(PClass):
     """
     A ``_ClassModel`` represents a type with a number of named, heterogeneous
@@ -535,7 +518,11 @@ class _ClassModel(PClass):
         ),
         (u"string", None): _BasicTypeModel(python_types=(unicode,)),
         (u"string", u"byte"): _BasicTypeModel(python_types=(bytes,)),
-        (u"string", u"date-time"): _DatetimeTypeModel(),
+        (u"string", u"date-time"): _BasicTypeModel(
+            python_types=(datetime,),
+            factory=_parse_iso8601,
+            serializer=lambda format, dt: dt.isoformat(),
+        ),
         (u"string", u"int-or-string"): _BasicTypeModel(
             python_types=(unicode, int, long),
         ),
