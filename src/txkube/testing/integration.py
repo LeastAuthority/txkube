@@ -51,6 +51,7 @@ def matches_metadata(expected):
         metadata=MatchesStructure(
             namespace=Equals(expected.namespace),
             name=Equals(expected.name),
+            labels=Equals(expected.labels),
         ),
     )
 
@@ -66,7 +67,14 @@ def matches_configmap(configmap):
 def matches_deployment(deployment):
     return MatchesAll(
         matches_metadata(deployment.metadata),
-        MatchesStructure.fromExample(deployment, "spec"),
+        # Augh.  I think some kind of "expected is None or values match"
+        # matcher would help?
+        MatchesStructure(
+            spec=MatchesStructure(
+                selector=Equals(deployment.spec.selector),
+                template=matches_metadata(deployment.spec.template.metadata),
+            ),
+        ),
     )
 
 

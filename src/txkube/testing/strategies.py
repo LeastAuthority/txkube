@@ -285,7 +285,13 @@ def deployments():
     Strategy to build ``Deployment``.
     """
     return builds(
-        v1beta1.Deployment,
+        lambda metadata, spec: v1beta1.Deployment(
+            # The submitted Deployment.metadata.labels don't have to match the
+            # Deployment.spec.template.metadata.labels but the server will
+            # copy them up if they're missing at the top.
+            metadata=metadata.set("labels", spec.template.metadata.labels),
+            spec=spec,
+        ),
         metadata=namespaced_object_metadatas(),
         # XXX Spec is only required if you want to be able to create the
         # Deployment.

@@ -116,6 +116,18 @@ class ConfigMap(v1.ConfigMap):
 
 
 
+def set_if_none(desired_value):
+    """
+    Create a transformer which sets the given value if it finds ``None`` as
+    the current value, otherwise leaves the current value alone.
+    """
+    def transform(current_value):
+        if current_value is None:
+            return desired_value
+        return current_value
+    return transform
+
+
 @behavior(v1beta1)
 @implementer(IObject)
 class Deployment(v1beta1.Deployment):
@@ -124,7 +136,11 @@ class Deployment(v1beta1.Deployment):
     <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
     """
     def fill_defaults(self):
-        return self
+        # Copying apparent Kubernetes behavior.
+        return self.transform(
+            [u"metadata", u"labels"],
+            set_if_none(self.spec.template.metadata.labels),
+        ),
 
 
 
