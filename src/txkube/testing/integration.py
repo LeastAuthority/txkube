@@ -391,6 +391,18 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
+        @async
+        def test_deployment_retrieval(self):
+            """
+            A specific ``Deployment`` object can be retrieved by name using
+            ``IKubernetesClient.get``.
+            """
+            return self._namespaced_object_retrieval_by_name_test(
+                deployments(),
+                v1beta1.Deployment,
+                matches_deployment,
+            )
+
 
         @needs(namespace=creatable_namespaces().example())
         def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, namespace):

@@ -270,3 +270,16 @@ class _Kubernetes(object):
             Get all existing Deployments.
             """
             return self._list(request, None, self.state.deployments)
+
+        @app.route(u"/namespaces/<namespace>/deployments/<deployment>", methods=[u"GET"])
+        def get_deployment(self, request, namespace, deployment):
+            """
+            Get one Deployment by name.
+            """
+            return self._get(
+                request,
+                self.state.deployments,
+                u"deployments",
+                namespace,
+                deployment,
+            )
