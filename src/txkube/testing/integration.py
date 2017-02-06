@@ -97,7 +97,7 @@ def is_active():
 
 
 
-def _named(kind, name, namespace):
+def _named(kind, name, namespace=None):
     return kind(metadata=v1.ObjectMeta(name=name, namespace=namespace))
 
 
