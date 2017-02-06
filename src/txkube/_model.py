@@ -280,7 +280,7 @@ def iobject_to_raw(obj):
     return result
 
 @mutant
-def iobject_from_raw(obj, kind_hint=None, version_hint=None):
+def iobject_from_raw(obj):
     """
     Load an object of unspecified type from the raw representation of it.
 
@@ -288,13 +288,8 @@ def iobject_from_raw(obj, kind_hint=None, version_hint=None):
 
     :return IObject: The loaded object.
     """
-    kind = obj.get(u"kind", kind_hint)
-    try:
-        apiVersion = obj[u"apiVersion"]
-    except KeyError:
-        apiVersion = version_hint
-    else:
-        apiVersion = _unmutilate(apiVersion)
+    kind = obj[u"kind"]
+    apiVersion = _unmutilate(obj[u"apiVersion"])
     try:
         v = _versions[apiVersion]
     except KeyError:
