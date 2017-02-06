@@ -102,13 +102,155 @@ def _named(kind, name, namespace=None):
 
 
 
+def needs(**to_create):
+    """
+    Create a function decorator which will create certain Kubernetes objects
+    before calling the decorated function and delete them after it completes.
+
+    This requires the decorated functions accept a first argument with a
+    ``client`` attribute bound to an ``IKubernetesClient``.
+
+    :param to_create: Keyword arguments with ``IObject`` providers as values.
+        After being created, these objects will be passed to the decorated
+        function using the same keyword arguments.
+
+    :return: A function decorator.
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapper(self, *a, **kw):
+            # Check to make sure there aren't keyword argument conflicts.  I
+            # doubt this is an exhaustive safety check.
+            overlap = set(to_create) & set(kw)
+            if overlap:
+                raise TypeError(
+                    "Conflict between @needs() and **kw: {}".format(overlap)
+                )
+
+            # Create the objects.
+            created = {}
+            task = cooperate(
+                self.client.create(
+                    obj
+                ).addCallback(
+                    partial(setitem, created, name)
+                )
+                for (name, obj)
+                in sorted(to_create.items())
+            )
+            d = task.whenDone()
+
+            # Call the decorated function.
+            d.addCallback(lambda ignored: kw.update(created))
+            d.addCallback(lambda ignored: f(self, *a, **kw))
+
+            # Delete the created objects.
+            def cleanup(passthrough):
+                task = cooperate(
+                    self.client.delete(created[name])
+                    for name
+                    in sorted(to_create, reverse=True)
+                    if name in created
+                )
+                d = task.whenDone()
+                d.addCallback(lambda ignored: passthrough)
+                return d
+            d.addBoth(cleanup)
+            return d
+        return wrapper
+    return decorator
+
+
+
+class _NamespaceTestsMixin(object):
+    @async
+    def test_namespace(self):
+        """
+        ``Namespace`` objects can be created and retrieved using the ``create``
+        and ``list`` methods of ``IKubernetesClient``.
+        """
+        obj = creatable_namespaces().example()
+        d = self.client.create(obj)
+        def created_namespace(created):
+            self.assertThat(created, matches_namespace(obj))
+            return self.client.list(v1.Namespace)
+        d.addCallback(created_namespace)
+        def check_namespaces(namespaces):
+            self.assertThat(namespaces, IsInstance(v1.NamespaceList))
+            # There are some built-in namespaces that we'll ignore.  If we
+            # find the one we created, that's sufficient.
+            self.assertThat(
+                namespaces.items,
+                AnyMatch(MatchesAll(matches_namespace(obj), has_uid(), is_active())),
+            )
+        d.addCallback(check_namespaces)
+        return d
+
+
+    @async
+    def test_namespace_retrieval(self):
+        """
+        A specific ``Namespace`` object can be retrieved by name using
+        ``IKubernetesClient.get``.
+        """
+        return self._global_object_retrieval_by_name_test(
+            creatable_namespaces(),
+            v1.Namespace,
+            matches_namespace,
+        )
+
+
+    @async
+    def test_namespace_deletion(self):
+        """
+        ``IKubernetesClient.delete`` can be used to delete ``Namespace``
+        objects.
+        """
+        obj = creatable_namespaces().example()
+        d = self.client.create(obj)
+        def created_namespace(created):
+            return self.client.delete(created)
+        d.addCallback(created_namespace)
+        def deleted_namespace(ignored):
+            return self.client.list(v1.Namespace)
+        d.addCallback(deleted_namespace)
+        def check_namespaces(collection):
+            active = list(
+                ns.metadata.name
+                for ns
+                in collection.items
+                if ns.status.phase == u"Active"
+            )
+            self.assertThat(
+                active,
+                Not(Contains(obj.metadata.name)),
+            )
+        d.addCallback(check_namespaces)
+        return d
+
+
+    @async
+    @needs(obj=creatable_namespaces().example())
+    def test_duplicate_namespace_rejected(self, obj):
+        """
+        ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+        ``KubernetesError`` if it is called with a ``Namespace`` object
+        with the same name as a *Namespace* which already exists.
+        """
+        return self._create_duplicate_rejected_test(
+            _named(v1.Namespace, name=obj.metadata.name), u"namespaces",
+        )
+
+
+
 def kubernetes_client_tests(get_kubernetes):
-    class KubernetesClientIntegrationTests(TestCase):
+    class KubernetesClientIntegrationTests(_NamespaceTestsMixin, TestCase):
         def setUp(self):
             super(KubernetesClientIntegrationTests, self).setUp()
             self.kubernetes = get_kubernetes(self)
             self.client = self.kubernetes.client()
             self.addCleanup(self._cleanup)
+
 
         def _cleanup(self):
             pool = getattr(self.client.agent, "_pool", None)
@@ -173,30 +315,6 @@ def kubernetes_client_tests(get_kubernetes):
                     ),
                 )
             d.addBoth(failed)
-            return d
-
-
-        @async
-        def test_namespace(self):
-            """
-            ``Namespace`` objects can be created and retrieved using the ``create``
-            and ``list`` methods of ``IKubernetesClient``.
-            """
-            obj = creatable_namespaces().example()
-            d = self.client.create(obj)
-            def created_namespace(created):
-                self.assertThat(created, matches_namespace(obj))
-                return self.client.list(v1.Namespace)
-            d.addCallback(created_namespace)
-            def check_namespaces(namespaces):
-                self.assertThat(namespaces, IsInstance(v1.NamespaceList))
-                # There are some built-in namespaces that we'll ignore.  If we
-                # find the one we created, that's sufficient.
-                self.assertThat(
-                    namespaces.items,
-                    AnyMatch(MatchesAll(matches_namespace(obj), has_uid(), is_active())),
-                )
-            d.addCallback(check_namespaces)
             return d
 
 
@@ -282,61 +400,6 @@ def kubernetes_client_tests(get_kubernetes):
                     obj, u"configmaps"
                 )
             )
-            return d
-
-
-        @async
-        @needs(obj=creatable_namespaces().example())
-        def test_duplicate_namespace_rejected(self, obj):
-            """
-            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
-            ``KubernetesError`` if it is called with a ``Namespace`` object
-            with the same name as a *Namespace* which already exists.
-            """
-            return self._create_duplicate_rejected_test(
-                _named(v1.Namespace, name=obj.metadata.name), u"namespaces",
-            )
-
-
-        @async
-        def test_namespace_retrieval(self):
-            """
-            A specific ``Namespace`` object can be retrieved by name using
-            ``IKubernetesClient.get``.
-            """
-            return self._global_object_retrieval_by_name_test(
-                creatable_namespaces(),
-                v1.Namespace,
-                matches_namespace,
-            )
-
-
-        @async
-        def test_namespace_deletion(self):
-            """
-            ``IKubernetesClient.delete`` can be used to delete ``Namespace``
-            objects.
-            """
-            obj = creatable_namespaces().example()
-            d = self.client.create(obj)
-            def created_namespace(created):
-                return self.client.delete(created)
-            d.addCallback(created_namespace)
-            def deleted_namespace(ignored):
-                return self.client.list(v1.Namespace)
-            d.addCallback(deleted_namespace)
-            def check_namespaces(collection):
-                active = list(
-                    ns.metadata.name
-                    for ns
-                    in collection.items
-                    if ns.status.phase == u"Active"
-                )
-                self.assertThat(
-                    active,
-                    Not(Contains(obj.metadata.name)),
-                )
-            d.addCallback(check_namespaces)
             return d
 
 
@@ -666,62 +729,3 @@ def items_are_sorted():
             u"%s is not sorted by namespace, name",
         ),
     )
-
-
-def needs(**to_create):
-    """
-    Create a function decorator which will create certain Kubernetes objects
-    before calling the decorated function and delete them after it completes.
-
-    This requires the decorated functions accept a first argument with a
-    ``client`` attribute bound to an ``IKubernetesClient``.
-
-    :param to_create: Keyword arguments with ``IObject`` providers as values.
-        After being created, these objects will be passed to the decorated
-        function using the same keyword arguments.
-
-    :return: A function decorator.
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(self, *a, **kw):
-            # Check to make sure there aren't keyword argument conflicts.  I
-            # doubt this is an exhaustive safety check.
-            overlap = set(to_create) & set(kw)
-            if overlap:
-                raise TypeError(
-                    "Conflict between @needs() and **kw: {}".format(overlap)
-                )
-
-            # Create the objects.
-            created = {}
-            task = cooperate(
-                self.client.create(
-                    obj
-                ).addCallback(
-                    partial(setitem, created, name)
-                )
-                for (name, obj)
-                in sorted(to_create.items())
-            )
-            d = task.whenDone()
-
-            # Call the decorated function.
-            d.addCallback(lambda ignored: kw.update(created))
-            d.addCallback(lambda ignored: f(self, *a, **kw))
-
-            # Delete the created objects.
-            def cleanup(passthrough):
-                task = cooperate(
-                    self.client.delete(created[name])
-                    for name
-                    in sorted(to_create, reverse=True)
-                    if name in created
-                )
-                d = task.whenDone()
-                d.addCallback(lambda ignored: passthrough)
-                return d
-            d.addBoth(cleanup)
-            return d
-        return wrapper
-    return decorator
