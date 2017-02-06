@@ -11,8 +11,8 @@ from functools import partial, wraps
 from zope.interface.verify import verifyObject
 
 from testtools.matchers import (
-    AnyMatch, MatchesAll, MatchesStructure, IsInstance, Equals, Not, Contains,
-    AfterPreprocessing, MatchesPredicate,
+    AnyMatch, MatchesAll, MatchesStructure, Is, IsInstance, Equals, Not,
+    Contains, AfterPreprocessing, MatchesPredicate,
 )
 
 from testtools.twistedsupport import AsynchronousDeferredRunTest
@@ -94,6 +94,12 @@ def is_active():
     return MatchesStructure(
         status=Equals(v1.NamespaceStatus.active()),
     )
+
+
+
+def _named(kind, name, namespace=None):
+    return kind(metadata=v1.ObjectMeta(name=name, namespace=namespace))
+
 
 
 def kubernetes_client_tests(get_kubernetes):
@@ -205,7 +211,7 @@ def kubernetes_client_tests(get_kubernetes):
             obj = strategy.example()
             d = self.client.create(obj)
             def created_object(created):
-                return self.client.get(kind.named(obj.metadata.name))
+                return self.client.get(_named(kind, name=obj.metadata.name))
             d.addCallback(created_object)
             def got_object(retrieved):
                 self.assertThat(retrieved, matches(obj))
@@ -288,7 +294,7 @@ def kubernetes_client_tests(get_kubernetes):
             with the same name as a *Namespace* which already exists.
             """
             return self._create_duplicate_rejected_test(
-                v1.Namespace.named(obj.metadata.name), u"namespaces",
+                _named(v1.Namespace, name=obj.metadata.name), u"namespaces",
             )
 
 
@@ -385,15 +391,88 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
+        @async
+        def test_deployment_retrieval(self):
+            """
+            A specific ``Deployment`` object can be retrieved by name using
+            ``IKubernetesClient.get``.
+            """
+            return self._namespaced_object_retrieval_by_name_test(
+                deployments(),
+                v1beta1.Deployment,
+                matches_deployment,
+                group=u"extensions",
+            )
+
 
         @needs(namespace=creatable_namespaces().example())
-        def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, namespace):
+        def _namespaced_object_deletion_by_name_test(self, strategy, cls, namespace):
+            """
+            Verify that a particular kind of namespaced Kubernetes object (such as
+            *Deployment* or *Service*) can be deleted by name by calling
+            ``IKubernetesClient.delete`` with the ``IObject`` corresponding to
+            that kind as long as the object has its *name* and *namespace*
+            metadata populated.
+
+            :param strategy: A Hypothesis strategy for building the namespaced
+                object to create and then retrieve.
+
+            :param cls: The ``IObject`` implementation corresponding to the
+                objects ``strategy`` can build.
+
+            :param v1.Namespace namespace: An existing namespace into which
+                the probe object can be created.
+
+            :return: A ``Deferred`` that fires when the behavior has been
+                verified.
+            """
+            obj = strategy.example()
+            # Move it to the namespace for this test.
+            obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
+            d = self.client.create(obj)
+            def created_object(created):
+                return self.client.delete(_named(
+                    cls,
+                    namespace=obj.metadata.namespace, name=obj.metadata.name,
+                ))
+            d.addCallback(created_object)
+            def deleted_object(result):
+                self.expectThat(result, Is(None))
+                return self.client.list(cls)
+            d.addCallback(deleted_object)
+            def listed_objects(collection):
+                def key(obj):
+                    return (obj.metadata.name, obj.metadata.namespace)
+                deployment_names = set(
+                    key(obj)
+                    for obj
+                    in collection.items
+                )
+                self.expectThat(deployment_names, Not(Contains(key(obj))))
+            d.addCallback(listed_objects)
+            return d
+
+
+        @async
+        def test_deployment_deletion(self):
+            """
+            A specific ``ConfigMap`` object can be deleted by name using
+            ``IKubernetesClient.delete``.
+            """
+            return self._namespaced_object_deletion_by_name_test(
+                deployments(),
+                v1beta1.Deployment,
+            )
+
+
+        @needs(namespace=creatable_namespaces().example())
+        def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, group, namespace):
             """
             Verify that a particular kind of namespaced Kubernetes object (such as
             *ConfigMap* or *PersistentVolumeClaim*) can be retrieved by name
-            by by calling ``IKubernetesClient.get`` with the ``IObject``
+            by calling ``IKubernetesClient.get`` with the ``IObject``
             corresponding to that kind as long as the object has its *name*
-            metadata populated.
+            and *namespace* metadata populated.
 
             :param strategy: A Hypothesis strategy for building the namespaced
                 object to create and then retrieve.
@@ -407,6 +486,12 @@ def kubernetes_client_tests(get_kubernetes):
                 matcher can compare just the important, predictable parts of
                 the object.
 
+            :param unicode group: The name of the API group responsible for
+                this retrieval.  Objects are arbitrarily collected into such
+                groupings.  Look at the Kubernetes API Operations
+                documentation to find out what group contains the retrieval
+                API for the type under test.
+
             :param v1.Namespace namespace: An existing namespace into which
                 the probe object can be created.
 
@@ -419,7 +504,10 @@ def kubernetes_client_tests(get_kubernetes):
             obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
             d = self.client.create(obj)
             def created_object(created):
-                return self.client.get(cls.named(obj.metadata.namespace, obj.metadata.name))
+                return self.client.get(_named(
+                    cls,
+                    namespace=obj.metadata.namespace, name=obj.metadata.name,
+                ))
             d.addCallback(created_object)
             def got_object(retrieved):
                 self.expectThat(retrieved, matches(obj))
@@ -433,12 +521,25 @@ def kubernetes_client_tests(get_kubernetes):
                 else:
                     bogus_namespace += u"x"
                 return self.client.get(
-                    cls.named(bogus_namespace, obj.metadata.name),
+                    _named(
+                        cls,
+                        namespace=bogus_namespace,
+                        name=obj.metadata.name,
+                    ),
                 )
             d.addCallback(got_object)
             def check_error(reason):
                 self.assertThat(reason, IsInstance(Failure))
                 reason.trap(KubernetesError)
+                if group is None:
+                    fmt = u"{kind} \"{name}\" not found"
+                else:
+                    fmt = u"{kind}.{group} \"{name}\" not found"
+                details = dict(
+                    kind=u"{}s".format(kind),
+                    name=obj.metadata.name,
+                    group=group,
+                )
                 self.assertThat(
                     reason.value,
                     MatchesStructure(
@@ -446,14 +547,9 @@ def kubernetes_client_tests(get_kubernetes):
                         status=Equals(v1.Status(
                             metadata={},
                             status=u"Failure",
-                            message=u"{}s \"{}\" not found".format(
-                                kind, obj.metadata.name,
-                            ),
+                            message=fmt.format(**details),
                             reason=u"NotFound",
-                            details=dict(
-                                kind=u"{}s".format(kind),
-                                name=obj.metadata.name,
-                            ),
+                            details=details,
                             code=NOT_FOUND,
                         )),
                     ),
@@ -472,6 +568,7 @@ def kubernetes_client_tests(get_kubernetes):
                 configmaps(),
                 v1.ConfigMap,
                 matches_configmap,
+                group=None,
             )
 
 

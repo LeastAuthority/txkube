@@ -85,14 +85,6 @@ class _KubernetesState(object):
 
 
 
-def terminate(obj):
-    # TODO: Add deletionTimestamp?  See #24
-    return obj.transform(
-        [u"status"], v1.NamespaceStatus.terminating(),
-    )
-
-
-
 def response(request, status, obj):
     """
     Generate a response.
@@ -136,20 +128,29 @@ class _Kubernetes(object):
                 collection = self._reduce_to_namespace(collection, namespace)
             return response(request, OK, iobject_to_raw(collection))
 
-    def _get(self, request, collection, collection_name, namespace, name):
+    def _get(self, group, request, collection, collection_name, namespace, name):
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         try:
             obj = collection.item_by_name(name)
         except KeyError:
+            details = {
+                u"name": name,
+                u"kind": collection_name,
+                u"group": group,
+            }
+            if group is None:
+                fmt = u"{kind} \"{name}\" not found"
+            else:
+                fmt = u"{kind}.{group} \"{name}\" not found"
             return response(
                 request,
                 NOT_FOUND,
                 iobject_to_raw(v1.Status(
                     status=u"Failure",
-                    message=u"{} \"{!s}\" not found".format(collection_name, name),
+                    message=fmt.format(**details),
                     reason=u"NotFound",
-                    details={u"name": name, u"kind": collection_name},
+                    details=details,
                     metadata={},
                     code=NOT_FOUND,
                 )),
@@ -179,9 +180,11 @@ class _Kubernetes(object):
             setattr(self.state, nativeString(collection_name), added)
             return response(request, CREATED, iobject_to_raw(obj))
 
-    def _delete(self, request, collection, collection_name, name):
+    def _delete(self, request, collection, collection_name, namespace, name):
+        if namespace is not None:
+            collection = self._reduce_to_namespace(collection, namespace)
         obj = collection.item_by_name(name)
-        setattr(self.state, collection_name, collection.replace(obj, terminate(obj)))
+        setattr(self.state, collection_name, obj.delete_from(collection))
         return response(request, OK, iobject_to_raw(obj))
 
     app = Klein()
@@ -213,7 +216,7 @@ class _Kubernetes(object):
             """
             Get one Namespace by name.
             """
-            return self._get(request, self.state.namespaces, u"namespaces", None, namespace)
+            return self._get(None, request, self.state.namespaces, u"namespaces", None, namespace)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
         def delete_namespace(self, request, namespace):
@@ -221,7 +224,7 @@ class _Kubernetes(object):
             Delete one Namespace by name.
             """
             return self._delete(
-                request, self.state.namespaces, "namespaces", namespace,
+                request, self.state.namespaces, "namespaces", None, namespace,
             )
 
         @app.route(u"/namespaces", methods=[u"POST"])
@@ -243,7 +246,7 @@ class _Kubernetes(object):
             """
             Get one ConfigMap by name.
             """
-            return self._get(request, self.state.configmaps, u"configmaps", namespace, configmap)
+            return self._get(None, request, self.state.configmaps, u"configmaps", namespace, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
         def create_configmap(self, request, namespace):
@@ -270,3 +273,26 @@ class _Kubernetes(object):
             Get all existing Deployments.
             """
             return self._list(request, None, self.state.deployments)
+
+        @app.route(u"/namespaces/<namespace>/deployments/<deployment>", methods=[u"GET"])
+        def get_deployment(self, request, namespace, deployment):
+            """
+            Get one Deployment by name.
+            """
+            return self._get(
+                u"extensions",
+                request,
+                self.state.deployments,
+                u"deployments",
+                namespace,
+                deployment,
+            )
+
+        @app.route(u"/namespaces/<namespace>/deployments/<deployment>", methods=[u"DELETE"])
+        def delete_deployment(self, request, namespace, deployment):
+            """
+            Delete one Deployment by name.
+            """
+            return self._delete(
+                request, self.state.deployments, "deployments", namespace, deployment,
+            )
