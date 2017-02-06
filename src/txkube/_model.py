@@ -80,6 +80,16 @@ class Namespace(v1.Namespace):
         )
 
 
+    def delete_from(self, collection):
+        # TODO: Add deletionTimestamp?  See #24
+        return collection.replace(
+            self,
+            self.transform(
+                [u"status"], v1.NamespaceStatus.terminating(),
+            ),
+        )
+
+
 
 @behavior(v1)
 @implementer(IObject)
@@ -121,6 +131,10 @@ class Deployment(v1beta1.Deployment):
             [u"metadata", u"labels"],
             set_if_none(self.spec.template.metadata.labels),
         )
+
+
+    def delete_from(self, collection):
+        return collection.remove(self)
 
 
 
