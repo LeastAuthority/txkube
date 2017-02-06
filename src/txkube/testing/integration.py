@@ -269,30 +269,16 @@ class _ConfigMapTestsMixin(TestCase):
 
 
     @async
-    def test_configmap(self):
+    @needs(namespace=creatable_namespaces().example())
+    def test_configmap(self, namespace):
         """
         ``ConfigMap`` objects can be created and retrieved using the ``create``
         and ``list`` methods of ``IKubernetesClient``.
         """
-        namespace = creatable_namespaces().example()
-        # Move the object into the namespace we're going to create.
-        obj = configmaps().example().transform(
-            [u"metadata", u"namespace"],
-            namespace.metadata.name,
+        self._create_list_test(
+            namespace, configmaps(), v1.ConfigMap, v1.ConfigMapList,
+            matches_configmap,
         )
-        d = self.client.create(namespace)
-        def created_namespace(ignored):
-            return self.client.create(obj)
-        d.addCallback(created_namespace)
-        def created_configmap(created):
-            self.assertThat(created, matches_configmap(obj))
-            return self.client.list(v1.ConfigMap)
-        d.addCallback(created_configmap)
-        def check_configmaps(collection):
-            self.assertThat(collection, IsInstance(v1.ConfigMapList))
-            self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
-        d.addCallback(check_configmaps)
-        return d
 
 
     @async
@@ -356,21 +342,10 @@ class _DeploymentTestsMixin(object):
         ``Deployment`` objects can be created and retrieved using the ``create``
         and ``list`` methods of ``IKubernetesClient``.
         """
-        # Move the object into the namespace we've got.
-        obj = deployments().example().transform(
-            [u"metadata", u"namespace"],
-            namespace.metadata.name,
+        return self._create_list_test(
+            namespace, deployments(), v1beta1.Deployment,
+            v1beta1.DeploymentList, matches_deployment,
         )
-        d = self.client.create(obj)
-        def created_deployment(created):
-            self.assertThat(created, matches_deployment(obj))
-            return self.client.list(v1beta1.Deployment)
-        d.addCallback(created_deployment)
-        def check_deployments(collection):
-            self.assertThat(collection, IsInstance(v1beta1.DeploymentList))
-            self.assertThat(collection.items, AnyMatch(matches_deployment(obj)))
-        d.addCallback(check_deployments)
-        return d
 
 
     @async
@@ -497,6 +472,30 @@ def kubernetes_client_tests(get_kubernetes):
             def got_object(retrieved):
                 self.assertThat(retrieved, matches(obj))
             d.addCallback(got_object)
+            return d
+
+
+        def _create_list_test(self, namespace, strategy, cls, list_cls, matches):
+            """
+            Verify that a particular kind of namespaced Kubernetes object (such as
+            *Service* or *Secret*) can be created using
+            ``IKubernetesClient.create`` and then appears in the result of
+            ``IKubernetesClient.list``.
+            """
+            # Get an object in the namespace.
+            expected = strategy.example().transform(
+                [u"metadata", u"namespace"],
+                namespace.metadata.name,
+            )
+            d = self.client.create(expected)
+            def created(actual):
+                self.assertThat(actual, matches(expected))
+                return self.client.list(cls)
+            d.addCallback(created)
+            def check(collection):
+                self.assertThat(collection, IsInstance(list_cls))
+                self.assertThat(collection.items, AnyMatch(matches(expected)))
+            d.addCallback(check)
             return d
 
 
