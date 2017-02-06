@@ -128,6 +128,7 @@ def set_if_none(desired_value):
     return transform
 
 
+
 @behavior(v1beta1)
 @implementer(IObject)
 class Deployment(v1beta1.Deployment):
@@ -140,7 +141,7 @@ class Deployment(v1beta1.Deployment):
         return self.transform(
             [u"metadata", u"labels"],
             set_if_none(self.spec.template.metadata.labels),
-        ),
+        )
 
 
 
