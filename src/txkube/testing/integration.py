@@ -475,7 +475,11 @@ def kubernetes_client_tests(get_kubernetes):
                 )
                 self.expectThat(
                     obj_names,
-                    Equals(set([key(bystander_a), key(bystander_b)])),
+                    MatchesAll(
+                        Contains(key(bystander_a)),
+                        Contains(key(bystander_b)),
+                        Not(Contains(key(victim))),
+                    ),
                 )
             d.addCallback(listed_objects)
             return d
