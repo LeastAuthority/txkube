@@ -243,8 +243,117 @@ class _NamespaceTestsMixin(object):
 
 
 
+class _ConfigMapTestsMixin(TestCase):
+    @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_duplicate_configmap_rejected(self, namespace):
+        """
+        ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+        ``KubernetesError`` if it is called with a ``ConfigMap`` object
+        with the same name as a *ConfigMap* which already exists in the
+        same namespace.
+        """
+        obj = configmaps().example()
+        # Put it in the namespace that was created.
+        obj = obj.transform(
+            [u"metadata", u"namespace"],
+            namespace.metadata.name,
+        )
+        d = self.client.create(obj)
+        d.addCallback(
+            lambda ignored: self._create_duplicate_rejected_test(
+                obj, u"configmaps"
+            )
+        )
+        return d
+
+
+    @async
+    def test_configmap(self):
+        """
+        ``ConfigMap`` objects can be created and retrieved using the ``create``
+        and ``list`` methods of ``IKubernetesClient``.
+        """
+        namespace = creatable_namespaces().example()
+        # Move the object into the namespace we're going to create.
+        obj = configmaps().example().transform(
+            [u"metadata", u"namespace"],
+            namespace.metadata.name,
+        )
+        d = self.client.create(namespace)
+        def created_namespace(ignored):
+            return self.client.create(obj)
+        d.addCallback(created_namespace)
+        def created_configmap(created):
+            self.assertThat(created, matches_configmap(obj))
+            return self.client.list(v1.ConfigMap)
+        d.addCallback(created_configmap)
+        def check_configmaps(collection):
+            self.assertThat(collection, IsInstance(v1.ConfigMapList))
+            self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
+        d.addCallback(check_configmaps)
+        return d
+
+
+    @async
+    def test_configmap_retrieval(self):
+        """
+        A specific ``ConfigMap`` object can be retrieved by name using
+        ``IKubernetesClient.get``.
+        """
+        return self._namespaced_object_retrieval_by_name_test(
+            configmaps(),
+            v1.ConfigMap,
+            matches_configmap,
+            group=None,
+        )
+
+
+    @async
+    def test_configmap_deletion(self):
+        """
+        A specific ``ConfigMap`` object can be deleted by name using
+        ``IKubernetesClient.delete``.
+        """
+        return self._namespaced_object_deletion_by_name_test(
+            configmaps(),
+            v1.ConfigMap,
+        )
+
+
+    @async
+    def test_configmaps_sorted(self):
+        """
+        ``ConfigMap`` objects retrieved with ``IKubernetesClient.list`` appear in
+        sorted order, with (namespace, name) as the sort key.
+        """
+        strategy = configmaps()
+        objs = [strategy.example(), strategy.example()]
+        ns = list(
+            v1.Namespace(
+                metadata=v1.ObjectMeta(name=obj.metadata.namespace),
+                status=None,
+            )
+            for obj
+            in objs
+        )
+        d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
+        def created_configmaps(ignored):
+            return self.client.list(v1.ConfigMap)
+        d.addCallback(created_configmaps)
+        def check_configmaps(collection):
+            self.expectThat(collection, items_are_sorted())
+        d.addCallback(check_configmaps)
+        return d
+
+
+
 def kubernetes_client_tests(get_kubernetes):
-    class KubernetesClientIntegrationTests(_NamespaceTestsMixin, TestCase):
+    class KubernetesClientIntegrationTests(
+        _NamespaceTestsMixin,
+        _ConfigMapTestsMixin,
+        TestCase
+    ):
         def setUp(self):
             super(KubernetesClientIntegrationTests, self).setUp()
             self.kubernetes = get_kubernetes(self)
@@ -376,57 +485,6 @@ def kubernetes_client_tests(get_kubernetes):
                     ),
                 )
             d.addBoth(failed)
-            return d
-
-
-        @async
-        @needs(namespace=creatable_namespaces().example())
-        def test_duplicate_configmap_rejected(self, namespace):
-            """
-            ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
-            ``KubernetesError`` if it is called with a ``ConfigMap`` object
-            with the same name as a *ConfigMap* which already exists in the
-            same namespace.
-            """
-            obj = configmaps().example()
-            # Put it in the namespace that was created.
-            obj = obj.transform(
-                [u"metadata", u"namespace"],
-                namespace.metadata.name,
-            )
-            d = self.client.create(obj)
-            d.addCallback(
-                lambda ignored: self._create_duplicate_rejected_test(
-                    obj, u"configmaps"
-                )
-            )
-            return d
-
-
-        @async
-        def test_configmap(self):
-            """
-            ``ConfigMap`` objects can be created and retrieved using the ``create``
-            and ``list`` methods of ``IKubernetesClient``.
-            """
-            namespace = creatable_namespaces().example()
-            # Move the object into the namespace we're going to create.
-            obj = configmaps().example().transform(
-                [u"metadata", u"namespace"],
-                namespace.metadata.name,
-            )
-            d = self.client.create(namespace)
-            def created_namespace(ignored):
-                return self.client.create(obj)
-            d.addCallback(created_namespace)
-            def created_configmap(created):
-                self.assertThat(created, matches_configmap(obj))
-                return self.client.list(v1.ConfigMap)
-            d.addCallback(created_configmap)
-            def check_configmaps(collection):
-                self.assertThat(collection, IsInstance(v1.ConfigMapList))
-                self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
-            d.addCallback(check_configmaps)
             return d
 
 
@@ -650,58 +708,6 @@ def kubernetes_client_tests(get_kubernetes):
                     ),
                 )
             d.addBoth(check_error)
-            return d
-
-
-        @async
-        def test_configmap_retrieval(self):
-            """
-            A specific ``ConfigMap`` object can be retrieved by name using
-            ``IKubernetesClient.get``.
-            """
-            return self._namespaced_object_retrieval_by_name_test(
-                configmaps(),
-                v1.ConfigMap,
-                matches_configmap,
-                group=None,
-            )
-
-
-        @async
-        def test_configmap_deletion(self):
-            """
-            A specific ``ConfigMap`` object can be deleted by name using
-            ``IKubernetesClient.delete``.
-            """
-            return self._namespaced_object_deletion_by_name_test(
-                configmaps(),
-                v1.ConfigMap,
-            )
-
-
-        @async
-        def test_configmaps_sorted(self):
-            """
-            ``ConfigMap`` objects retrieved with ``IKubernetesClient.list`` appear in
-            sorted order, with (namespace, name) as the sort key.
-            """
-            strategy = configmaps()
-            objs = [strategy.example(), strategy.example()]
-            ns = list(
-                v1.Namespace(
-                    metadata=v1.ObjectMeta(name=obj.metadata.namespace),
-                    status=None,
-                )
-                for obj
-                in objs
-            )
-            d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
-            def created_configmaps(ignored):
-                return self.client.list(v1.ConfigMap)
-            d.addCallback(created_configmaps)
-            def check_configmaps(collection):
-                self.expectThat(collection, items_are_sorted())
-            d.addCallback(check_configmaps)
             return d
 
     return KubernetesClientIntegrationTests
