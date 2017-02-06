@@ -237,7 +237,7 @@ class _NamespaceTestsMixin(object):
         with the same name as a *Namespace* which already exists.
         """
         return self._create_duplicate_rejected_test(
-            None, creatable_namespaces(), u"namespaces",
+            None, creatable_namespaces(), u"namespaces", None,
         )
 
 
@@ -253,7 +253,7 @@ class _ConfigMapTestsMixin(TestCase):
         same namespace.
         """
         return self._create_duplicate_rejected_test(
-            namespace, configmaps(), u"configmaps",
+            namespace, configmaps(), u"configmaps", None,
         )
 
 
@@ -334,6 +334,20 @@ class _DeploymentTestsMixin(object):
         return self._create_list_test(
             namespace, deployments(), v1beta1.Deployment,
             v1beta1.DeploymentList, matches_deployment,
+        )
+
+
+    @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_duplicate_deployment_rejected(self, namespace):
+        """
+        ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+        ``KubernetesError`` if it is called with a ``Deployment`` object with
+        the same name as a *Deployment* which already exists in the same
+        namespace.
+        """
+        return self._create_duplicate_rejected_test(
+            namespace, deployments(), u"deployments", u"extensions",
         )
 
 
@@ -488,7 +502,7 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        def _create_duplicate_rejected_test(self, namespace, strategy, kind):
+        def _create_duplicate_rejected_test(self, namespace, strategy, kind, group):
             """
             Verify an object cannot be created if its name (and maybe namespace) is
             already taken.
@@ -498,6 +512,11 @@ def kubernetes_client_tests(get_kubernetes):
             :param unicode kind: The name of the collection of the *kind* of
                 ``obj``, lowercase.  For example, *configmaps*.
             """
+            if group is None:
+                kind_identifier = kind
+            else:
+                kind_identifier = u"{}.{}".format(kind, group)
+
             obj = strategy.example()
             # Put it in the namespace.
             if namespace is not None:
@@ -523,11 +542,14 @@ def kubernetes_client_tests(get_kubernetes):
                             # ... already exists"?  How about "Namespace
                             # ... already exists"?  Maybe report it to
                             # Kubernetes.
-                            message=u"{} \"{}\" already exists".format(kind, obj.metadata.name),
+                            message=u"{} \"{}\" already exists".format(
+                                kind_identifier, obj.metadata.name,
+                            ),
                             reason=u"AlreadyExists",
                             details=dict(
                                 name=obj.metadata.name,
                                 kind=kind,
+                                group=group,
                             ),
                             code=CONFLICT,
                         )),
