@@ -136,20 +136,29 @@ class _Kubernetes(object):
                 collection = self._reduce_to_namespace(collection, namespace)
             return response(request, OK, iobject_to_raw(collection))
 
-    def _get(self, request, collection, collection_name, namespace, name):
+    def _get(self, group, request, collection, collection_name, namespace, name):
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         try:
             obj = collection.item_by_name(name)
         except KeyError:
+            details = {
+                u"name": name,
+                u"kind": collection_name,
+                u"group": group,
+            }
+            if group is None:
+                fmt = u"{kind} \"{name}\" not found"
+            else:
+                fmt = u"{kind}.{group} \"{name}\" not found"
             return response(
                 request,
                 NOT_FOUND,
                 iobject_to_raw(v1.Status(
                     status=u"Failure",
-                    message=u"{} \"{!s}\" not found".format(collection_name, name),
+                    message=fmt.format(**details),
                     reason=u"NotFound",
-                    details={u"name": name, u"kind": collection_name},
+                    details=details,
                     metadata={},
                     code=NOT_FOUND,
                 )),
@@ -213,7 +222,7 @@ class _Kubernetes(object):
             """
             Get one Namespace by name.
             """
-            return self._get(request, self.state.namespaces, u"namespaces", None, namespace)
+            return self._get(None, request, self.state.namespaces, u"namespaces", None, namespace)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
         def delete_namespace(self, request, namespace):
@@ -243,7 +252,7 @@ class _Kubernetes(object):
             """
             Get one ConfigMap by name.
             """
-            return self._get(request, self.state.configmaps, u"configmaps", namespace, configmap)
+            return self._get(None, request, self.state.configmaps, u"configmaps", namespace, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
         def create_configmap(self, request, namespace):
@@ -277,6 +286,7 @@ class _Kubernetes(object):
             Get one Deployment by name.
             """
             return self._get(
+                u"extensions",
                 request,
                 self.state.deployments,
                 u"deployments",
