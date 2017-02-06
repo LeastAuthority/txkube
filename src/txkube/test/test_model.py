@@ -25,6 +25,7 @@ from ..testing.strategies import (
     object_name,
     iobjects,
     namespacelists,
+    objectcollections,
 )
 
 from .. import (
@@ -115,6 +116,16 @@ class IObjectTests(TestCase):
         serialized = dumps(marshalled)
         deserialized = loads(serialized)
         self.expectThat(marshalled, MappingEquals(deserialized))
+
+
+    @given(objectcollections())
+    def test_empty_collection(self, collection):
+        """
+        The ``items`` of a collection can be made empty in a couple different
+        ways.
+        """
+        self.expectThat(collection.set(items=None).items, Equals([]))
+        self.expectThat(collection.set(items=[]).items, Equals([]))
 
 
     def test_unknown_version(self):

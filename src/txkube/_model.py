@@ -200,6 +200,20 @@ class _List(object):
         return required_unique(self.items, object_sort_key)
 
 
+    @staticmethod
+    def __new__(cls, **kwargs):
+        # The Kubernetes Swagger schema for Lists claims items is a *required*
+        # *array*.  However, it is frequently None/null instead.  Hack around
+        # such values, turning them into the empty sequence.
+        #
+        # It might be better to fix this with a schema overlay instead - eg,
+        # with a tweak to mark them as optional instead of required.
+        items = kwargs.get(u"items", None)
+        if items is None:
+            kwargs[u"items"] = ()
+        return super(_List, cls).__new__(cls, **kwargs)
+
+
     def item_by_name(self, name):
         """
         Find an item in this collection by its name metadata.
@@ -240,14 +254,14 @@ class NamespaceList(_List, v1.NamespaceList):
 
 @behavior(v1)
 @implementer(IObject)
-class ConfigMapList(v1.ConfigMapList, _List):
+class ConfigMapList(_List, v1.ConfigMapList):
     pass
 
 
 
 @behavior(v1beta1)
 @implementer(IObject)
-class DeploymentList(v1beta1.DeploymentList, _List):
+class DeploymentList(_List, v1beta1.DeploymentList):
     pass
 
 
