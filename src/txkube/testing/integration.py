@@ -348,10 +348,64 @@ class _ConfigMapTestsMixin(TestCase):
 
 
 
+class _DeploymentTestsMixin(object):
+    @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_deployment(self, namespace):
+        """
+        ``Deployment`` objects can be created and retrieved using the ``create``
+        and ``list`` methods of ``IKubernetesClient``.
+        """
+        # Move the object into the namespace we've got.
+        obj = deployments().example().transform(
+            [u"metadata", u"namespace"],
+            namespace.metadata.name,
+        )
+        d = self.client.create(obj)
+        def created_deployment(created):
+            self.assertThat(created, matches_deployment(obj))
+            return self.client.list(v1beta1.Deployment)
+        d.addCallback(created_deployment)
+        def check_deployments(collection):
+            self.assertThat(collection, IsInstance(v1beta1.DeploymentList))
+            self.assertThat(collection.items, AnyMatch(matches_deployment(obj)))
+        d.addCallback(check_deployments)
+        return d
+
+
+    @async
+    def test_deployment_retrieval(self):
+        """
+        A specific ``Deployment`` object can be retrieved by name using
+        ``IKubernetesClient.get``.
+        """
+        return self._namespaced_object_retrieval_by_name_test(
+            deployments(),
+            v1beta1.Deployment,
+            matches_deployment,
+            group=u"extensions",
+        )
+
+
+    @async
+    def test_deployment_deletion(self):
+        """
+        A specific ``Deployment`` object can be deleted by name using
+        ``IKubernetesClient.delete``.
+        """
+        return self._namespaced_object_deletion_by_name_test(
+            deployments(),
+            v1beta1.Deployment,
+        )
+
+
+
+
 def kubernetes_client_tests(get_kubernetes):
     class KubernetesClientIntegrationTests(
         _NamespaceTestsMixin,
         _ConfigMapTestsMixin,
+        _DeploymentTestsMixin,
         TestCase
     ):
         def setUp(self):
@@ -488,44 +542,6 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        @async
-        @needs(namespace=creatable_namespaces().example())
-        def test_deployment(self, namespace):
-            """
-            ``Deployment`` objects can be created and retrieved using the ``create``
-            and ``list`` methods of ``IKubernetesClient``.
-            """
-            # Move the object into the namespace we've got.
-            obj = deployments().example().transform(
-                [u"metadata", u"namespace"],
-                namespace.metadata.name,
-            )
-            d = self.client.create(obj)
-            def created_deployment(created):
-                self.assertThat(created, matches_deployment(obj))
-                return self.client.list(v1beta1.Deployment)
-            d.addCallback(created_deployment)
-            def check_deployments(collection):
-                self.assertThat(collection, IsInstance(v1beta1.DeploymentList))
-                self.assertThat(collection.items, AnyMatch(matches_deployment(obj)))
-            d.addCallback(check_deployments)
-            return d
-
-
-        @async
-        def test_deployment_retrieval(self):
-            """
-            A specific ``Deployment`` object can be retrieved by name using
-            ``IKubernetesClient.get``.
-            """
-            return self._namespaced_object_retrieval_by_name_test(
-                deployments(),
-                v1beta1.Deployment,
-                matches_deployment,
-                group=u"extensions",
-            )
-
-
         @needs(
             victim_namespace=creatable_namespaces().example(),
             bystander_namespace=creatable_namespaces().example()
@@ -604,18 +620,6 @@ def kubernetes_client_tests(get_kubernetes):
                 )
             d.addCallback(listed_objects)
             return d
-
-
-        @async
-        def test_deployment_deletion(self):
-            """
-            A specific ``Deployment`` object can be deleted by name using
-            ``IKubernetesClient.delete``.
-            """
-            return self._namespaced_object_deletion_by_name_test(
-                deployments(),
-                v1beta1.Deployment,
-            )
 
 
         @needs(namespace=creatable_namespaces().example())
