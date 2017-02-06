@@ -230,15 +230,14 @@ class _NamespaceTestsMixin(object):
 
 
     @async
-    @needs(obj=creatable_namespaces().example())
-    def test_duplicate_namespace_rejected(self, obj):
+    def test_duplicate_namespace_rejected(self):
         """
         ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
         ``KubernetesError`` if it is called with a ``Namespace`` object
         with the same name as a *Namespace* which already exists.
         """
         return self._create_duplicate_rejected_test(
-            _named(v1.Namespace, name=obj.metadata.name), u"namespaces",
+            None, creatable_namespaces(), u"namespaces",
         )
 
 
@@ -253,19 +252,9 @@ class _ConfigMapTestsMixin(TestCase):
         with the same name as a *ConfigMap* which already exists in the
         same namespace.
         """
-        obj = configmaps().example()
-        # Put it in the namespace that was created.
-        obj = obj.transform(
-            [u"metadata", u"namespace"],
-            namespace.metadata.name,
+        return self._create_duplicate_rejected_test(
+            namespace, configmaps(), u"configmaps",
         )
-        d = self.client.create(obj)
-        d.addCallback(
-            lambda ignored: self._create_duplicate_rejected_test(
-                obj, u"configmaps"
-            )
-        )
-        return d
 
 
     @async
@@ -499,20 +488,27 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        def _create_duplicate_rejected_test(self, obj, kind):
+        def _create_duplicate_rejected_test(self, namespace, strategy, kind):
             """
             Verify an object cannot be created if its name (and maybe namespace) is
             already taken.
 
-            :param IObject obj: Some object to create.  An object with the
-                same name (and namespace, if it is a namespaced *kind*) is
-                expected to already have been created by the caller.
+            :param IObject obj: Some object to create and try to create again.
 
             :param unicode kind: The name of the collection of the *kind* of
                 ``obj``, lowercase.  For example, *configmaps*.
             """
-            # obj was already created once.
+            obj = strategy.example()
+            # Put it in the namespace.
+            if namespace is not None:
+                obj = obj.transform(
+                    [u"metadata", u"namespace"],
+                    namespace.metadata.name,
+                )
             d = self.client.create(obj)
+            def created(ignored):
+                return self.client.create(obj)
+            d.addCallback(created)
             def failed(reason):
                 self.assertThat(reason, IsInstance(Failure))
                 reason.trap(KubernetesError)
