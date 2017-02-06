@@ -18,7 +18,12 @@ from . import UnrecognizedVersion, UnrecognizedKind, IObject
 from ._swagger import Swagger, VersionedPClasses
 
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
-v1 = VersionedPClasses(spec, u"v1", name_field=u"kind", version_field=u"apiVersion")
+v1 = VersionedPClasses(
+    spec, u"v1", name_field=u"kind", version_field=u"apiVersion",
+)
+v1beta1 = VersionedPClasses(
+    spec, u"v1beta1", name_field=u"kind", version_field=u"apiVersion",
+)
 
 
 def behavior(namespace):
@@ -108,6 +113,35 @@ class ConfigMap(v1.ConfigMap):
         # TODO Surely some stuff to fill.
         # See https://github.com/LeastAuthority/txkube/issues/36
         return self
+
+
+
+def set_if_none(desired_value):
+    """
+    Create a transformer which sets the given value if it finds ``None`` as
+    the current value, otherwise leaves the current value alone.
+    """
+    def transform(current_value):
+        if current_value is None:
+            return desired_value
+        return current_value
+    return transform
+
+
+
+@behavior(v1beta1)
+@implementer(IObject)
+class Deployment(v1beta1.Deployment):
+    """
+    ``Deployment`` instances model ``Deployment objects
+    <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
+    """
+    def fill_defaults(self):
+        # Copying apparent Kubernetes behavior.
+        return self.transform(
+            [u"metadata", u"labels"],
+            set_if_none(self.spec.template.metadata.labels),
+        )
 
 
 
@@ -211,21 +245,42 @@ class ConfigMapList(v1.ConfigMapList, _List):
 
 
 
-def iobject_to_raw(obj):
-    result = obj.serialize()
-    result.update({
-        u"kind": obj.kind,
-        u"apiVersion": obj.apiVersion,
-    })
-    return result
+@behavior(v1beta1)
+@implementer(IObject)
+class DeploymentList(v1beta1.DeploymentList, _List):
+    pass
+
 
 
 _versions = {
     u"v1": v1,
+    u"v1beta1": v1beta1,
 }
 
+def _mutilate(version):
+    if version == u"v1beta1":
+        return u"extensions/v1beta1"
+    return version
+
+
+
+def _unmutilate(version):
+    if version.startswith(u"extensions/"):
+        return version[len(u"extensions/"):]
+    return version
+
+
+
+def iobject_to_raw(obj):
+    result = obj.serialize()
+    result.update({
+        u"kind": obj.kind,
+        u"apiVersion": _mutilate(obj.apiVersion),
+    })
+    return result
+
 @mutant
-def iobject_from_raw(obj, kind_hint=None, version_hint=None):
+def iobject_from_raw(obj):
     """
     Load an object of unspecified type from the raw representation of it.
 
@@ -233,8 +288,8 @@ def iobject_from_raw(obj, kind_hint=None, version_hint=None):
 
     :return IObject: The loaded object.
     """
-    kind = obj.get(u"kind", kind_hint)
-    apiVersion = obj.get(u"apiVersion", version_hint)
+    kind = obj[u"kind"]
+    apiVersion = _unmutilate(obj[u"apiVersion"])
     try:
         v = _versions[apiVersion]
     except KeyError:

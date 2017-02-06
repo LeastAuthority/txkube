@@ -10,7 +10,7 @@ __all__ = [
     "IObject", "IKubernetes", "IKubernetesClient",
 
     "KubernetesError", "UnrecognizedVersion", "UnrecognizedKind",
-    "v1", "iobject_from_raw", "iobject_to_raw",
+    "v1", "v1beta1", "iobject_from_raw", "iobject_to_raw",
 
     "memory_kubernetes",
     "network_kubernetes",  "network_kubernetes_from_context",
@@ -27,7 +27,7 @@ from ._exception import KubernetesError, UnrecognizedVersion, UnrecognizedKind
 from ._interface import IObject, IKubernetes, IKubernetesClient
 
 from ._model import (
-    v1,
+    v1, v1beta1,
     iobject_from_raw,
     iobject_to_raw,
 )

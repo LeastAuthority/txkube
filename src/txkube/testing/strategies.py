@@ -9,10 +9,10 @@ from string import ascii_lowercase, digits
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries,
+    dictionaries, tuples,
 )
 
-from .. import v1
+from .. import v1, v1beta1
 
 # Without some attempt to cap the size of collection strategies (lists,
 # dictionaries), the slowness health check fails intermittently.  Here are
@@ -25,16 +25,90 @@ from .. import v1
 _QUICK_AVERAGE_SIZE = 3
 _QUICK_MAX_SIZE = 10
 
-def object_name():
-    # https://kubernetes.io/docs/user-guide/identifiers/#names
-    # [a-z0-9]([-a-z0-9]*[a-z0-9])?
-    alphabet = ascii_lowercase + digits + b"-"
+def joins(sep, elements):
+    """
+    Strategy to join unicode strings built by another strategy.
+
+    :param unicode sep: The separate to join with.
+
+    :param elements: A strategy which builds a sequence of unicode strings to
+        join.
+
+    :return: A strategy for building the joined strings.
+    """
     return builds(
-        lambda parts: b"".join(parts).decode("ascii"),
-        lists(sampled_from(alphabet), min_size=1, average_size=10, max_size=253),
-    ).filter(
-        lambda value: not (value.startswith(b"-") or value.endswith(b"-"))
+        lambda values: sep.join(values),
+        elements,
     )
+join = joins
+
+
+def dns_labels():
+    # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/identifiers.md
+    # https://kubernetes.io/docs/user-guide/identifiers/#names
+    ends = (ascii_lowercase + digits).decode("ascii")
+    internal = ends + u"-"
+    return one_of(
+        # Could be just one character long
+        sampled_from(ends),
+        # Or longer
+        joins(
+            u"",
+            tuples(
+                sampled_from(ends),
+                text(
+                    alphabet=internal,
+                    min_size=0,
+                    max_size=61,
+                    average_size=_QUICK_AVERAGE_SIZE,
+                ),
+                sampled_from(ends),
+            ),
+        ),
+    )
+
+# XXX wrong
+object_name = object_names = image_names = dns_labels
+
+
+def dns_subdomains():
+    # XXX wrong
+    return joins(
+        u".",
+        lists(
+            dns_labels(),
+            min_size=1,
+            max_size=_QUICK_MAX_SIZE,
+            average_size=_QUICK_AVERAGE_SIZE,
+        ),
+    )
+
+
+def label_prefixes():
+    return dns_subdomains()
+
+
+def label_names():
+    # https://kubernetes.io/docs/user-guide/labels/#syntax-and-character-set
+    return dns_labels()
+
+
+def label_values():
+    # https://kubernetes.io/docs/user-guide/labels/#syntax-and-character-set
+    return label_names()
+
+
+def labels():
+    return dictionaries(
+        keys=one_of(
+            join(u"/", tuples(label_prefixes(), label_names())),
+            label_names(),
+        ),
+        values=label_values(),
+        average_size=_QUICK_MAX_SIZE,
+        max_size=_QUICK_MAX_SIZE,
+    )
+
 
 def object_metadatas():
     """
@@ -45,6 +119,10 @@ def object_metadatas():
         fixed_dictionaries({
             u"name": object_name(),
             u"uid": none(),
+            u"labels": one_of(
+                none(),
+                labels(),
+            ),
         }),
     )
 
@@ -145,6 +223,97 @@ def configmaps():
     )
 
 
+def containers():
+    """
+    Strategy to build ``v1.Container``.
+    """
+    return builds(
+        v1.Container,
+        name=dns_labels(),
+        # XXX Spec does not say image is required but it is
+        image=image_names(),
+    )
+
+
+def podspecs():
+    """
+    Strategy to build ``v1.PodSpec``.
+    """
+    return builds(
+        v1.PodSpec,
+        containers=lists(
+            containers(),
+            min_size=1,
+            average_size=_QUICK_MAX_SIZE,
+            max_size=_QUICK_MAX_SIZE,
+            unique_by=lambda container: container.name,
+        ),
+    )
+
+
+def podtemplatespecs():
+    """
+    Strategy to build ``v1.PodTemplateSpec``.
+    """
+    return builds(
+        v1.PodTemplateSpec,
+        # v1.ObjectMeta for a PodTemplateSpec must include some labels.
+        metadata=object_metadatas().filter(
+            lambda meta: meta.labels and len(meta.labels) > 0,
+        ),
+        spec=podspecs(),
+    )
+
+
+def deploymentspecs():
+    """
+    Strategy to build ``DeploymentSpec``.
+    """
+    return builds(
+        lambda template: v1beta1.DeploymentSpec(
+            template=template,
+            # The selector has to match the PodTemplateSpec.  This is an easy
+            # way to accomplish that but not the only way.
+            selector={u"matchLabels": template.metadata.labels},
+        ),
+        template=podtemplatespecs(),
+    )
+
+
+def deployments():
+    """
+    Strategy to build ``Deployment``.
+    """
+    return builds(
+        lambda metadata, spec: v1beta1.Deployment(
+            # The submitted Deployment.metadata.labels don't have to match the
+            # Deployment.spec.template.metadata.labels but the server will
+            # copy them up if they're missing at the top.
+            metadata=metadata.set("labels", spec.template.metadata.labels),
+            spec=spec,
+        ),
+        metadata=namespaced_object_metadatas(),
+        # XXX Spec is only required if you want to be able to create the
+        # Deployment.
+        spec=deploymentspecs(),
+    )
+
+
+def deploymentlists():
+    """
+    Strategy to build ``DeploymentList``.
+    """
+    return builds(
+        v1beta1.DeploymentList,
+        items=lists(
+            deployments(),
+            average_size=_QUICK_AVERAGE_SIZE,
+            max_size=_QUICK_MAX_SIZE,
+            unique_by=_unique_names_with_namespaces,
+        ),
+    )
+
+
 def configmaplists():
     """
     Strategy to build ``ConfigMapList``.
@@ -182,6 +351,7 @@ def objectcollections(namespaces=creatable_namespaces()):
     return one_of(
         configmaplists(),
         namespacelists(namespaces),
+        deploymentlists(),
     )
 
 
@@ -209,5 +379,6 @@ def iobjects():
         creatable_namespaces(),
         retrievable_namespaces(),
         configmaps(),
+        deployments(),
         objectcollections(),
     )

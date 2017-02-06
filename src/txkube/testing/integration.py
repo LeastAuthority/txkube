@@ -23,15 +23,19 @@ from twisted.internet.defer import gatherResults
 from twisted.internet.task import deferLater, cooperate
 from twisted.web.http import NOT_FOUND, CONFLICT
 
+from .._network import version_to_segments
+
 from ..testing import TestCase
 
 from .. import (
     KubernetesError,
     IKubernetesClient,
-    v1,
+    v1, v1beta1,
 )
 
-from .strategies import creatable_namespaces, configmaps
+from .strategies import (
+    creatable_namespaces, configmaps, deployments,
+)
 
 
 def async(f):
@@ -42,20 +46,38 @@ def async(f):
 
 
 
-def matches_namespace(ns):
+def matches_metadata(expected):
     return MatchesStructure(
         metadata=MatchesStructure(
-            name=Equals(ns.metadata.name),
+            namespace=Equals(expected.namespace),
+            name=Equals(expected.name),
+            # TODO: It would be nice to compare labels but currently that
+            # results in an annoying failure because of the confusion of
+            # representation of the empty value - {} vs None.
+            # https://github.com/LeastAuthority/txkube/issues/66
+            # labels=Equals(expected.labels),
         ),
     )
 
 
+def matches_namespace(ns):
+    return matches_metadata(ns.metadata)
+
 
 def matches_configmap(configmap):
-    return MatchesStructure(
-        metadata=MatchesStructure(
-            namespace=Equals(configmap.metadata.namespace),
-            name=Equals(configmap.metadata.name),
+    return matches_metadata(configmap.metadata)
+
+
+def matches_deployment(deployment):
+    return MatchesAll(
+        matches_metadata(deployment.metadata),
+        # Augh.  I think some kind of "expected is None or values match"
+        # matcher would help?
+        MatchesStructure(
+            spec=MatchesStructure(
+                selector=Equals(deployment.spec.selector),
+                template=matches_metadata(deployment.spec.template.metadata),
+            ),
         ),
     )
 
@@ -116,6 +138,15 @@ def kubernetes_client_tests(get_kubernetes):
                 apiVersion = u"v6txkube2"
                 kind = u"Mythical"
                 metadata = v1.ObjectMeta()
+
+            # The client won't know where to route the request without this.
+            # There is a more general problem here that the model is missing
+            # some unpredictable information about where the relevant APIs are
+            # exposed in the URL hierarchy.
+            version_to_segments[Mythical.apiVersion] = (
+                u"apis", u"extensions", Mythical.apiVersion,
+            )
+            self.addCleanup(lambda: version_to_segments.pop(Mythical.apiVersion))
 
             d = self.client.list(Mythical)
             def failed(reason):
@@ -328,6 +359,31 @@ def kubernetes_client_tests(get_kubernetes):
                 self.assertThat(collection.items, AnyMatch(matches_configmap(obj)))
             d.addCallback(check_configmaps)
             return d
+
+
+        @async
+        @needs(namespace=creatable_namespaces().example())
+        def test_deployment(self, namespace):
+            """
+            ``Deployment`` objects can be created and retrieved using the ``create``
+            and ``list`` methods of ``IKubernetesClient``.
+            """
+            # Move the object into the namespace we've got.
+            obj = deployments().example().transform(
+                [u"metadata", u"namespace"],
+                namespace.metadata.name,
+            )
+            d = self.client.create(obj)
+            def created_deployment(created):
+                self.assertThat(created, matches_deployment(obj))
+                return self.client.list(v1beta1.Deployment)
+            d.addCallback(created_deployment)
+            def check_deployments(collection):
+                self.assertThat(collection, IsInstance(v1beta1.DeploymentList))
+                self.assertThat(collection.items, AnyMatch(matches_deployment(obj)))
+            d.addCallback(check_deployments)
+            return d
+
 
 
         @needs(namespace=creatable_namespaces().example())

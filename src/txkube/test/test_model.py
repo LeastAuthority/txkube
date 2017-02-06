@@ -9,8 +9,11 @@ from json import loads, dumps
 
 from zope.interface.verify import verifyObject
 
+from pyrsistent import freeze
+
 from testtools.matchers import (
-    Equals, MatchesStructure, Not, Is, Contains, raises,
+    Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
+    IsInstance,
 )
 
 from hypothesis import given, assume
@@ -26,8 +29,48 @@ from ..testing.strategies import (
 
 from .. import (
     UnrecognizedVersion, UnrecognizedKind,
-    IObject, v1, iobject_to_raw, iobject_from_raw,
+    IObject, v1, v1beta1, iobject_to_raw, iobject_from_raw,
 )
+
+from .._model import set_if_none
+
+
+class SerializationTests(TestCase):
+    """
+    Tests for ``iobject_to_raw`` and ``iobject_from_raw``.
+    """
+    def test_v1_apiVersion(self):
+        """
+        Objects from ``v1`` serialize with an *apiVersion* of ``u"v1"``.
+        """
+        obj = v1.ComponentStatus()
+        raw = iobject_to_raw(obj)
+        self.expectThat(
+            raw[u"apiVersion"],
+            Equals(u"v1"),
+        )
+        self.expectThat(
+            iobject_from_raw(raw),
+            IsInstance(v1.ComponentStatus),
+        )
+
+
+    def test_v1beta1_apiVersion(self):
+        """
+        Objects from ``v1beta1`` serialize with an *apiVersion* of
+        ``u"extensions/v1beta1"``.
+        """
+        obj = v1beta1.CertificateSigningRequest()
+        raw = iobject_to_raw(obj)
+        self.expectThat(
+            raw[u"apiVersion"],
+            Equals(u"extensions/v1beta1"),
+        )
+        self.expectThat(
+            iobject_from_raw(raw),
+            IsInstance(v1beta1.CertificateSigningRequest),
+        )
+
 
 
 class IObjectTests(TestCase):
@@ -50,11 +93,12 @@ class IObjectTests(TestCase):
         """
         marshalled = iobject_to_raw(obj)
 
-        # Every IObject has these marshalled fields - and when looking at
-        # the marshalled form, they're necessary to figure out the
-        # schema/definition for the data.
-        self.expectThat(marshalled[u"kind"], Equals(obj.kind))
-        self.expectThat(marshalled[u"apiVersion"], Equals(obj.apiVersion))
+        # Every IObject has these marshalled fields - and when looking at the
+        # marshalled form, they're necessary to figure out the
+        # schema/definition for the data.  We can't say anything in general
+        # about the *values* (because of things like "extensions/v1beta1") but
+        # we can at least assert the keys are present.
+        self.expectThat(marshalled, ContainsAll([u"kind", u"apiVersion"]))
 
         # We should be able to unmarshal the data back to the same model
         # object as we started with.
@@ -214,3 +258,28 @@ class NamespaceListTests(TestCase):
             lambda: collection.item_by_name(item.metadata.name),
             raises(KeyError(item.metadata.name)),
         )
+
+
+
+class SetIfNoneTests(TestCase):
+    """
+    Tests for ``set_if_none``.
+    """
+    def test_none(self):
+        """
+        If the value for transformation is ``None``, the result contains the new
+        value instead.
+        """
+        structure = freeze({u"foo": None})
+        transformed = structure.transform([u"foo"], set_if_none(u"bar"))
+        self.assertThat(transformed[u"foo"], Equals(u"bar"))
+
+
+    def test_not_none(self):
+        """
+        If the value for transformation is not ``None``, the result contains the
+        original value.
+        """
+        structure = freeze({u"foo": u"baz"})
+        transformed = structure.transform([u"foo"], set_if_none(u"bar"))
+        self.assertThat(transformed[u"foo"], Equals(u"baz"))

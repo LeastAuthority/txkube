@@ -254,6 +254,12 @@ def object_location(obj):
 
 
 
+version_to_segments = {
+    u"v1": (u"api", u"v1"),
+    u"v1beta1": (u"apis", u"extensions", u"v1beta1"),
+}
+
+
 def collection_location(obj):
     """
     Get the URL for the collection of objects like ``obj``.
@@ -268,6 +274,9 @@ def collection_location(obj):
     # TODO kind is not part of IObjectLoader and we should really be loading
     # apiVersion off of this object too.
     kind = obj.kind
+    apiVersion = obj.apiVersion
+
+    prefix = version_to_segments[apiVersion]
 
     collection = kind.lower() + u"s"
 
@@ -280,10 +289,11 @@ def collection_location(obj):
 
     if namespace is None:
         # If there's no namespace, look in the un-namespaced area.
-        return (u"api", u"v1", collection)
+        return prefix + (collection,)
 
     # If there is, great, look there.
-    return (u"api", u"v1", u"namespaces", namespace, collection)
+    return prefix + (u"namespaces", namespace, collection)
+
 
 
 @implementer(IKubernetes)
