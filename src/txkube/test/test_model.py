@@ -22,7 +22,6 @@ from hypothesis.strategies import choices
 from ..testing import TestCase
 from ..testing.matchers import PClassEquals, MappingEquals
 from ..testing.strategies import (
-    object_name,
     iobjects,
     namespacelists,
     objectcollections,
