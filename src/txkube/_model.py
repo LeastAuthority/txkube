@@ -67,18 +67,7 @@ class Namespace(v1.Namespace):
         """
         Get the default namespace.
         """
-        return cls.named(u"default")
-
-
-    @classmethod
-    def named(cls, name):
-        """
-        Create an object with only the name metadata item.
-        """
-        return cls(
-            metadata=v1.ObjectMeta(name=name),
-            status=None,
-        )
+        return cls(metadata=v1.ObjectMeta(name=u"default"))
 
 
     def fill_defaults(self):
@@ -99,16 +88,6 @@ class ConfigMap(v1.ConfigMap):
     ``ConfigMap`` instances model `ConfigMap objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
     """
-    @classmethod
-    def named(cls, namespace, name):
-        """
-        Create an object with only namespace and name metadata items.
-        """
-        return cls(
-            metadata=v1.ObjectMeta(namespace=namespace, name=name),
-        )
-
-
     def fill_defaults(self):
         # TODO Surely some stuff to fill.
         # See https://github.com/LeastAuthority/txkube/issues/36

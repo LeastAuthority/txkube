@@ -96,6 +96,12 @@ def is_active():
     )
 
 
+
+def _named(kind, name, namespace):
+    return kind(metadata=v1.ObjectMeta(name=name, namespace=namespace))
+
+
+
 def kubernetes_client_tests(get_kubernetes):
     class KubernetesClientIntegrationTests(TestCase):
         def setUp(self):
@@ -205,7 +211,7 @@ def kubernetes_client_tests(get_kubernetes):
             obj = strategy.example()
             d = self.client.create(obj)
             def created_object(created):
-                return self.client.get(kind.named(obj.metadata.name))
+                return self.client.get(_named(kind, name=obj.metadata.name))
             d.addCallback(created_object)
             def got_object(retrieved):
                 self.assertThat(retrieved, matches(obj))
@@ -288,7 +294,7 @@ def kubernetes_client_tests(get_kubernetes):
             with the same name as a *Namespace* which already exists.
             """
             return self._create_duplicate_rejected_test(
-                v1.Namespace.named(obj.metadata.name), u"namespaces",
+                _named(v1.Namespace, name=obj.metadata.name), u"namespaces",
             )
 
 
@@ -419,7 +425,10 @@ def kubernetes_client_tests(get_kubernetes):
             obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
             d = self.client.create(obj)
             def created_object(created):
-                return self.client.get(cls.named(obj.metadata.namespace, obj.metadata.name))
+                return self.client.get(_named(
+                    cls,
+                    namespace=obj.metadata.namespace, name=obj.metadata.name,
+                ))
             d.addCallback(created_object)
             def got_object(retrieved):
                 self.expectThat(retrieved, matches(obj))
@@ -433,7 +442,11 @@ def kubernetes_client_tests(get_kubernetes):
                 else:
                     bogus_namespace += u"x"
                 return self.client.get(
-                    cls.named(bogus_namespace, obj.metadata.name),
+                    _named(
+                        cls,
+                        namespace=bogus_namespace,
+                        name=obj.metadata.name,
+                    ),
                 )
             d.addCallback(got_object)
             def check_error(reason):

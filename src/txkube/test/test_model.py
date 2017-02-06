@@ -178,22 +178,6 @@ class NamespaceTests(TestCase):
         )
 
 
-    @given(object_name())
-    def test_named(self, name):
-        """
-        ``Namespace.named`` returns a ``Namespace`` model object with the given
-        name.
-        """
-        self.assertThat(
-            v1.Namespace.named(name),
-            MatchesStructure(
-                metadata=MatchesStructure(
-                    name=Equals(name),
-                ),
-            ),
-        )
-
-
     def test_fill_defaults(self):
         """
         ``Namespace.fill_defaults`` returns a ``Namespace`` with *uid* metadata
@@ -201,7 +185,7 @@ class NamespaceTests(TestCase):
         """
         # If they are not set already, a uid is generated and put into the
         # metadata and the status is set to active.
-        sparse = v1.Namespace.named(u"foo")
+        sparse = v1.Namespace(metadata=v1.ObjectMeta(name=u"foo"))
         filled = sparse.fill_defaults()
         self.expectThat(
             filled,
@@ -210,28 +194,6 @@ class NamespaceTests(TestCase):
                     uid=Not(Is(None)),
                 ),
                 status=Equals(v1.NamespaceStatus.active()),
-            ),
-        )
-
-
-
-class ConfigMapTests(TestCase):
-    """
-    Tests for ``ConfigMap``.
-    """
-    @given(namespace=object_name(), name=object_name())
-    def test_named(self, namespace, name):
-        """
-        ``ConfigMap.named`` returns a ``ConfigMap`` model object with the given
-        namespace and name.
-        """
-        self.assertThat(
-            v1.ConfigMap.named(namespace, name),
-            MatchesStructure(
-                metadata=MatchesStructure(
-                    namespace=Equals(namespace),
-                    name=Equals(name),
-                ),
             ),
         )
 
