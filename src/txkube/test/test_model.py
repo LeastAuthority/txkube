@@ -9,6 +9,8 @@ from json import loads, dumps
 
 from zope.interface.verify import verifyObject
 
+from pyrsistent import freeze
+
 from testtools.matchers import (
     Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
     IsInstance,
@@ -29,6 +31,8 @@ from .. import (
     UnrecognizedVersion, UnrecognizedKind,
     IObject, v1, v1beta1, iobject_to_raw, iobject_from_raw,
 )
+
+from .._model import set_if_none
 
 
 class SerializationTests(TestCase):
@@ -254,3 +258,28 @@ class NamespaceListTests(TestCase):
             lambda: collection.item_by_name(item.metadata.name),
             raises(KeyError(item.metadata.name)),
         )
+
+
+
+class SetIfNoneTests(TestCase):
+    """
+    Tests for ``set_if_none``.
+    """
+    def test_none(self):
+        """
+        If the value for transformation is ``None``, the result contains the new
+        value instead.
+        """
+        structure = freeze({u"foo": None})
+        transformed = structure.transform([u"foo"], set_if_none(u"bar"))
+        self.assertThat(transformed[u"foo"], Equals(u"bar"))
+
+
+    def test_not_none(self):
+        """
+        If the value for transformation is not ``None``, the result contains the
+        original value.
+        """
+        structure = freeze({u"foo": u"baz"})
+        transformed = structure.transform([u"foo"], set_if_none(u"bar"))
+        self.assertThat(transformed[u"foo"], Equals(u"baz"))
