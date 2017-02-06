@@ -299,49 +299,47 @@ def deployments():
     )
 
 
+def _collections(cls, strategy, unique_by):
+    """
+    A helper for defining a strategy to build ``...List`` objects.
+
+    :param cls: The model class to instantiate.
+    :param strategy: A strategy to build elements for the collection.
+    :param unique_by: A key function compatible with the ``lists`` strategy.
+    """
+    return builds(
+        cls,
+        items=one_of(
+            none(),
+            lists(
+                strategy,
+                average_size=_QUICK_AVERAGE_SIZE,
+                max_size=_QUICK_MAX_SIZE,
+                unique_by=unique_by,
+            ),
+        ),
+    )
+
+
 def deploymentlists():
     """
     Strategy to build ``DeploymentList``.
     """
-    return builds(
-        v1beta1.DeploymentList,
-        items=lists(
-            deployments(),
-            average_size=_QUICK_AVERAGE_SIZE,
-            max_size=_QUICK_MAX_SIZE,
-            unique_by=_unique_names_with_namespaces,
-        ),
-    )
+    return _collections(v1beta1.DeploymentList, deployments(), _unique_names_with_namespaces)
 
 
 def configmaplists():
     """
     Strategy to build ``ConfigMapList``.
     """
-    return builds(
-        v1.ConfigMapList,
-        items=lists(
-            configmaps(),
-            average_size=_QUICK_AVERAGE_SIZE,
-            max_size=_QUICK_MAX_SIZE,
-            unique_by=_unique_names_with_namespaces,
-        ),
-    )
+    return _collections(v1.ConfigMapList, configmaps(), _unique_names_with_namespaces)
 
 
 def namespacelists(namespaces=creatable_namespaces()):
     """
     Strategy to build ``NamespaceList``.
     """
-    return builds(
-        v1.NamespaceList,
-        items=lists(
-            namespaces,
-            average_size=_QUICK_AVERAGE_SIZE,
-            max_size=_QUICK_MAX_SIZE,
-            unique_by=_unique_names,
-        ),
-    )
+    return _collections(v1.NamespaceList, namespaces, _unique_names)
 
 
 def objectcollections(namespaces=creatable_namespaces()):
