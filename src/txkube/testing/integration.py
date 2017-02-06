@@ -446,6 +446,10 @@ def kubernetes_client_tests(get_kubernetes):
             bystander_a = bystander_a.transform(
                 [u"metadata", u"namespace"], victim_namespace.metadata.name,
             )
+            # And the other in another namespace.
+            bystander_b = bystander_b.transform(
+                [u"metadata", u"namespace"], bystander_namespace.metadata.name,
+            )
             d = gatherResults(list(
                 self.client.create(o)
                 for o
