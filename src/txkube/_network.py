@@ -235,8 +235,7 @@ class _NetworkClient(object):
             d = DeferredContext(self._get(url))
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
-            d.addCallback(loads)
-            d.addCallback(iobject_from_raw)
+            d.addCallback(lambda body: iobject_from_raw(loads(body)))
             return d.addActionFinish()
 
 
