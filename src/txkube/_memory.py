@@ -107,9 +107,9 @@ def response(request, status, obj):
 
 def _message(details, event):
     if details.get(u"group") is None:
-        fmt = u"{kind} \"{name}\" {event}"
+        fmt = u'{kind} "{name}" {event}'
     else:
-        fmt = u"{kind}.{group} \"{name}\" {event}"
+        fmt = u'{kind}.{group} "{name}" {event}'
     return fmt.format(event=event, **details)
 
 
