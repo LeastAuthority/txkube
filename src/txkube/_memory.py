@@ -305,6 +305,15 @@ class _Kubernetes(object):
                 service,
             )
 
+        @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"DELETE"])
+        def delete_service(self, request, namespace, service):
+            """
+            Delete one Service by name.
+            """
+            return self._delete(
+                request, self.state.services, "services", namespace, service,
+            )
+
     with app.subroute(u"/apis/extensions/v1beta1") as app:
         @app.route(u"/namespaces/<namespace>/deployments", methods=[u"POST"])
         def create_deployment(self, request, namespace):

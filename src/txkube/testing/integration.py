@@ -424,6 +424,18 @@ class _ServiceTestsMixin(object):
         )
 
 
+    @async
+    def test_service_deletion(self):
+        """
+        A specific ``Service`` object can be deleted by name using
+        ``IKubernetesClient.delete``.
+        """
+        return self._namespaced_object_deletion_by_name_test(
+            services(),
+            v1.Service,
+        )
+
+
 
 def kubernetes_client_tests(get_kubernetes):
     class KubernetesClientIntegrationTests(
