@@ -192,6 +192,12 @@ class _Kubernetes(object):
             setattr(self.state, nativeString(collection_name), added)
             return response(request, CREATED, iobject_to_raw(obj))
 
+    def _replace(self, group, request, collection, collection_name, namespace, name):
+        old = collection.item_by_name(name)
+        new = iobject_from_raw(loads(request.content.read()))
+        setattr(self.state, collection_name, collection.replace(old, new))
+        return response(request, OK, iobject_to_raw(new))
+
     def _delete(self, request, collection, collection_name, namespace, name):
         if namespace is None:
             obj = collection.item_by_name(name)
@@ -247,6 +253,20 @@ class _Kubernetes(object):
             """
             return self._create(None, request, self.state.namespaces, u"namespaces")
 
+        @app.route(u"/namespaces/<namespace>", methods=[u"PUT"])
+        def replace_namespace(self, request, namespace):
+            """
+            Replace an existing Namespace.
+            """
+            return self._replace(
+                None,
+                request,
+                self.state.namespaces,
+                u"namespaces",
+                None,
+                namespace,
+            )
+
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request):
             """
@@ -268,6 +288,20 @@ class _Kubernetes(object):
             """
             return self._create(None, request, self.state.configmaps, u"configmaps")
 
+        @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"PUT"])
+        def replace_configmap(self, request, namespace, configmap):
+            """
+            Replace an existing ConfigMap.
+            """
+            return self._replace(
+                None,
+                request,
+                self.state.configmaps,
+                u"configmaps",
+                namespace,
+                configmap,
+            )
+
         @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"DELETE"])
         def delete_configmap(self, request, namespace, configmap):
             """
@@ -283,6 +317,20 @@ class _Kubernetes(object):
             Create a new Service.
             """
             return self._create(None, request, self.state.services, u"services")
+
+        @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"PUT"])
+        def replace_service(self, request, namespace, service):
+            """
+            Replace an existing Service.
+            """
+            return self._replace(
+                None,
+                request,
+                self.state.services,
+                u"services",
+                namespace,
+                service,
+            )
 
         @app.route(u"/services", methods=[u"GET"])
         def list_services(self, request):
@@ -325,6 +373,20 @@ class _Kubernetes(object):
                 request,
                 self.state.deployments,
                 u"deployments",
+            )
+
+        @app.route(u"/namespaces/<namespace>/deployments/<deployment>", methods=[u"PUT"])
+        def replace_deployment(self, request, namespace, deployment):
+            """
+            Replace an existing Deployment.
+            """
+            return self._replace(
+                u"extensions",
+                request,
+                self.state.deployments,
+                u"deployments",
+                namespace,
+                deployment,
             )
 
         @app.route(u"/deployments", methods=[u"GET"])

@@ -159,6 +159,12 @@ class _NetworkClient(object):
         )
 
 
+    def _put(self, url, obj):
+        return self._request(
+            b"PUT", url, bodyProducer=_BytesProducer(dumps(obj)),
+        )
+
+
     def create(self, obj):
         """
         Issue a I{POST} to create the given object.
@@ -172,6 +178,26 @@ class _NetworkClient(object):
             Message.log(submitted_object=document)
             d = DeferredContext(self._post(url, document))
             d.addCallback(check_status, (CREATED,))
+            d.addCallback(readBody)
+            d.addCallback(loads)
+            d.addCallback(log_response_object, action)
+            d.addCallback(iobject_from_raw)
+            return d.addActionFinish()
+
+
+    def replace(self, obj):
+        """
+        Issue a I{PUT} to replace an existing object with a new one.
+        """
+        action = start_action(
+            action_type=u"network-client:create",
+        )
+        with action.context():
+            url = self.kubernetes.base_url.child(*object_location(obj))
+            document = iobject_to_raw(obj)
+            action.add_success_fields(submitted_object=document)
+            d = DeferredContext(self._put(url, document))
+            d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)

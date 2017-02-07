@@ -87,6 +87,18 @@ class IKubernetesClient(Interface):
         """
 
 
+    def replace(obj):
+        """
+        Replace an existing object with a new one.
+
+        :param IObject obj: The replacement object.  An old object with the
+            same name in the same namespace (if applicable) will be replaced
+            with this one.
+
+        :return Deferred(IObject): A description of the created object.
+        """
+
+
     def get(obj):
         """
         Get a single object.

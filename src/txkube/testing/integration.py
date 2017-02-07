@@ -205,6 +205,19 @@ class _NamespaceTestsMixin(object):
 
 
     @async
+    def test_namespace_replacement(self):
+        """
+        A specific ``Namespace`` object can be replaced by name using
+        ``IKubernetesClient.replace``.
+        """
+        return self._object_replacement_test(
+            None,
+            creatable_namespaces(),
+            matches_namespace,
+        )
+
+
+    @async
     def test_namespace_deletion(self):
         """
         ``IKubernetesClient.delete`` can be used to delete ``Namespace``
@@ -285,6 +298,20 @@ class _ConfigMapTestsMixin(TestCase):
             v1.ConfigMap,
             matches_configmap,
             group=None,
+        )
+
+
+    @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_configmap_replacement(self, namespace):
+        """
+        A specific ``ConfigMap`` object can be replaced by name using
+        ``IKubernetesClient.replace``.
+        """
+        return self._object_replacement_test(
+            namespace,
+            configmaps(),
+            matches_configmap,
         )
 
 
@@ -370,6 +397,20 @@ class _DeploymentTestsMixin(object):
 
 
     @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_deployment_replacement(self, namespace):
+        """
+        A specific ``Deployment`` object can be replaced by name using
+        ``IKubernetesClient.replace``.
+        """
+        return self._object_replacement_test(
+            namespace,
+            deployments(),
+            matches_deployment,
+        )
+
+
+    @async
     def test_deployment_deletion(self):
         """
         A specific ``Deployment`` object can be deleted by name using
@@ -421,6 +462,20 @@ class _ServiceTestsMixin(object):
             v1.Service,
             matches_service,
             group=None,
+        )
+
+
+    @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_service_replacement(self, namespace):
+        """
+        A specific ``Service`` object can be replaced by name using
+        ``IKubernetesClient.replace``.
+        """
+        return self._object_replacement_test(
+            namespace,
+            services(),
+            matches_service,
         )
 
 
@@ -534,6 +589,49 @@ def kubernetes_client_tests(get_kubernetes):
             def got_object(retrieved):
                 self.assertThat(retrieved, matches(obj))
             d.addCallback(got_object)
+            return d
+
+
+        def _object_replacement_test(self, namespace, strategy, matches):
+            """
+            Verify that an existing object can be replaced by a new one.
+
+            :param namespace: If the object belongs in a namespace, the name
+                of an existing namespace to create it in.  ``None`` if not.
+
+            :param strategy: A Hypothesis strategy for building the object to
+                create and the object to replace it with.
+
+            :param matches: A one-argument caller which takes the expected
+                object and returns a testtools matcher for it.  Since created
+                objects have some unpredictable server-generated fields, this
+                matcher can compare just the important, predictable parts of
+                the object.
+
+            :return: A ``Deferred`` that fires when the behavior has been
+                verified.
+            """
+            original = strategy.example()
+            if namespace is not None:
+                original = strategy.example().transform(
+                    [u"metadata", u"namespace"], original.metadata.namespace,
+                )
+            replacement = strategy.example().transform(
+                [u"metadata", u"namespace"], original.metadata.namespace,
+                [u"metadata", u"name"], original.metadata.name,
+            )
+
+            d = self.client.create(original)
+            def created(ignored):
+                return self.client.replace(replacement)
+            d.addCallback(created)
+            def replaced(result):
+                self.expectThat(result, matches(replacement))
+                return self.client.get(original)
+            d.addCallback(replaced)
+            def retrieved(result):
+                self.expectThat(result, matches(replacement))
+            d.addCallback(retrieved)
             return d
 
 
