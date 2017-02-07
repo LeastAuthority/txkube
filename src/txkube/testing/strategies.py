@@ -9,7 +9,7 @@ from string import ascii_lowercase, digits
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries, tuples,
+    dictionaries, tuples, integers,
 )
 
 from .. import v1, v1beta1
@@ -302,6 +302,33 @@ def deployments():
     )
 
 
+def service_ports():
+    """
+    Strategy to build ``ServicePort``.
+    """
+    return builds(
+        v1.ServicePort,
+        port=integers(min_value=1, max_value=65535),
+        # The specification doesn't document name as required, but it is.
+        name=dns_labels().filter(lambda name: len(name) <= 24),
+    )
+
+
+def service_specs():
+    """
+    Strategy to build ``ServiceSpec``.
+    """
+    return builds(
+        v1.ServiceSpec,
+        ports=lists(
+            service_ports(),
+            min_size=1,
+            max_size=_QUICK_MAX_SIZE,
+            average_size=_QUICK_AVERAGE_SIZE,
+            unique_by=lambda port: port.name,
+        )
+    )
+
 
 def services():
     """
@@ -310,6 +337,8 @@ def services():
     return builds(
         v1.Service,
         metadata=namespaced_object_metadatas(),
+        # Though the specification doesn't tell us, the spec is required.
+        spec=service_specs(),
     )
 
 
