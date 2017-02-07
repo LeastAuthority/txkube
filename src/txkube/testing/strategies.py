@@ -46,26 +46,29 @@ join = joins
 def dns_labels():
     # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/identifiers.md
     # https://kubernetes.io/docs/user-guide/identifiers/#names
-    ends = (ascii_lowercase + digits).decode("ascii")
-    internal = ends + u"-"
-    return one_of(
+    # https://www.ietf.org/rfc/rfc1035.txt
+    letter = ascii_lowercase.decode("ascii")
+    letter_digit = letter + digits.decode("ascii")
+    letter_digit_hyphen = letter_digit + u"-"
+    variations = [
         # Could be just one character long
-        sampled_from(ends),
+        (sampled_from(letter),),
         # Or longer
-        joins(
-            u"",
-            tuples(
-                sampled_from(ends),
-                text(
-                    alphabet=internal,
-                    min_size=0,
-                    max_size=61,
-                    average_size=_QUICK_AVERAGE_SIZE,
-                ),
-                sampled_from(ends),
-            ),
+        (sampled_from(letter),
+         text(
+             letter_digit_hyphen,
+             min_size=0,
+             max_size=61,
+             average_size=_QUICK_AVERAGE_SIZE,
+         ),
+         sampled_from(letter_digit),
         ),
-    )
+    ]
+    return one_of(list(
+        joins(u"", tuples(*alphabet))
+        for alphabet
+        in variations
+    ))
 
 # XXX wrong
 object_name = object_names = image_names = dns_labels
