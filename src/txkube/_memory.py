@@ -291,6 +291,20 @@ class _Kubernetes(object):
             """
             return self._list(request, None, self.state.services)
 
+        @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"GET"])
+        def get_service(self, request, namespace, service):
+            """
+            Get one Service by name.
+            """
+            return self._get(
+                None,
+                request,
+                self.state.services,
+                u"services",
+                namespace,
+                service,
+            )
+
     with app.subroute(u"/apis/extensions/v1beta1") as app:
         @app.route(u"/namespaces/<namespace>/deployments", methods=[u"POST"])
         def create_deployment(self, request, namespace):

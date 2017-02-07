@@ -410,6 +410,20 @@ class _ServiceTestsMixin(object):
         )
 
 
+    @async
+    def test_service_retrieval(self):
+        """
+        A specific ``Service`` object can be retrieved by name using
+        ``IKubernetesClient.get``.
+        """
+        return self._namespaced_object_retrieval_by_name_test(
+            services(),
+            v1.Service,
+            matches_service,
+            group=None,
+        )
+
+
 
 def kubernetes_client_tests(get_kubernetes):
     class KubernetesClientIntegrationTests(
