@@ -181,9 +181,10 @@ class _Kubernetes(object):
             return response(request, CREATED, iobject_to_raw(obj))
 
     def _delete(self, request, collection, collection_name, namespace, name):
-        if namespace is not None:
-            collection = self._reduce_to_namespace(collection, namespace)
-        obj = collection.item_by_name(name)
+        if namespace is None:
+            obj = collection.item_by_name(name)
+        else:
+            obj = self._reduce_to_namespace(collection, namespace).item_by_name(name)
         setattr(self.state, collection_name, obj.delete_from(collection))
         return response(request, OK, iobject_to_raw(obj))
 
@@ -254,6 +255,15 @@ class _Kubernetes(object):
             Create a new ConfigMap.
             """
             return self._create(request, self.state.configmaps, u"configmaps")
+
+        @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"DELETE"])
+        def delete_configmap(self, request, namespace, configmap):
+            """
+            Delete one ConfigMap by name.
+            """
+            return self._delete(
+                request, self.state.configmaps, "configmaps", namespace, configmap,
+            )
 
     with app.subroute(u"/apis/extensions/v1beta1") as app:
         @app.route(u"/namespaces/<namespace>/deployments", methods=[u"POST"])

@@ -405,8 +405,13 @@ def kubernetes_client_tests(get_kubernetes):
             )
 
 
-        @needs(namespace=creatable_namespaces().example())
-        def _namespaced_object_deletion_by_name_test(self, strategy, cls, namespace):
+        @needs(
+            victim_namespace=creatable_namespaces().example(),
+            bystander_namespace=creatable_namespaces().example()
+        )
+        def _namespaced_object_deletion_by_name_test(
+            self, strategy, cls, victim_namespace, bystander_namespace
+        ):
             """
             Verify that a particular kind of namespaced Kubernetes object (such as
             *Deployment* or *Service*) can be deleted by name by calling
@@ -420,20 +425,40 @@ def kubernetes_client_tests(get_kubernetes):
             :param cls: The ``IObject`` implementation corresponding to the
                 objects ``strategy`` can build.
 
-            :param v1.Namespace namespace: An existing namespace into which
-                the probe object can be created.
+            :param v1.Namespace victim_namespace: An existing namespace into
+                which the probe object can be created (not part of the
+                interface; value supplied by the decorator).
+
+            :param v1.Namespace bystander_namespace: An existing namespace
+                into which another object can be created (not part of the
+                interface; value supplied by the decorator).
 
             :return: A ``Deferred`` that fires when the behavior has been
                 verified.
             """
-            obj = strategy.example()
-            # Move it to the namespace for this test.
-            obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
-            d = self.client.create(obj)
-            def created_object(created):
+            victim = strategy.example()
+            bystander_a = strategy.example()
+            bystander_b = strategy.example()
+            # Put the victim and a bystander into the victim namespace.
+            victim = victim.transform(
+                [u"metadata", u"namespace"], victim_namespace.metadata.name,
+            )
+            bystander_a = bystander_a.transform(
+                [u"metadata", u"namespace"], victim_namespace.metadata.name,
+            )
+            # And the other in another namespace.
+            bystander_b = bystander_b.transform(
+                [u"metadata", u"namespace"], bystander_namespace.metadata.name,
+            )
+            d = gatherResults(list(
+                self.client.create(o)
+                for o
+                in [victim, bystander_a, bystander_b]
+            ))
+            def created_object(ignored):
                 return self.client.delete(_named(
                     cls,
-                    namespace=obj.metadata.namespace, name=obj.metadata.name,
+                    namespace=victim.metadata.namespace, name=victim.metadata.name,
                 ))
             d.addCallback(created_object)
             def deleted_object(result):
@@ -443,12 +468,19 @@ def kubernetes_client_tests(get_kubernetes):
             def listed_objects(collection):
                 def key(obj):
                     return (obj.metadata.name, obj.metadata.namespace)
-                deployment_names = set(
+                obj_names = set(
                     key(obj)
                     for obj
                     in collection.items
                 )
-                self.expectThat(deployment_names, Not(Contains(key(obj))))
+                self.expectThat(
+                    obj_names,
+                    MatchesAll(
+                        Contains(key(bystander_a)),
+                        Contains(key(bystander_b)),
+                        Not(Contains(key(victim))),
+                    ),
+                )
             d.addCallback(listed_objects)
             return d
 
@@ -456,7 +488,7 @@ def kubernetes_client_tests(get_kubernetes):
         @async
         def test_deployment_deletion(self):
             """
-            A specific ``ConfigMap`` object can be deleted by name using
+            A specific ``Deployment`` object can be deleted by name using
             ``IKubernetesClient.delete``.
             """
             return self._namespaced_object_deletion_by_name_test(
@@ -569,6 +601,18 @@ def kubernetes_client_tests(get_kubernetes):
                 v1.ConfigMap,
                 matches_configmap,
                 group=None,
+            )
+
+
+        @async
+        def test_configmap_deletion(self):
+            """
+            A specific ``ConfigMap`` object can be deleted by name using
+            ``IKubernetesClient.delete``.
+            """
+            return self._namespaced_object_deletion_by_name_test(
+                configmaps(),
+                v1.ConfigMap,
             )
 
 

@@ -104,6 +104,10 @@ class ConfigMap(v1.ConfigMap):
         return self
 
 
+    def delete_from(self, collection):
+        return collection.remove(self)
+
+
 
 def set_if_none(desired_value):
     """
