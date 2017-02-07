@@ -396,6 +396,20 @@ class _ServiceTestsMixin(object):
         )
 
 
+    @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_duplicate_service_rejected(self, namespace):
+        """
+        ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+        ``KubernetesError`` if it is called with a ``ConfigMap`` object
+        with the same name as a *ConfigMap* which already exists in the
+        same namespace.
+        """
+        return self._create_duplicate_rejected_test(
+            namespace, configmaps(), u"configmaps", None,
+        )
+
+
 
 def kubernetes_client_tests(get_kubernetes):
     class KubernetesClientIntegrationTests(
