@@ -34,7 +34,7 @@ from .. import (
 )
 
 from .strategies import (
-    creatable_namespaces, configmaps, deployments,
+    creatable_namespaces, configmaps, deployments, services,
 )
 
 
@@ -80,6 +80,10 @@ def matches_deployment(deployment):
             ),
         ),
     )
+
+
+def matches_service(service):
+    return matches_metadata(service.metadata)
 
 
 def has_uid():
@@ -378,12 +382,27 @@ class _DeploymentTestsMixin(object):
 
 
 
+class _ServiceTestsMixin(object):
+    @async
+    @needs(namespace=creatable_namespaces().example())
+    def test_service(self, namespace):
+        """
+        ``Service`` objects can be created and retrieved using the ``create`` and
+        ``list`` methods of ``IKubernetesClient``.
+        """
+        self._create_list_test(
+            namespace, services(), v1.Service, v1.ServiceList,
+            matches_service,
+        )
+
+
 
 def kubernetes_client_tests(get_kubernetes):
     class KubernetesClientIntegrationTests(
         _NamespaceTestsMixin,
         _ConfigMapTestsMixin,
         _DeploymentTestsMixin,
+        _ServiceTestsMixin,
         TestCase
     ):
         def setUp(self):

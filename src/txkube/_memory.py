@@ -80,6 +80,7 @@ def _kubernetes_resource(state):
 class _KubernetesState(object):
     namespaces = attr.ib(default=v1.NamespaceList())
     configmaps = attr.ib(default=v1.ConfigMapList())
+    services = attr.ib(default=v1.ServiceList())
 
     deployments = attr.ib(default=v1beta1.DeploymentList())
 
@@ -275,6 +276,20 @@ class _Kubernetes(object):
             return self._delete(
                 request, self.state.configmaps, "configmaps", namespace, configmap,
             )
+
+        @app.route(u"/namespaces/<namespace>/services", methods=[u"POST"])
+        def create_service(self, request, namespace):
+            """
+            Create a new Service.
+            """
+            return self._create(None, request, self.state.services, u"services")
+
+        @app.route(u"/services", methods=[u"GET"])
+        def list_services(self, request):
+            """
+            Get all existing Services.
+            """
+            return self._list(request, None, self.state.services)
 
     with app.subroute(u"/apis/extensions/v1beta1") as app:
         @app.route(u"/namespaces/<namespace>/deployments", methods=[u"POST"])

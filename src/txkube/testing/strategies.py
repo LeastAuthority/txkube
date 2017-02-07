@@ -299,6 +299,18 @@ def deployments():
     )
 
 
+
+def services():
+    """
+    Strategy to build ``Service``.
+    """
+    return builds(
+        v1.Service,
+        metadata=namespaced_object_metadatas(),
+    )
+
+
+
 def _collections(cls, strategy, unique_by):
     """
     A helper for defining a strategy to build ``...List`` objects.
@@ -342,6 +354,13 @@ def namespacelists(namespaces=creatable_namespaces()):
     return _collections(v1.NamespaceList, namespaces, _unique_names)
 
 
+def servicelists():
+    """
+    Strategy to build ``ServiceList``.
+    """
+    return _collections(v1.ServiceList, services(), _unique_names_with_namespaces)
+
+
 def objectcollections(namespaces=creatable_namespaces()):
     """
     Strategy to build ``ObjectCollection``.
@@ -350,6 +369,7 @@ def objectcollections(namespaces=creatable_namespaces()):
         configmaplists(),
         namespacelists(namespaces),
         deploymentlists(),
+        servicelists(),
     )
 
 
@@ -378,5 +398,6 @@ def iobjects():
         retrievable_namespaces(),
         configmaps(),
         deployments(),
+        services(),
         objectcollections(),
     )
