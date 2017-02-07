@@ -109,6 +109,24 @@ class ConfigMap(v1.ConfigMap):
 
 
 
+@behavior(v1)
+@implementer(IObject)
+class Service(v1.Service):
+    """
+    ``Service`` instances model `Service objects
+    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_service>`_.
+    """
+    def fill_defaults(self):
+        # TODO Surely some stuff to fill.
+        # See https://github.com/LeastAuthority/txkube/issues/36
+        return self
+
+
+    def delete_from(self, collection):
+        return collection.remove(self)
+
+
+
 def set_if_none(desired_value):
     """
     Create a transformer which sets the given value if it finds ``None`` as
@@ -252,6 +270,13 @@ class NamespaceList(_List, v1.NamespaceList):
 @behavior(v1)
 @implementer(IObject)
 class ConfigMapList(_List, v1.ConfigMapList):
+    pass
+
+
+
+@behavior(v1)
+@implementer(IObject)
+class ServiceList(_List, v1.ServiceList):
     pass
 
 

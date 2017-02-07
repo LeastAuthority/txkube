@@ -80,6 +80,7 @@ def _kubernetes_resource(state):
 class _KubernetesState(object):
     namespaces = attr.ib(default=v1.NamespaceList())
     configmaps = attr.ib(default=v1.ConfigMapList())
+    services = attr.ib(default=v1.ServiceList())
 
     deployments = attr.ib(default=v1beta1.DeploymentList())
 
@@ -101,6 +102,15 @@ def response(request, status, obj):
         u"content-type", [u"application/json"],
     )
     return dumps(obj)
+
+
+
+def _message(details, event):
+    if details.get(u"group") is None:
+        fmt = u'{kind} "{name}" {event}'
+    else:
+        fmt = u'{kind}.{group} "{name}" {event}'
+    return fmt.format(event=event, **details)
 
 
 
@@ -139,16 +149,13 @@ class _Kubernetes(object):
                 u"kind": collection_name,
                 u"group": group,
             }
-            if group is None:
-                fmt = u"{kind} \"{name}\" not found"
-            else:
-                fmt = u"{kind}.{group} \"{name}\" not found"
+            message = _message(details, u"not found")
             return response(
                 request,
                 NOT_FOUND,
                 iobject_to_raw(v1.Status(
                     status=u"Failure",
-                    message=fmt.format(**details),
+                    message=message,
                     reason=u"NotFound",
                     details=details,
                     metadata={},
@@ -158,20 +165,25 @@ class _Kubernetes(object):
         else:
             return response(request, OK, iobject_to_raw(obj))
 
-    def _create(self, request, collection, collection_name):
+    def _create(self, group, request, collection, collection_name):
         with start_action(action_type=u"memory:create", kind=collection.kind):
             obj = iobject_from_raw(loads(request.content.read())).fill_defaults()
             try:
                 added = collection.add(obj)
             except InvariantException:
+                details = {
+                    u"name": obj.metadata.name,
+                    u"kind": collection_name,
+                    u"group": group,
+                }
                 return response(
                     request,
                     CONFLICT,
                     iobject_to_raw(v1.Status(
                         status=u"Failure",
-                        message=u"{} \"{!s}\" already exists".format(collection_name, obj.metadata.name),
+                        message=_message(details, u"already exists"),
                         reason=u"AlreadyExists",
-                        details={u"name": obj.metadata.name, u"kind": collection_name},
+                        details=details,
                         metadata={},
                         code=CONFLICT,
                     )),
@@ -233,7 +245,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(request, self.state.namespaces, u"namespaces")
+            return self._create(None, request, self.state.namespaces, u"namespaces")
 
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request):
@@ -254,7 +266,7 @@ class _Kubernetes(object):
             """
             Create a new ConfigMap.
             """
-            return self._create(request, self.state.configmaps, u"configmaps")
+            return self._create(None, request, self.state.configmaps, u"configmaps")
 
         @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"DELETE"])
         def delete_configmap(self, request, namespace, configmap):
@@ -265,6 +277,43 @@ class _Kubernetes(object):
                 request, self.state.configmaps, "configmaps", namespace, configmap,
             )
 
+        @app.route(u"/namespaces/<namespace>/services", methods=[u"POST"])
+        def create_service(self, request, namespace):
+            """
+            Create a new Service.
+            """
+            return self._create(None, request, self.state.services, u"services")
+
+        @app.route(u"/services", methods=[u"GET"])
+        def list_services(self, request):
+            """
+            Get all existing Services.
+            """
+            return self._list(request, None, self.state.services)
+
+        @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"GET"])
+        def get_service(self, request, namespace, service):
+            """
+            Get one Service by name.
+            """
+            return self._get(
+                None,
+                request,
+                self.state.services,
+                u"services",
+                namespace,
+                service,
+            )
+
+        @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"DELETE"])
+        def delete_service(self, request, namespace, service):
+            """
+            Delete one Service by name.
+            """
+            return self._delete(
+                request, self.state.services, "services", namespace, service,
+            )
+
     with app.subroute(u"/apis/extensions/v1beta1") as app:
         @app.route(u"/namespaces/<namespace>/deployments", methods=[u"POST"])
         def create_deployment(self, request, namespace):
@@ -272,6 +321,7 @@ class _Kubernetes(object):
             Create a new Deployment.
             """
             return self._create(
+                u"extensions",
                 request,
                 self.state.deployments,
                 u"deployments",

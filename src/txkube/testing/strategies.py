@@ -9,7 +9,7 @@ from string import ascii_lowercase, digits
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries, tuples,
+    dictionaries, tuples, integers,
 )
 
 from .. import v1, v1beta1
@@ -46,26 +46,29 @@ join = joins
 def dns_labels():
     # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/identifiers.md
     # https://kubernetes.io/docs/user-guide/identifiers/#names
-    ends = (ascii_lowercase + digits).decode("ascii")
-    internal = ends + u"-"
-    return one_of(
+    # https://www.ietf.org/rfc/rfc1035.txt
+    letter = ascii_lowercase.decode("ascii")
+    letter_digit = letter + digits.decode("ascii")
+    letter_digit_hyphen = letter_digit + u"-"
+    variations = [
         # Could be just one character long
-        sampled_from(ends),
+        (sampled_from(letter),),
         # Or longer
-        joins(
-            u"",
-            tuples(
-                sampled_from(ends),
-                text(
-                    alphabet=internal,
-                    min_size=0,
-                    max_size=61,
-                    average_size=_QUICK_AVERAGE_SIZE,
-                ),
-                sampled_from(ends),
-            ),
+        (sampled_from(letter),
+         text(
+             letter_digit_hyphen,
+             min_size=0,
+             max_size=61,
+             average_size=_QUICK_AVERAGE_SIZE,
+         ),
+         sampled_from(letter_digit),
         ),
-    )
+    ]
+    return one_of(list(
+        joins(u"", tuples(*alphabet))
+        for alphabet
+        in variations
+    ))
 
 # XXX wrong
 object_name = object_names = image_names = dns_labels
@@ -299,6 +302,47 @@ def deployments():
     )
 
 
+def service_ports():
+    """
+    Strategy to build ``ServicePort``.
+    """
+    return builds(
+        v1.ServicePort,
+        port=integers(min_value=1, max_value=65535),
+        # The specification doesn't document name as required, but it is.
+        name=dns_labels().filter(lambda name: len(name) <= 24),
+    )
+
+
+def service_specs():
+    """
+    Strategy to build ``ServiceSpec``.
+    """
+    return builds(
+        v1.ServiceSpec,
+        ports=lists(
+            service_ports(),
+            min_size=1,
+            max_size=_QUICK_MAX_SIZE,
+            average_size=_QUICK_AVERAGE_SIZE,
+            unique_by=lambda port: port.name,
+        )
+    )
+
+
+def services():
+    """
+    Strategy to build ``Service``.
+    """
+    return builds(
+        v1.Service,
+        metadata=namespaced_object_metadatas(),
+        # Though the specification doesn't tell us, the spec is required.
+        spec=service_specs(),
+    )
+
+
+
 def _collections(cls, strategy, unique_by):
     """
     A helper for defining a strategy to build ``...List`` objects.
@@ -342,6 +386,13 @@ def namespacelists(namespaces=creatable_namespaces()):
     return _collections(v1.NamespaceList, namespaces, _unique_names)
 
 
+def servicelists():
+    """
+    Strategy to build ``ServiceList``.
+    """
+    return _collections(v1.ServiceList, services(), _unique_names_with_namespaces)
+
+
 def objectcollections(namespaces=creatable_namespaces()):
     """
     Strategy to build ``ObjectCollection``.
@@ -350,6 +401,7 @@ def objectcollections(namespaces=creatable_namespaces()):
         configmaplists(),
         namespacelists(namespaces),
         deploymentlists(),
+        servicelists(),
     )
 
 
@@ -378,5 +430,6 @@ def iobjects():
         retrievable_namespaces(),
         configmaps(),
         deployments(),
+        services(),
         objectcollections(),
     )

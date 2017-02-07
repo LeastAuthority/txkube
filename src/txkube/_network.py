@@ -27,7 +27,7 @@ from twisted.web.iweb import IBodyProducer, IAgent
 from twisted.web.http import OK, CREATED
 from twisted.web.client import Agent, readBody
 
-from eliot import start_action
+from eliot import Message, start_action
 from eliot.twisted import DeferredContext
 
 from pykube import KubeConfig
@@ -169,7 +169,7 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(obj))
             document = iobject_to_raw(obj)
-            action.add_success_fields(submitted_object=document)
+            Message.log(submitted_object=document)
             d = DeferredContext(self._post(url, document))
             d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
