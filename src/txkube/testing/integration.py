@@ -101,6 +101,13 @@ def is_active():
 
 
 
+def different_name(name):
+    if len(name) > 1:
+        return name[:-1]
+    return name + u"x"
+
+
+
 def _named(kind, name, namespace=None):
     return kind(metadata=v1.ObjectMeta(name=name, namespace=namespace))
 
@@ -846,11 +853,7 @@ def kubernetes_client_tests(get_kubernetes):
                 # namespace.  We shouldn't find it.
                 #
                 # First, compute a legal but non-existing namespace name.
-                bogus_namespace = obj.metadata.namespace
-                if len(bogus_namespace) > 1:
-                    bogus_namespace = bogus_namespace[:-1]
-                else:
-                    bogus_namespace += u"x"
+                bogus_namespace = different_name(obj.metadata.namespace)
                 return self.client.get(
                     _named(
                         cls,
