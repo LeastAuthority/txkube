@@ -9,7 +9,7 @@ from string import ascii_lowercase, digits
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries, tuples, integers,
+    dictionaries, tuples, integers, just,
 )
 
 from .. import v1, v1beta1
@@ -71,7 +71,17 @@ def dns_labels():
     ))
 
 # XXX wrong
-object_name = object_names = image_names = dns_labels
+object_name = object_names = dns_labels
+
+
+def image_names():
+    """
+    Strategy to build Docker image names.
+
+    Only generate images that appear to be hosted on localhost to avoid ever
+    actually pulling an image from anywhere on the network.
+    """
+    return joins(u"/", tuples(just(u"127.0.0.1"), dns_labels()))
 
 
 def dns_subdomains():
