@@ -190,7 +190,7 @@ class _NetworkClient(object):
         Issue a I{PUT} to replace an existing object with a new one.
         """
         action = start_action(
-            action_type=u"network-client:create",
+            action_type=u"network-client:replace",
         )
         with action.context():
             url = self.kubernetes.base_url.child(*object_location(obj))
