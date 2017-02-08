@@ -104,11 +104,11 @@ class _MappingLikeMismatch(Mismatch):
         if type(self._actual) != type(self._reference):
             return (
                 "type mismatch:\n"
-                "reference = %s\n"
-                "actual    = %s\n"
+                "reference = %s (%s)\n"
+                "actual    = %s (%s)\n"
             ) % (
-                type(self._reference),
-                type(self._actual),
+                type(self._reference), self._reference,
+                type(self._actual), self._actual,
             )
 
         mismatched = []
