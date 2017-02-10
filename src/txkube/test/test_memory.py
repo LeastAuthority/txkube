@@ -9,7 +9,7 @@ from zope.interface.verify import verifyClass
 
 from hypothesis import given
 
-from testtools.matchers import Equals, IsInstance, AfterPreprocessing
+from testtools.matchers import Equals, Is, IsInstance, AfterPreprocessing
 
 from ..testing.integration import kubernetes_client_tests
 from ..testing.strategies import iobjects
@@ -68,6 +68,16 @@ class NullAgencyTests(TestCase):
         state = _KubernetesState()
         actual = NullAgency().after_create(state, obj)
         self.assertThat(actual, Equals(obj))
+
+
+    @given(iobjects(), iobjects())
+    def test_before_replace(self, old, new):
+        """
+        ``NullAgency.before_replace`` returns ``None``.
+        """
+        state = _KubernetesState()
+        actual = NullAgency().before_replace(state, old, new)
+        self.assertThat(actual, Is(None))
 
 
 

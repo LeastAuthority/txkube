@@ -28,6 +28,7 @@ from twisted.web.http import NOT_FOUND, CONFLICT
 
 from .._network import version_to_segments
 
+from ..testing.matchers import MappingEquals
 from ..testing import TestCase, AsynchronousDeferredRunTest
 
 from .. import (
@@ -38,7 +39,7 @@ from .. import (
 )
 
 from .strategies import (
-    creatable_namespaces, configmaps, deployments, services,
+    labels, creatable_namespaces, configmaps, deployments, services,
 )
 
 
@@ -120,6 +121,7 @@ def _named(kind, name, namespace=None):
     return kind(metadata=v1.ObjectMeta(name=name, namespace=namespace))
 
 
+
 def poll(reactor, action, f, intervals):
     """
     Repeatedly call a function.
@@ -152,6 +154,35 @@ def poll(reactor, action, f, intervals):
     d = g()
     d.addCallback(lambda ignored: g())
     return d
+
+
+_TRY_AGAIN = (
+    u"the object has been modified; "
+    u"please apply your changes to the latest version and try again"
+)
+
+def _replace(client, obj, transformation, retries=2):
+    """
+    Try to replace the given object with one that differs by the given
+    transformation.
+
+    Try again if the server reports the object has changed.
+    """
+    d = client.replace(obj.transform(*transformation))
+    def maybe_outdated(reason):
+        reason.trap(KubernetesError)
+        # Uugghh...  This seems to be the only way to identify the condition.
+        if _TRY_AGAIN in reason.value.status.message:
+            d = client.get(obj)
+            d.addCallback(lambda latest: _replace(
+                client, latest, transformation, retries - 1
+            ))
+            return d
+        return reason
+    if retries > 0:
+        d.addErrback(maybe_outdated)
+    return d
+
 
 
 def does_not_exist(client, obj):
@@ -709,24 +740,45 @@ def kubernetes_client_tests(get_kubernetes):
             """
             original = strategy.example()
             if namespace is not None:
-                original = strategy.example().transform(
-                    [u"metadata", u"namespace"], original.metadata.namespace,
+                original = original.transform(
+                    [u"metadata", u"namespace"], namespace.metadata.name,
                 )
-            replacement = strategy.example().transform(
-                [u"metadata", u"namespace"], original.metadata.namespace,
-                [u"metadata", u"name"], original.metadata.name,
-            )
+            # Different kinds of objects have different constraints on what
+            # they can be replaced with.  To avoid running into those, make
+            # the replacement just like the original but with some different
+            # labels.  Hopefully this will always be allowed.
+            #
+            # Also, make sure _some_ labels are set to avoid triggering extra
+            # server processing in some cases.  For example, Deployment
+            # inherits labels from its template spec if its own labels are
+            # empty.
+            replacement_labels = labels().filter(lambda labels: len(labels)).example()
 
             d = self.client.create(original)
-            def created(ignored):
-                return self.client.replace(replacement)
+            def created(created):
+                # Use the created object as the basis for the replacement
+                # object.  Various server-populated fields (varying between
+                # different kinds of objects) must match in the replacement.
+                # Using our original object as the starting point will mess
+                # these.
+                transformation = (
+                    [u"metadata", u"labels"],
+                    replacement_labels,
+                )
+                return _replace(self.client, created, transformation, retries=1)
             d.addCallback(created)
             def replaced(result):
-                self.expectThat(result, matches(replacement))
+                self.expectThat(
+                    result.metadata.labels,
+                    MappingEquals(replacement_labels),
+                )
                 return self.client.get(original)
             d.addCallback(replaced)
             def retrieved(result):
-                self.expectThat(result, matches(replacement))
+                self.expectThat(
+                    result.metadata.labels,
+                    MappingEquals(replacement_labels),
+                )
             d.addCallback(retrieved)
             return d
 
