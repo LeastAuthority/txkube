@@ -27,7 +27,7 @@ _QUICK_MAX_SIZE = 10
 
 def joins(sep, elements):
     """
-    Strategy to join unicode strings built by another strategy.
+    Join unicode strings built by another strategy.
 
     :param unicode sep: The separate to join with.
 
@@ -71,7 +71,17 @@ def dns_labels():
     ))
 
 # XXX wrong
-object_name = object_names = image_names = dns_labels
+object_name = object_names = dns_labels
+
+
+def image_names():
+    """
+    Build Docker image names.
+
+    Only generate images that appear to be hosted on localhost to avoid ever
+    actually pulling an image from anywhere on the network.
+    """
+    return dns_labels().map(lambda label: u"127.0.0.1/" + label)
 
 
 def dns_subdomains():
@@ -115,7 +125,7 @@ def labels():
 
 def object_metadatas():
     """
-    Strategy to build ``v1.ObjectMeta`` without a namespace.
+    Build ``v1.ObjectMeta`` without a namespace.
     """
     return builds(
         v1.ObjectMeta.create,
@@ -132,7 +142,7 @@ def object_metadatas():
 
 def namespaced_object_metadatas():
     """
-    Strategy to build ``v1.ObjectMeta`` with a namespace.
+    Build ``v1.ObjectMeta`` with a namespace.
     """
     return builds(
         lambda obj_metadata, namespace: obj_metadata.set(
@@ -145,7 +155,7 @@ def namespaced_object_metadatas():
 
 def namespace_statuses():
     """
-    Strategy to build ``Namespace.status``.
+    Build ``Namespace.status``.
     """
     return builds(
         v1.NamespaceStatus,
@@ -155,8 +165,7 @@ def namespace_statuses():
 
 def creatable_namespaces():
     """
-    Strategy to build ``Namespace``\ s which can be created on a Kubernetes
-    cluster.
+    Build ``Namespace``\ s which can be created on a Kubernetes cluster.
     """
     return builds(
         v1.Namespace,
@@ -167,8 +176,7 @@ def creatable_namespaces():
 
 def retrievable_namespaces():
     """
-    Strategy to build ``Namespace``\ s which might be retrieved from a
-    Kubernetes cluster.
+    Build ``Namespace``\ s which might be retrieved from a Kubernetes cluster.
 
     This includes additional fields that might be populated by the Kubernetes
     cluster automatically.
@@ -182,7 +190,7 @@ def retrievable_namespaces():
 
 def configmap_data_keys():
     """
-    Strategy to build keys for the ``data`` mapping of a ``ConfigMap``.
+    Build keys for the ``data`` mapping of a ``ConfigMap``.
     """
     return builds(
         lambda labels, dot: dot + u".".join(labels),
@@ -195,14 +203,14 @@ def configmap_data_keys():
 
 def configmap_data_values():
     """
-    Strategy to build values for the ``data`` field for a ``ConfigMap``.
+    Build values for the ``data`` field for a ``v1.ConfigMap``.
     """
     return text()
 
 
 def configmap_datas():
     """
-    Strategy to build the ``data`` mapping of a ``ConfigMap``.
+    Build the ``data`` mapping of a ``v1.ConfigMap``.
     """
     return one_of(
         none(),
@@ -217,7 +225,7 @@ def configmap_datas():
 
 def configmaps():
     """
-    Strategy to build ``ConfigMap``.
+    Build ``v1.ConfigMap``.
     """
     return builds(
         v1.ConfigMap,
@@ -228,7 +236,7 @@ def configmaps():
 
 def containers():
     """
-    Strategy to build ``v1.Container``.
+    Build ``v1.Container``.
     """
     return builds(
         v1.Container,
@@ -240,7 +248,7 @@ def containers():
 
 def podspecs():
     """
-    Strategy to build ``v1.PodSpec``.
+    Build ``v1.PodSpec``.
     """
     return builds(
         v1.PodSpec,
@@ -256,7 +264,7 @@ def podspecs():
 
 def podtemplatespecs():
     """
-    Strategy to build ``v1.PodTemplateSpec``.
+    Build ``v1.PodTemplateSpec``.
     """
     return builds(
         v1.PodTemplateSpec,
@@ -270,7 +278,7 @@ def podtemplatespecs():
 
 def deploymentspecs():
     """
-    Strategy to build ``DeploymentSpec``.
+    Build ``v1beta1.DeploymentSpec``.
     """
     return builds(
         lambda template: v1beta1.DeploymentSpec(
@@ -285,7 +293,7 @@ def deploymentspecs():
 
 def deployments():
     """
-    Strategy to build ``Deployment``.
+    Build ``v1beta1.Deployment``.
     """
     return builds(
         lambda metadata, spec: v1beta1.Deployment(
@@ -304,7 +312,7 @@ def deployments():
 
 def service_ports():
     """
-    Strategy to build ``ServicePort``.
+    Build ``v1.ServicePort``.
     """
     return builds(
         v1.ServicePort,
@@ -316,7 +324,7 @@ def service_ports():
 
 def service_specs():
     """
-    Strategy to build ``ServiceSpec``.
+    Build ``v1.ServiceSpec``.
     """
     return builds(
         v1.ServiceSpec,
@@ -332,7 +340,7 @@ def service_specs():
 
 def services():
     """
-    Strategy to build ``Service``.
+    Build ``v1.Service``.
     """
     return builds(
         v1.Service,
@@ -367,35 +375,35 @@ def _collections(cls, strategy, unique_by):
 
 def deploymentlists():
     """
-    Strategy to build ``DeploymentList``.
+    Build ``v1beta1.DeploymentList``.
     """
     return _collections(v1beta1.DeploymentList, deployments(), _unique_names_with_namespaces)
 
 
 def configmaplists():
     """
-    Strategy to build ``ConfigMapList``.
+    Build ``v1.ConfigMapList``.
     """
     return _collections(v1.ConfigMapList, configmaps(), _unique_names_with_namespaces)
 
 
 def namespacelists(namespaces=creatable_namespaces()):
     """
-    Strategy to build ``NamespaceList``.
+    Build ``v1.NamespaceList``.
     """
     return _collections(v1.NamespaceList, namespaces, _unique_names)
 
 
 def servicelists():
     """
-    Strategy to build ``ServiceList``.
+    Build ``v1.ServiceList``.
     """
     return _collections(v1.ServiceList, services(), _unique_names_with_namespaces)
 
 
 def objectcollections(namespaces=creatable_namespaces()):
     """
-    Strategy to build ``ObjectCollection``.
+    Build ``v1.ObjectCollection``.
     """
     return one_of(
         configmaplists(),
@@ -423,7 +431,7 @@ def _unique_names_with_namespaces(item):
 
 def iobjects():
     """
-    Strategy to build any one of the ``IObject`` implementations.
+    Build any one of the ``IObject`` implementations.
     """
     return one_of(
         creatable_namespaces(),
