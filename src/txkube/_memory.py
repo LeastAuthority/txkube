@@ -435,7 +435,14 @@ class _Kubernetes(object):
         collection = self._collection_by_name(collection_name)
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
-        obj = collection.item_by_name(name)
+        try:
+            obj = collection.item_by_name(name)
+        except KeyError:
+            raise KubernetesError.not_found({
+                u"group": _groups.get(type(collection), None),
+                u"kind": collection_name,
+                u"name": name,
+            })
         self._set_state(self._get_state().delete(collection_name, obj))
         return response(request, OK, iobject_to_raw(obj))
 
