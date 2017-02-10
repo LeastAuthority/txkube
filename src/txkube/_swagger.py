@@ -209,7 +209,7 @@ class _BasicTypeModel(PClass):
     python_types = field(mandatory=True)
     range = field(mandatory=True, initial=None)
     factory = field(mandatory=True, initial=None)
-    serializer = field(mandatory=True, initial=None)
+    serializer = field(mandatory=True, initial=lambda: lambda format, value: value)
 
     def _pyrsistent_invariant(self, required):
         """
@@ -256,6 +256,26 @@ class _BasicTypeModel(PClass):
         return optional
 
 
+    def _pyrsistent_serializer(self, required):
+        """
+        Create a pyrsistent serialization function.
+
+        :param bool required: ``True`` if this value must appear in the
+            serialized form.  ``False`` if it may be omitted when it has a
+            ``None`` value.
+
+        :return: A callable suitable for use as a pyrsistent field serializer.
+        """
+        if required:
+            return self.serializer
+
+        def serialize(format, value):
+            if value is None:
+                return omit
+            return self.serializer(format, value)
+        return serialize
+
+
     def pclass_field_for_type(self, required):
         """
         Construct a pyrsistent field reflecting this model.
@@ -280,8 +300,7 @@ class _BasicTypeModel(PClass):
         if factory is not None:
             extra[u"factory"] = factory
 
-        if self.serializer is not None:
-            extra[u"serializer"] = self.serializer
+        extra[u"serializer"] = self._pyrsistent_serializer(required)
 
         return field(
             mandatory=required, type=python_types, **extra
@@ -490,9 +509,7 @@ def _parse_iso8601(text):
 
 
 
-def _maybe_isoformat(format, v):
-    if v is None:
-        return omit
+def _isoformat(format, v):
     return v.isoformat()
 
 
@@ -528,7 +545,7 @@ class _ClassModel(PClass):
         (u"string", u"date-time"): _BasicTypeModel(
             python_types=(datetime,),
             factory=_parse_iso8601,
-            serializer=_maybe_isoformat,
+            serializer=_isoformat,
         ),
         (u"string", u"int-or-string"): _BasicTypeModel(
             python_types=(unicode, int, long),
@@ -583,7 +600,11 @@ class _ClassModel(PClass):
             else:
                 # For our purposes, the pclass we got is just another basic
                 # type we can model.
-                return _BasicTypeModel(python_types=(python_type,), factory=python_type.create)
+                return _BasicTypeModel(
+                    python_types=(python_type,),
+                    factory=python_type.create,
+                    serializer=lambda format, value: value.serialize(format),
+                )
 
         # If it wasn't any of those kinds of things, maybe it's just a simple
         # type.  Look up the corresponding model object in the static mapping.
