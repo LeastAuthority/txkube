@@ -9,14 +9,16 @@ from zope.interface.verify import verifyClass
 
 from hypothesis import given
 
-from testtools.matchers import Equals
+from testtools.matchers import Equals, IsInstance, AfterPreprocessing
 
 from ..testing.integration import kubernetes_client_tests
 from ..testing.strategies import iobjects
 from ..testing import TestCase
 
 from .. import memory_kubernetes
-from .._memory import _KubernetesState, IAgency, NullAgency
+from .._memory import (
+    _KubernetesState, IAgency, NullAgency, _incrementResourceVersion,
+)
 
 
 def get_kubernetes(case):
@@ -66,3 +68,28 @@ class NullAgencyTests(TestCase):
         state = _KubernetesState()
         actual = NullAgency().after_create(state, obj)
         self.assertThat(actual, Equals(obj))
+
+
+
+class IncrementResourceVersionTests(TestCase):
+    """
+    Tests for ``_incrementResourceVersion``.
+    """
+    def test_missing(self):
+        """
+        The next version after ``None`` is ``u"1"``.
+        """
+        version = _incrementResourceVersion(None)
+        self.expectThat(version, IsInstance(unicode))
+        self.expectThat(version, Equals(u"1"))
+
+
+    def test_incremented(self):
+        """
+        Any version other than ``None`` is interpreted as a string representation
+        of an integer and incremented.
+        """
+        version = _incrementResourceVersion(_incrementResourceVersion(None))
+        updated = _incrementResourceVersion(version)
+        self.expectThat(updated, IsInstance(unicode))
+        self.expectThat(updated, AfterPreprocessing(int, Equals(int(version) + 1)))
