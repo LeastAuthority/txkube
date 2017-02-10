@@ -413,9 +413,10 @@ class _Kubernetes(object):
             self._set_state(state)
             return response(request, CREATED, iobject_to_raw(obj))
 
-
     def _replace(self, group, request, collection_name, namespace, name):
         collection = self._collection_by_name(collection_name)
+        if namespace is not None:
+            collection = self._reduce_to_namespace(collection, namespace)
         old = collection.item_by_name(name)
         new = iobject_from_raw(loads(request.content.read()))
         self._set_state(self._get_state().replace(collection_name, old, new))
@@ -423,6 +424,8 @@ class _Kubernetes(object):
 
     def _delete(self, request, collection_name, namespace, name):
         collection = self._collection_by_name(collection_name)
+        if namespace is not None:
+            collection = self._reduce_to_namespace(collection, namespace)
         obj = collection.item_by_name(name)
         self._set_state(self._get_state().delete(collection_name, obj))
         return response(request, OK, iobject_to_raw(obj))
