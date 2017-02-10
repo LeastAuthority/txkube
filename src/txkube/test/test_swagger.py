@@ -97,6 +97,18 @@ class SwaggerTests(TestCase):
                     },
                 }
             },
+            u"required-boolean": {
+                u"description": u"has type boolean",
+                u"required": [
+                    u"v",
+                ],
+                u"properties": {
+                    u"v": {
+                        u"description": u"required property",
+                        u"type": u"boolean"
+                    },
+                }
+            },
             u"string.unlabeled": {
                 u"description": u"has type string and no format",
                 u"properties": {
@@ -222,7 +234,8 @@ class SwaggerTests(TestCase):
             },
         })
         Type = spec.pclass_for_definition(u"object")
-        self.assertThat(Type().o, Is(None))
+        self.expectThat(Type().o, Is(None))
+        self.expectThat(Type().serialize(), Equals({}))
 
 
     def test_boolean(self):
@@ -237,6 +250,13 @@ class SwaggerTests(TestCase):
         )
         self.expectThat(Type(v=True).v, Equals(True))
         self.expectThat(Type(v=False).v, Equals(False))
+        self.expectThat(Type(v=True).serialize(), Equals({u"v": True}))
+        self.expectThat(Type(v=False).serialize(), Equals({u"v": False}))
+
+
+    def test_required_default_serializer(self):
+        Type = self.spec.pclass_for_definition(u"required-boolean")
+        self.expectThat(Type(v=True).serialize(), Equals({u"v": True}))
 
 
     def test_integer_int32_errors(self):
@@ -391,6 +411,11 @@ class SwaggerTests(TestCase):
         self.expectThat(Complex(p=None).p, Is(None))
         # It should also default to None.
         self.expectThat(Complex().p, Is(None))
+        # Serialization is recursive.
+        self.expectThat(
+            Complex(p=Simple(p=u"foo")).serialize(),
+            Equals({u"p": {u"p": u"foo"}}),
+        )
 
 
     def test_property_object_arrays(self):
