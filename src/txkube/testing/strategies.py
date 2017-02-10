@@ -9,7 +9,7 @@ from string import ascii_lowercase, digits
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries, tuples, integers, just,
+    dictionaries, tuples, integers,
 )
 
 from .. import v1, v1beta1
@@ -81,7 +81,7 @@ def image_names():
     Only generate images that appear to be hosted on localhost to avoid ever
     actually pulling an image from anywhere on the network.
     """
-    return joins(u"/", tuples(just(u"127.0.0.1"), dns_labels()))
+    return dns_labels().map(lambda label: u"127.0.0.1/" + label)
 
 
 def dns_subdomains():
