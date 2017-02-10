@@ -26,7 +26,7 @@ from werkzeug.exceptions import NotFound
 from treq.testing import RequestTraversalAgent
 
 from . import (
-    IKubernetes, network_kubernetes,
+    IKubernetes, KubernetesError, network_kubernetes,
     v1, v1beta1,
     iobject_from_raw, iobject_to_raw,
 )
@@ -125,6 +125,40 @@ def _transform_object(obj, *transformation):
 
 
 
+def _full_kind(details):
+    """
+    Determine the full kind (including a group if applicable) for some failure
+    details.
+
+    :see: ``v1.Status.details``
+    """
+    kind = details[u"kind"]
+    if details.get(u"group") is not None:
+        kind += u"." + details[u"group"]
+    return kind
+
+
+
+def _message(details, event):
+    """
+    Format some values into one kind of failure message.
+
+    :see: ``v1.Status.message``
+    """
+    fmt = u'{full_kind} "{name}" {event}'
+    full_kind = _full_kind(details)
+    return fmt.format(event=event, full_kind=full_kind, **details)
+
+
+
+# Help figure out what API group some types are associated with.
+_groups = {
+    v1beta1.Deployment: u"extensions",
+    v1beta1.DeploymentList: u"extensions",
+}
+
+
+
 class IAgency(Interface):
     """
     An ``IAgency`` implementation can impress certain additional behaviors
@@ -164,6 +198,23 @@ class IAgency(Interface):
         """
 
 
+    def before_replace(state, old, new):
+        """
+        This is called before an existing object is replaced by a new one.
+
+        :param _KubernetesState state: The state in which the object is being
+            replaced.
+
+        :param IObject old: A description of the object being replaced.
+
+        :param IObject new: A description of the object to replace ``old``.
+
+        :raise: Some exception to prevent the replacement from taking place.
+
+        :return: ``None``
+        """
+
+
 
 @implementer(IAgency)
 class NullAgency(object):
@@ -176,6 +227,10 @@ class NullAgency(object):
 
     def after_create(self, state, obj):
         return obj
+
+
+    def before_replace(self, state, old, new):
+        pass
 
 
 
@@ -211,6 +266,33 @@ class AdHocAgency(object):
             )
         return obj
 
+
+    def before_replace(self, state, old, new):
+        if old.metadata.resourceVersion != new.metadata.resourceVersion:
+            group = _groups.get(type(old), None)
+            details = {
+                u'group': group,
+                u'kind': u'deployments',
+                u'name': u'q',
+            }
+            kind = _full_kind(details)
+            name = old.metadata.name
+            fmt = (
+                u'Operation cannot be fulfilled on {kind} "{name}": '
+                u'the object has been modified; '
+                u'please apply your changes to the latest version and try again'
+            )
+            raise KubernetesError(
+                CONFLICT,
+                v1.Status(
+                    code=CONFLICT,
+                    details=details,
+                    message=fmt.format(kind=kind, name=name),
+                    metadata={},
+                    reason=u'Conflict',
+                    status=u'Failure',
+                ),
+            )
 
 
 class _KubernetesState(PClass):
@@ -265,9 +347,7 @@ class _KubernetesState(PClass):
         :return _KubernetesState: A new state based on the current state but
             also containing ``obj``.
         """
-        # A before_replace hook on agency, called here, would be a good way to
-        # introduce the resourceVersion check we need to properly test the fix
-        # for #88.
+        self.agency.before_replace(self, old, new)
         updated = self.transform(
             [collection_name],
             lambda c: c.replace(old, new),
@@ -314,15 +394,6 @@ def response(request, status, obj):
 
 
 
-def _message(details, event):
-    if details.get(u"group") is None:
-        fmt = u'{kind} "{name}" {event}'
-    else:
-        fmt = u'{kind}.{group} "{name}" {event}'
-    return fmt.format(event=event, **details)
-
-
-
 @attr.s(frozen=True)
 class _Kubernetes(object):
     """
@@ -359,7 +430,7 @@ class _Kubernetes(object):
                 collection = self._reduce_to_namespace(collection, namespace)
             return response(request, OK, iobject_to_raw(collection))
 
-    def _get(self, group, request, collection_name, namespace, name):
+    def _get(self, request, collection_name, namespace, name):
         collection = self._collection_by_name(collection_name)
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
@@ -369,7 +440,7 @@ class _Kubernetes(object):
             details = {
                 u"name": name,
                 u"kind": collection_name,
-                u"group": group,
+                u"group": _groups.get(type(collection), None),
             }
             message = _message(details, u"not found")
             return response(
@@ -387,16 +458,17 @@ class _Kubernetes(object):
         else:
             return response(request, OK, iobject_to_raw(obj))
 
-    def _create(self, group, request, collection_name):
+    def _create(self, request, collection_name):
         with start_action(action_type=u"memory:create", kind=collection_name):
             obj = iobject_from_raw(loads(request.content.read()))
             try:
                 state = self._get_state().create(collection_name, obj)
             except InvariantException:
+                collection = getattr(self._get_state(), collection_name)
                 details = {
                     u"name": obj.metadata.name,
                     u"kind": collection_name,
-                    u"group": group,
+                    u"group": _groups.get(type(collection), None),
                 }
                 return response(
                     request,
@@ -414,11 +486,16 @@ class _Kubernetes(object):
             return response(request, CREATED, iobject_to_raw(obj))
 
 
-    def _replace(self, group, request, collection_name, namespace, name):
+    def _replace(self, request, collection_name, namespace, name):
         collection = self._collection_by_name(collection_name)
         old = collection.item_by_name(name)
         new = iobject_from_raw(loads(request.content.read()))
-        self._set_state(self._get_state().replace(collection_name, old, new))
+        try:
+            state = self._get_state().replace(collection_name, old, new)
+        except KubernetesError as e:
+            return response(request, e.code, iobject_to_raw(e.status))
+
+        self._set_state(state)
         return response(request, OK, iobject_to_raw(new))
 
     def _delete(self, request, collection_name, namespace, name):
@@ -456,7 +533,7 @@ class _Kubernetes(object):
             """
             Get one Namespace by name.
             """
-            return self._get(None, request, u"namespaces", None, namespace)
+            return self._get(request, u"namespaces", None, namespace)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
         def delete_namespace(self, request, namespace):
@@ -472,7 +549,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(None, request, u"namespaces")
+            return self._create(request, u"namespaces")
 
         @app.route(u"/namespaces/<namespace>", methods=[u"PUT"])
         def replace_namespace(self, request, namespace):
@@ -480,7 +557,6 @@ class _Kubernetes(object):
             Replace an existing Namespace.
             """
             return self._replace(
-                None,
                 request,
                 u"namespaces",
                 None,
@@ -499,14 +575,14 @@ class _Kubernetes(object):
             """
             Get one ConfigMap by name.
             """
-            return self._get(None, request, u"configmaps", namespace, configmap)
+            return self._get(request, u"configmaps", namespace, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
         def create_configmap(self, request, namespace):
             """
             Create a new ConfigMap.
             """
-            return self._create(None, request, u"configmaps")
+            return self._create(request, u"configmaps")
 
         @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"PUT"])
         def replace_configmap(self, request, namespace, configmap):
@@ -514,7 +590,6 @@ class _Kubernetes(object):
             Replace an existing ConfigMap.
             """
             return self._replace(
-                None,
                 request,
                 u"configmaps",
                 namespace,
@@ -535,7 +610,7 @@ class _Kubernetes(object):
             """
             Create a new Service.
             """
-            return self._create(None, request, u"services")
+            return self._create(request, u"services")
 
         @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"PUT"])
         def replace_service(self, request, namespace, service):
@@ -543,7 +618,6 @@ class _Kubernetes(object):
             Replace an existing Service.
             """
             return self._replace(
-                None,
                 request,
                 u"services",
                 namespace,
@@ -563,7 +637,6 @@ class _Kubernetes(object):
             Get one Service by name.
             """
             return self._get(
-                None,
                 request,
                 u"services",
                 namespace,
@@ -586,7 +659,6 @@ class _Kubernetes(object):
             Create a new Deployment.
             """
             return self._create(
-                u"extensions",
                 request,
                 u"deployments",
             )
@@ -597,7 +669,6 @@ class _Kubernetes(object):
             Replace an existing Deployment.
             """
             return self._replace(
-                u"extensions",
                 request,
                 u"deployments",
                 namespace,
@@ -617,7 +688,6 @@ class _Kubernetes(object):
             Get one Deployment by name.
             """
             return self._get(
-                u"extensions",
                 request,
                 u"deployments",
                 namespace,
