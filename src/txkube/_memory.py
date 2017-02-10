@@ -15,7 +15,7 @@ from zope.interface import Interface, implementer
 
 from twisted.python.url import URL
 
-from twisted.web.http import CREATED, CONFLICT, NOT_FOUND, OK
+from twisted.web.http import CREATED, NOT_FOUND, OK
 
 from eliot import start_action
 
@@ -122,32 +122,6 @@ def _transform_object(obj, *transformation):
         _incrementResourceVersion,
         *transformation
     )
-
-
-
-def _full_kind(details):
-    """
-    Determine the full kind (including a group if applicable) for some failure
-    details.
-
-    :see: ``v1.Status.details``
-    """
-    kind = details[u"kind"]
-    if details.get(u"group") is not None:
-        kind += u"." + details[u"group"]
-    return kind
-
-
-
-def _message(details, event):
-    """
-    Format some values into one kind of failure message.
-
-    :see: ``v1.Status.message``
-    """
-    fmt = u'{full_kind} "{name}" {event}'
-    full_kind = _full_kind(details)
-    return fmt.format(event=event, full_kind=full_kind, **details)
 
 
 
@@ -271,28 +245,11 @@ class AdHocAgency(object):
         if old.metadata.resourceVersion != new.metadata.resourceVersion:
             group = _groups.get(type(old), None)
             details = {
-                u'group': group,
-                u'kind': u'deployments',
-                u'name': u'q',
+                u"group": group,
+                u"kind": old.kind,
+                u"name": old.metadata.name,
             }
-            kind = _full_kind(details)
-            name = old.metadata.name
-            fmt = (
-                u'Operation cannot be fulfilled on {kind} "{name}": '
-                u'the object has been modified; '
-                u'please apply your changes to the latest version and try again'
-            )
-            raise KubernetesError(
-                CONFLICT,
-                v1.Status(
-                    code=CONFLICT,
-                    details=details,
-                    message=fmt.format(kind=kind, name=name),
-                    metadata={},
-                    reason=u'Conflict',
-                    status=u'Failure',
-                ),
-            )
+            raise KubernetesError.object_modified(details)
 
 
 class _KubernetesState(PClass):
@@ -437,26 +394,12 @@ class _Kubernetes(object):
         try:
             obj = collection.item_by_name(name)
         except KeyError:
-            details = {
+            raise KubernetesError.not_found({
                 u"name": name,
                 u"kind": collection_name,
                 u"group": _groups.get(type(collection), None),
-            }
-            message = _message(details, u"not found")
-            return response(
-                request,
-                NOT_FOUND,
-                iobject_to_raw(v1.Status(
-                    status=u"Failure",
-                    message=message,
-                    reason=u"NotFound",
-                    details=details,
-                    metadata={},
-                    code=NOT_FOUND,
-                )),
-            )
-        else:
-            return response(request, OK, iobject_to_raw(obj))
+            })
+        return response(request, OK, iobject_to_raw(obj))
 
     def _create(self, request, collection_name):
         with start_action(action_type=u"memory:create", kind=collection_name):
@@ -470,18 +413,7 @@ class _Kubernetes(object):
                     u"kind": collection_name,
                     u"group": _groups.get(type(collection), None),
                 }
-                return response(
-                    request,
-                    CONFLICT,
-                    iobject_to_raw(v1.Status(
-                        status=u"Failure",
-                        message=_message(details, u"already exists"),
-                        reason=u"AlreadyExists",
-                        details=details,
-                        metadata={},
-                        code=CONFLICT,
-                    )),
-                )
+                raise KubernetesError.already_exists(details)
             self._set_state(state)
             return response(request, CREATED, iobject_to_raw(obj))
 
@@ -522,6 +454,11 @@ class _Kubernetes(object):
                 code=NOT_FOUND,
             )),
         )
+
+    @app.handle_errors(KubernetesError)
+    def object_not_found(self, request, reason):
+        exc = reason.value
+        return response(request, exc.code, iobject_to_raw(exc.status))
 
     with app.subroute(u"/api/v1") as app:
         @app.route(u"/namespaces", methods=[u"GET"])

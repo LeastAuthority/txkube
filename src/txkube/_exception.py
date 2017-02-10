@@ -3,7 +3,22 @@
 
 from json import loads
 
+from twisted.web.http import NOT_FOUND, CONFLICT
 from twisted.web.client import readBody
+
+
+def _full_kind(details):
+    """
+    Determine the full kind (including a group if applicable) for some failure
+    details.
+
+    :see: ``v1.Status.details``
+    """
+    kind = details[u"kind"]
+    if details.get(u"group") is not None:
+        kind += u"." + details[u"group"]
+    return kind
+
 
 
 class KubernetesError(Exception):
@@ -16,6 +31,65 @@ class KubernetesError(Exception):
     def __init__(self, code, status):
         self.code = code
         self.status = status
+
+    @classmethod
+    def not_found(cls, details):
+        # Circular imports :(  See below.
+        from ._model import v1
+        kind = _full_kind(details)
+        return cls(
+            NOT_FOUND,
+            v1.Status(
+                status=u"Failure",
+                message=u'{kind} "{name}" not found'.format(
+                    kind=kind, name=details[u"name"],
+                ),
+                reason=u"NotFound",
+                details=details,
+                metadata={},
+                code=NOT_FOUND,
+            ),
+        )
+
+    @classmethod
+    def already_exists(cls, details):
+        # Circular imports :(  See below.
+        from ._model import v1
+        kind = _full_kind(details)
+        return cls(
+            CONFLICT,
+            v1.Status(
+                status=u"Failure",
+                message=u'{kind} "{name}" already exists'.format(
+                    kind=kind, name=details[u"name"],
+                ),
+                reason=u"AlreadyExists",
+                details=details,
+                metadata={},
+                code=CONFLICT,
+            ),
+        )
+
+    @classmethod
+    def object_modified(cls, details):
+        from ._model import v1
+        kind = _full_kind(details)
+        fmt = (
+            u'Operation cannot be fulfilled on {kind} "{name}": '
+            u'the object has been modified; '
+            u'please apply your changes to the latest version and try again'
+        )
+        return cls(
+            CONFLICT,
+            v1.Status(
+                code=CONFLICT,
+                details=details,
+                message=fmt.format(kind=kind, name=details[u"name"]),
+                metadata={},
+                reason=u'Conflict',
+                status=u'Failure',
+            ),
+        )
 
 
     @classmethod
