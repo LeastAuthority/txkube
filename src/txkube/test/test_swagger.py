@@ -703,7 +703,10 @@ class VersionedPClassesTests(TestCase):
         ``VersionedPClasses``.
         """
         a = VersionedPClasses(self.spec, u"a", name_field=u"name")
-        self.assertThat(a.foo().name, Equals(u"foo"))
+        self.assertThat(
+            a.foo().name,
+            MatchesAll(IsInstance(unicode), Equals(u"foo")),
+        )
 
 
     def test_version(self):

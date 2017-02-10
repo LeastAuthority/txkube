@@ -785,6 +785,7 @@ class VersionedPClasses(object):
 
 
     def __getattr__(self, name):
+        name = name.decode("ascii")
         constant_fields = {}
         if self.name_field is not None:
             constant_fields[self.name_field] = name
