@@ -1,7 +1,12 @@
 # Copyright Least Authority Enterprises.
 # See LICENSE for details.
 
-from io import BytesIO
+"""
+Integration between Eliot, eliottree, and testtools to provide easily
+readable Eliot logs for failing tests.
+"""
+
+from io import BytesIO as TextIO
 
 from fixtures import Fixture
 
@@ -25,13 +30,14 @@ def _eliottree(logs):
     tree.merge_tasks(logs)
     nodes = tree.nodes()
 
-    out = BytesIO()
+    out = TextIO()
     render_task_nodes(
         write=out.write,
         nodes=nodes,
         field_limit=0,
     )
     return out.getvalue()
+
 
 
 class CaptureEliotLogs(Fixture):
