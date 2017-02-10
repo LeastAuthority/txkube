@@ -48,13 +48,13 @@ class MappingEqualsTests(TestCase):
         )
 
         # Different types altogether.
-        mismatch = MappingEquals(object()).match({u"foo": u"baz"})
+        mismatch = MappingEquals(0).match({0: 1})
         self.expectThat(
             mismatch.describe(),
             Equals(
                 u"type mismatch:\n"
-                u"reference = <type 'object'>\n"
-                u"actual    = <type 'dict'>\n"
+                u"reference = <type 'int'> (0)\n"
+                u"actual    = <type 'dict'> ({0: 1})\n"
             ),
         )
 
@@ -128,13 +128,13 @@ class AttrsEqualsTests(TestCase):
         )
 
         # Different types altogether.
-        mismatch = AttrsEquals(self.attrs(u"bar")).match(object())
+        mismatch = AttrsEquals(self.attrs(0)).match(1)
         self.expectThat(
             mismatch.describe(),
             Equals(
                 u"type mismatch:\n"
-                u"reference = <class 'txkube.testing.test.test_matchers.attrs'>\n"
-                u"actual    = <type 'object'>\n"
+                u"reference = <class 'txkube.testing.test.test_matchers.attrs'> (attrs(foo=0))\n"
+                u"actual    = <type 'int'> (1)\n"
             ),
         )
 
@@ -184,13 +184,13 @@ class PClassEqualsTests(TestCase):
         )
 
         # Different types altogether.
-        mismatch = PClassEquals(object()).match(self.pclass(foo=u"baz"))
+        mismatch = PClassEquals(0).match(self.pclass(foo=1))
         self.expectThat(
             mismatch.describe(),
             Equals(
                 u"type mismatch:\n"
-                u"reference = <type 'object'>\n"
-                u"actual    = <class 'txkube.testing.test.test_matchers.pclass'>\n"
+                u"reference = <type 'int'> (0)\n"
+                u"actual    = <class 'txkube.testing.test.test_matchers.pclass'> (pclass(foo=1))\n"
             ),
         )
 
