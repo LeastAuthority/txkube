@@ -15,7 +15,6 @@ from testtools.matchers import (
     Contains, AfterPreprocessing, MatchesPredicate,
 )
 
-from testtools.twistedsupport import AsynchronousDeferredRunTest
 from testtools import run_test_with
 
 from twisted.python.failure import Failure
@@ -25,7 +24,7 @@ from twisted.web.http import NOT_FOUND, CONFLICT
 
 from .._network import version_to_segments
 
-from ..testing import TestCase
+from ..testing import TestCase, AsynchronousDeferredRunTest
 
 from .. import (
     KubernetesError,
