@@ -110,24 +110,25 @@ _TRY_AGAIN = (
     u"please apply your changes to the latest version and try again"
 )
 
-def _replace(client, obj, transformation, tries=3):
+def _replace(client, obj, transformation, retries=2):
     """
     Try to replace the given object with one that differs by the given
     transformation.
 
     Try again if the server reports the object has changed.
     """
-    d = client.get(obj)
-    def got(latest):
-        return client.replace(latest.transform(*transformation))
-    d.addCallback(got)
+    d = client.replace(obj.transform(*transformation))
     def maybe_outdated(reason):
         reason.trap(KubernetesError)
         # Uugghh...  This seems to be the only way to identify the condition.
         if _TRY_AGAIN in reason.value.status.message:
-            return _replace(client, obj, transformation, tries - 1)
+            d = client.get(obj)
+            d.addCallback(lambda latest: _replace(
+                client, latest, transformation, retries - 1
+            ))
+            return d
         return reason
-    if tries > 0:
+    if retries > 0:
         d.addErrback(maybe_outdated)
     return d
 
@@ -665,7 +666,7 @@ def kubernetes_client_tests(get_kubernetes):
                     [u"metadata", u"labels"],
                     replacement_labels,
                 )
-                return _replace(self.client, created, transformation)
+                return _replace(self.client, created, transformation, retries=1)
             d.addCallback(created)
             def replaced(result):
                 self.expectThat(
