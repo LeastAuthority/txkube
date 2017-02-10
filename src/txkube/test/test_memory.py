@@ -5,9 +5,19 @@
 Tests for ``txkube.memory_kubernetes``.
 """
 
+from zope.interface.verify import verifyClass
+
+from hypothesis import given
+
+from testtools.matchers import Equals
+
 from ..testing.integration import kubernetes_client_tests
+from ..testing.strategies import iobjects
+from ..testing import TestCase
 
 from .. import memory_kubernetes
+from .._memory import _KubernetesState, IAgency, NullAgency
+
 
 def get_kubernetes(case):
     """
@@ -16,8 +26,43 @@ def get_kubernetes(case):
     return memory_kubernetes()
 
 
+
 class KubernetesClientIntegrationTests(kubernetes_client_tests(get_kubernetes)):
     """
     Integration tests which interact with an in-memory-only Kubernetes
     deployment via ``txkube.memory_kubernetes``.
     """
+
+
+
+class NullAgencyTests(TestCase):
+    """
+    Tests for ``NullAgency``.
+    """
+    def test_interface(self):
+        """
+        ``NullAgency`` implements ``IAgency``.
+        """
+        verifyClass(IAgency, NullAgency)
+
+
+    @given(iobjects())
+    def test_before_create(self, obj):
+        """
+        ``NullAgency.before_create`` returns the ``IObject`` passed to it with no
+        modifications.
+        """
+        state = _KubernetesState()
+        actual = NullAgency().before_create(state, obj)
+        self.assertThat(actual, Equals(obj))
+
+
+    @given(iobjects())
+    def test_after_create(self, obj):
+        """
+        ``NullAgency.after_create`` returns the ``IObject`` passed to it with no
+        modifications.
+        """
+        state = _KubernetesState()
+        actual = NullAgency().after_create(state, obj)
+        self.assertThat(actual, Equals(obj))
