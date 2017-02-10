@@ -896,18 +896,24 @@ def kubernetes_client_tests(get_kubernetes):
             :return: A ``Deferred`` that fires when the behavior has been
                 verified.
             """
+            # This object will be the target of the deletion.
             victim = strategy.example()
+            # These bystanders should be left alone.
             bystander_a = strategy.example()
             bystander_b = strategy.example()
-            # Put the victim and a bystander into the victim namespace.
             victim = victim.transform(
+                # Put the victim in the victim namespace.
                 [u"metadata", u"namespace"], victim_namespace.metadata.name,
             )
             bystander_a = bystander_a.transform(
+                # Put a bystander in the victim namespace, too.
                 [u"metadata", u"namespace"], victim_namespace.metadata.name,
+                # Also, be completely certain the bystander has a different
+                # name.
+                [u"metadata", u"name"], different_name(victim.metadata.name),
             )
-            # And the other in another namespace.
             bystander_b = bystander_b.transform(
+                # Put a bystander in another namespace too.
                 [u"metadata", u"namespace"], bystander_namespace.metadata.name,
             )
             d = gatherResults(list(
