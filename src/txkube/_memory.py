@@ -9,13 +9,12 @@ from json import dumps, loads
 
 import attr
 
-from pyrsistent import InvariantException, pset
+from pyrsistent import InvariantException, PClass, field, pset
 
-from zope.interface import implementer
+from zope.interface import Interface, implementer
 
 from twisted.python.url import URL
 
-from twisted.python.compat import nativeString
 from twisted.web.http import CREATED, CONFLICT, NOT_FOUND, OK
 
 from eliot import start_action
@@ -56,11 +55,24 @@ class _MemoryKubernetes(object):
     def __init__(self):
         base_url = URL.fromText(u"https://kubernetes.example.invalid./")
         self._state = _KubernetesState()
-        self._resource = _kubernetes_resource(self._state)
+        self._resource = _kubernetes_resource(self)
         self._kubernetes = network_kubernetes(
             base_url=base_url,
             agent=RequestTraversalAgent(self._resource),
         )
+
+
+    def _state_changed(self, state):
+        """
+        The Kubernetes state has been changed.  Record the new version.
+
+        The state is immutable so any changes must be represented as a brand
+        new object.
+
+        :param _KubernetesState state: The new state.
+        """
+        self._state = state
+
 
     def client(self, *args, **kwargs):
         """
@@ -71,18 +83,215 @@ class _MemoryKubernetes(object):
 
 
 
-def _kubernetes_resource(state):
-    return _Kubernetes(state).app.resource()
+def _kubernetes_resource(memory_service):
+    return _Kubernetes(memory_service).app.resource()
 
 
 
-@attr.s
-class _KubernetesState(object):
-    namespaces = attr.ib(default=v1.NamespaceList())
-    configmaps = attr.ib(default=v1.ConfigMapList())
-    services = attr.ib(default=v1.ServiceList())
+def _incrementResourceVersion(version):
+    """
+    Pyrsistent transformation function which can increment a
+    ``v1.ObjectMeta.resourceVersion`` value (even if it was missing).
 
-    deployments = attr.ib(default=v1beta1.DeploymentList())
+    :param version: The old version as a ``unicode`` string or ``None`` if
+        there wasn't one.
+
+    :return unicode: The new version, guaranteed to be greater than the old
+        one.
+    """
+    if version is None:
+        version = 0
+    return u"{}".format(int(version) + 1)
+
+
+
+def _transform_object(obj, *transformation):
+    """
+    Apply a pyrsistent transformation to an ``IObject``.
+
+    In addition to the given transformation, the object's resourceVersion will
+    be updated.
+
+    :param IObject: obj: The object to transform.
+    :param *transformation: Arguments like those to ``PClass.transform``.
+
+    :return: The transformed object.
+    """
+    return obj.transform(
+        [u"metadata", u"resourceVersion"],
+        _incrementResourceVersion,
+        *transformation
+    )
+
+
+
+class IAgency(Interface):
+    """
+    An ``IAgency`` implementation can impress certain additional behaviors
+    upon a ``_KubernetesState``.  The latter shall use methods of the former
+    during state changes to give the former an opportunity to influence the
+    outcome of the state change.
+    """
+    def before_create(state, obj):
+        """
+        This is called before an object is created.
+
+        :param _KubernetesState state: The state in which the object is being
+            created.
+
+        :param IObject obj: A description of the object to be created.
+
+        :return IObject: The object to really create.  Typically this is some
+            transformation of ``obj`` (for example, with default values
+            populated).
+        """
+
+
+    def after_create(state, obj):
+        """
+        This is called after an object has been created.
+
+        :param _KubernetesState state: The state in which the object is being
+            created.
+
+        :param IObject obj: A description of the object created.  Regardless
+            of the implementation of this method, this is the description
+            which will be returned in the response to the create operation.
+
+        :return IObject: The object to store in the state.  Typically this is
+            some transformation of ``obj`` (for example, with an observed
+            status attached)l.
+        """
+
+
+
+@implementer(IAgency)
+class NullAgency(object):
+    """
+    ``NullAgency`` does nothing.
+    """
+    def before_create(self, state, obj):
+        return obj
+
+
+    def after_create(self, state, obj):
+        return obj
+
+
+
+@implementer(IAgency)
+class AdHocAgency(object):
+    """
+    ``AdHocAgency`` implements some object changes which I observed to happen
+    on a real Kubernetes server while I was working on various parts of
+    txkube.  No attempt at completeness attempted.  The system for selecting
+    changes to implement is to run into important inconsistencies between this
+    and a real Kubernetes while developing other features and then fix those
+    inconsistencies.
+
+    Perhaps in the future this will be replaced by something with less of an
+    ad hoc nature.
+    """
+    def before_create(self, state, obj):
+        return obj.fill_defaults()
+
+
+    def after_create(self, state, obj):
+        if isinstance(obj, v1beta1.Deployment):
+            obj = _transform_object(
+                obj,
+                [u"metadata", u"annotations", u"deployment.kubernetes.io/revision"],
+                u"1",
+                [u"status"],
+                {},
+                [u"status", u"observedGeneration"],
+                1,
+                [u"status", u"unavailableReplicas"],
+                1,
+            )
+        return obj
+
+
+
+class _KubernetesState(PClass):
+    """
+    ``_KubernetesState`` contains the canonical representation of internal
+    state required to emulate a Kubernetes server.
+
+    :ivar IAgency agency: Any behavior to apply to transformations of this
+        state.
+    """
+    agency = field(initial=AdHocAgency())
+
+    namespaces = field(initial=v1.NamespaceList())
+    configmaps = field(initial=v1.ConfigMapList())
+    services = field(initial=v1.ServiceList())
+
+    deployments = field(initial=v1beta1.DeploymentList())
+
+    def create(self, collection_name, obj):
+        """
+        Create a new object in the named collection.
+
+        :param unicode collection_name: The name of the collection in which to
+            create the object.
+
+        :param IObject obj: A description of the object to create.
+
+        :return _KubernetesState: A new state based on the current state but
+            also containing ``obj``.
+        """
+        obj = self.agency.before_create(self, obj)
+        new = self.agency.after_create(self, obj)
+        updated = self.transform(
+            [collection_name],
+            lambda c: c.add(new),
+        )
+        return updated
+
+
+    def replace(self, collection_name, old, new):
+        """
+        Replace an existing object with a new version of it.
+
+        :param unicode collection_name: The name of the collection in which to
+            replace an object.
+
+        :param IObject old: A description of the object being replaced.
+
+        :param IObject new: A description of the object to take the place of
+            ``old``.
+
+        :return _KubernetesState: A new state based on the current state but
+            also containing ``obj``.
+        """
+        # A before_replace hook on agency, called here, would be a good way to
+        # introduce the resourceVersion check we need to properly test the fix
+        # for #88.
+        updated = self.transform(
+            [collection_name],
+            lambda c: c.replace(old, new),
+        )
+        return updated
+
+
+    def delete(self, collection_name, obj):
+        """
+        Delete an existing object.
+
+        :param unicode collection_name: The name of the collection from which
+            to delete the object.
+
+        :param IObject obj: A description of the object to delete.
+
+        :return _KubernetesState: A new state based on the current state but
+            not containing ``obj``.
+        """
+        updated = self.transform(
+            [collection_name],
+            lambda c: obj.delete_from(c),
+        )
+        return updated
 
 
 
@@ -119,10 +328,18 @@ class _Kubernetes(object):
     """
     A place to stick a bunch of Klein definitions.
 
-    :ivar _KubernetesState state: The Kubernetes state with which the API will
-        be interacting.
+    :ivar _MemoryKubernetes service: The Kubernetes-alike holding the
+        in-memory Kubernetes state with which the API will be interacting.
     """
-    state = attr.ib()
+    service = attr.ib()
+
+    # This could be a property except
+    # https://github.com/hynek/attrs/issues/144
+    def _get_state(self):
+        return self.service._state
+
+    def _set_state(self, value):
+        self.service._state_changed(value)
 
     def _reduce_to_namespace(self, collection, namespace):
         # Unfortunately pset does not support transform. :( Use this more
@@ -132,13 +349,18 @@ class _Kubernetes(object):
             pset(obj for obj in collection.items if obj.metadata.namespace == namespace),
         )
 
-    def _list(self, request, namespace, collection):
-        with start_action(action_type=u"memory:list", kind=collection.kind):
+    def _collection_by_name(self, collection_name):
+        return getattr(self._get_state(), collection_name)
+
+    def _list(self, request, namespace, collection_name):
+        with start_action(action_type=u"memory:list", kind=collection_name):
+            collection = self._collection_by_name(collection_name)
             if namespace is not None:
                 collection = self._reduce_to_namespace(collection, namespace)
             return response(request, OK, iobject_to_raw(collection))
 
-    def _get(self, group, request, collection, collection_name, namespace, name):
+    def _get(self, group, request, collection_name, namespace, name):
+        collection = self._collection_by_name(collection_name)
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         try:
@@ -165,11 +387,11 @@ class _Kubernetes(object):
         else:
             return response(request, OK, iobject_to_raw(obj))
 
-    def _create(self, group, request, collection, collection_name):
-        with start_action(action_type=u"memory:create", kind=collection.kind):
-            obj = iobject_from_raw(loads(request.content.read())).fill_defaults()
+    def _create(self, group, request, collection_name):
+        with start_action(action_type=u"memory:create", kind=collection_name):
+            obj = iobject_from_raw(loads(request.content.read()))
             try:
-                added = collection.add(obj)
+                state = self._get_state().create(collection_name, obj)
             except InvariantException:
                 details = {
                     u"name": obj.metadata.name,
@@ -188,22 +410,21 @@ class _Kubernetes(object):
                         code=CONFLICT,
                     )),
                 )
-
-            setattr(self.state, nativeString(collection_name), added)
+            self._set_state(state)
             return response(request, CREATED, iobject_to_raw(obj))
 
-    def _replace(self, group, request, collection, collection_name, namespace, name):
+
+    def _replace(self, group, request, collection_name, namespace, name):
+        collection = self._collection_by_name(collection_name)
         old = collection.item_by_name(name)
         new = iobject_from_raw(loads(request.content.read()))
-        setattr(self.state, collection_name, collection.replace(old, new))
+        self._set_state(self._get_state().replace(collection_name, old, new))
         return response(request, OK, iobject_to_raw(new))
 
-    def _delete(self, request, collection, collection_name, namespace, name):
-        if namespace is None:
-            obj = collection.item_by_name(name)
-        else:
-            obj = self._reduce_to_namespace(collection, namespace).item_by_name(name)
-        setattr(self.state, collection_name, obj.delete_from(collection))
+    def _delete(self, request, collection_name, namespace, name):
+        collection = self._collection_by_name(collection_name)
+        obj = collection.item_by_name(name)
+        self._set_state(self._get_state().delete(collection_name, obj))
         return response(request, OK, iobject_to_raw(obj))
 
     app = Klein()
@@ -228,14 +449,14 @@ class _Kubernetes(object):
             """
             Get all existing Namespaces.
             """
-            return self._list(request, None, self.state.namespaces)
+            return self._list(request, None, u"namespaces")
 
         @app.route(u"/namespaces/<namespace>", methods=[u"GET"])
         def get_namespace(self, request, namespace):
             """
             Get one Namespace by name.
             """
-            return self._get(None, request, self.state.namespaces, u"namespaces", None, namespace)
+            return self._get(None, request, u"namespaces", None, namespace)
 
         @app.route(u"/namespaces/<namespace>", methods=[u"DELETE"])
         def delete_namespace(self, request, namespace):
@@ -243,7 +464,7 @@ class _Kubernetes(object):
             Delete one Namespace by name.
             """
             return self._delete(
-                request, self.state.namespaces, "namespaces", None, namespace,
+                request, u"namespaces", None, namespace,
             )
 
         @app.route(u"/namespaces", methods=[u"POST"])
@@ -251,7 +472,7 @@ class _Kubernetes(object):
             """
             Create a new Namespace.
             """
-            return self._create(None, request, self.state.namespaces, u"namespaces")
+            return self._create(None, request, u"namespaces")
 
         @app.route(u"/namespaces/<namespace>", methods=[u"PUT"])
         def replace_namespace(self, request, namespace):
@@ -261,7 +482,6 @@ class _Kubernetes(object):
             return self._replace(
                 None,
                 request,
-                self.state.namespaces,
                 u"namespaces",
                 None,
                 namespace,
@@ -272,21 +492,21 @@ class _Kubernetes(object):
             """
             Get all existing ConfigMaps.
             """
-            return self._list(request, None, self.state.configmaps)
+            return self._list(request, None, u"configmaps")
 
         @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"GET"])
         def get_configmap(self, request, namespace, configmap):
             """
             Get one ConfigMap by name.
             """
-            return self._get(None, request, self.state.configmaps, u"configmaps", namespace, configmap)
+            return self._get(None, request, u"configmaps", namespace, configmap)
 
         @app.route(u"/namespaces/<namespace>/configmaps", methods=[u"POST"])
         def create_configmap(self, request, namespace):
             """
             Create a new ConfigMap.
             """
-            return self._create(None, request, self.state.configmaps, u"configmaps")
+            return self._create(None, request, u"configmaps")
 
         @app.route(u"/namespaces/<namespace>/configmaps/<configmap>", methods=[u"PUT"])
         def replace_configmap(self, request, namespace, configmap):
@@ -296,7 +516,6 @@ class _Kubernetes(object):
             return self._replace(
                 None,
                 request,
-                self.state.configmaps,
                 u"configmaps",
                 namespace,
                 configmap,
@@ -308,7 +527,7 @@ class _Kubernetes(object):
             Delete one ConfigMap by name.
             """
             return self._delete(
-                request, self.state.configmaps, "configmaps", namespace, configmap,
+                request, u"configmaps", namespace, configmap,
             )
 
         @app.route(u"/namespaces/<namespace>/services", methods=[u"POST"])
@@ -316,7 +535,7 @@ class _Kubernetes(object):
             """
             Create a new Service.
             """
-            return self._create(None, request, self.state.services, u"services")
+            return self._create(None, request, u"services")
 
         @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"PUT"])
         def replace_service(self, request, namespace, service):
@@ -326,7 +545,6 @@ class _Kubernetes(object):
             return self._replace(
                 None,
                 request,
-                self.state.services,
                 u"services",
                 namespace,
                 service,
@@ -337,7 +555,7 @@ class _Kubernetes(object):
             """
             Get all existing Services.
             """
-            return self._list(request, None, self.state.services)
+            return self._list(request, None, u"services")
 
         @app.route(u"/namespaces/<namespace>/services/<service>", methods=[u"GET"])
         def get_service(self, request, namespace, service):
@@ -347,7 +565,6 @@ class _Kubernetes(object):
             return self._get(
                 None,
                 request,
-                self.state.services,
                 u"services",
                 namespace,
                 service,
@@ -359,7 +576,7 @@ class _Kubernetes(object):
             Delete one Service by name.
             """
             return self._delete(
-                request, self.state.services, "services", namespace, service,
+                request, u"services", namespace, service,
             )
 
     with app.subroute(u"/apis/extensions/v1beta1") as app:
@@ -371,7 +588,6 @@ class _Kubernetes(object):
             return self._create(
                 u"extensions",
                 request,
-                self.state.deployments,
                 u"deployments",
             )
 
@@ -383,7 +599,6 @@ class _Kubernetes(object):
             return self._replace(
                 u"extensions",
                 request,
-                self.state.deployments,
                 u"deployments",
                 namespace,
                 deployment,
@@ -394,7 +609,7 @@ class _Kubernetes(object):
             """
             Get all existing Deployments.
             """
-            return self._list(request, None, self.state.deployments)
+            return self._list(request, None, u"deployments")
 
         @app.route(u"/namespaces/<namespace>/deployments/<deployment>", methods=[u"GET"])
         def get_deployment(self, request, namespace, deployment):
@@ -404,7 +619,6 @@ class _Kubernetes(object):
             return self._get(
                 u"extensions",
                 request,
-                self.state.deployments,
                 u"deployments",
                 namespace,
                 deployment,
@@ -416,5 +630,5 @@ class _Kubernetes(object):
             Delete one Deployment by name.
             """
             return self._delete(
-                request, self.state.deployments, "deployments", namespace, deployment,
+                request, u"deployments", namespace, deployment,
             )
