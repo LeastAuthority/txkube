@@ -338,10 +338,13 @@ class SwaggerTests(TestCase):
 
         # string / date-time fields serialize back to an ISO8601 format
         # string.
+        serialized = Type(s=now).serialize()
         self.expectThat(
-            Type(s=now).serialize(),
+            serialized,
             Equals({u"s": now.isoformat().decode("ascii")}),
         )
+        # Thanks for making bytes and unicode compare equal, Python.
+        self.expectThat(serialized[u"s"], IsInstance(unicode))
         # Missing values don't appear in the output.
         self.expectThat(
             Type(s=None).serialize(),

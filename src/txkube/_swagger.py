@@ -510,7 +510,7 @@ def _parse_iso8601(text):
 
 
 def _isoformat(format, v):
-    return v.isoformat()
+    return v.isoformat().decode("ascii")
 
 
 
