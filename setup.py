@@ -25,7 +25,9 @@ setuptools.setup(
         "attr",
         "pyrsistent",
         "incremental",
-        "twisted[tls]",
+        # See https://github.com/twisted/treq/issues/167
+        # And https://twistedmatrix.com/trac/ticket/9032
+        "twisted[tls]!=17.1.0",
         "pem",
         "eliot",
         "python-dateutil",
