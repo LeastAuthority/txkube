@@ -149,8 +149,11 @@ class _NetworkClient(object):
         return self._request(b"GET", url)
 
 
-    def _delete(self, url):
-        return self._request(b"DELETE", url)
+    def _delete(self, url, options):
+        bodyProducer = None
+        if options is not None:
+            bodyProducer = _BytesProducer(dumps(iobject_to_raw(options)))
+        return self._request(b"DELETE", url, bodyProducer=bodyProducer)
 
 
     def _post(self, url, obj):
@@ -229,9 +232,12 @@ class _NetworkClient(object):
             return d.addActionFinish()
 
 
-    def delete(self, obj):
+    def delete(self, obj, options=None):
         """
         Issue a I{DELETE} to delete the given object.
+
+        :param v1.DeleteOptions options: Optional details to control some
+            consequences of the deletion.
         """
         action = start_action(
             action_type=u"network-client:delete",
@@ -241,7 +247,7 @@ class _NetworkClient(object):
         )
         with action.context():
             url = self.kubernetes.base_url.child(*object_location(obj))
-            d = DeferredContext(self._delete(url))
+            d = DeferredContext(self._delete(url, options))
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(lambda raw: None)
