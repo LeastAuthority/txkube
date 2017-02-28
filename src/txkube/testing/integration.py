@@ -7,8 +7,12 @@ Integration test generator for ``txkube.IKubernetesClient``.
 
 from operator import attrgetter, setitem
 from functools import partial, wraps
+from itertools import repeat
 
 from zope.interface.verify import verifyObject
+
+from eliot import Message, start_action
+from eliot.twisted import DeferredContext
 
 from testtools.matchers import (
     AnyMatch, MatchesAll, MatchesStructure, Is, IsInstance, Equals, Not,
@@ -31,6 +35,7 @@ from .. import (
     KubernetesError,
     IKubernetesClient,
     v1, v1beta1,
+    iobject_to_raw,
 )
 
 from .strategies import (
@@ -40,7 +45,11 @@ from .strategies import (
 
 def async(f):
     def _async(*a, **kw):
-        kw["timeout"] = 5.0
+        # This is a pretty long timeout but it includes sitting around waiting
+        # for Kubernetes to finish deleting things so we get better test
+        # isolation...  Namespace deletion, specifically, can be slow, with
+        # some attempts taking 5 minutes or more.
+        kw["timeout"] = 600.0
         return AsynchronousDeferredRunTest(*a, **kw)
     return run_test_with(_async)(f)
 
@@ -101,8 +110,50 @@ def is_active():
 
 
 
+def different_name(name):
+    if len(name) > 1:
+        return name[:-1]
+    return name + u"x"
+
+
+
 def _named(kind, name, namespace=None):
     return kind(metadata=v1.ObjectMeta(name=name, namespace=namespace))
+
+
+
+def poll(reactor, action, f, intervals):
+    """
+    Repeatedly call a function.
+
+    :param IReactorTime reactor: The reactor to use for scheduling.
+
+    :param action: An Eliot action in the context of which to call ``f``.
+
+    :param f: A no-argument callable which returns a ``Deferred``.
+
+    :param interfaces: An iterable of numbers giving the delay to use between
+        each call to ``f``.  This also limits the total number of calls.  When
+        the iterable is exhausted, ``poll`` will stop calling ``f``.
+
+    :return: A ``Deferred`` that fires with any errors encountered by ``f`` or
+        with ``StopIteration`` if the end of ``intervals`` is reached.
+    """
+    intervals = iter(intervals)
+    def g():
+        with action.context():
+            Message.log(poll_iteration=None)
+            # Not bothering with DeferredContext here because when
+            # deferLater calls g, it can restore the action context from
+            # the closure (as it just did a couple lines above).
+            d = f()
+            d.addCallback(
+                lambda ignored: deferLater(reactor, next(intervals), g),
+            )
+            return d
+    d = g()
+    d.addCallback(lambda ignored: g())
+    return d
 
 
 _TRY_AGAIN = (
@@ -134,6 +185,36 @@ def _replace(client, obj, transformation, retries=2):
 
 
 
+def does_not_exist(client, obj):
+    """
+    Wait for ``obj`` to not exist.
+
+    :param IKubernetesClient client: The client to use to determine existence.
+
+    :param IObject obj: The object the existence of which to check.
+
+    :return: A ``Deferred`` that fires when the object does not exist.
+    """
+    action = start_action(action_type=u"poll:start", obj=iobject_to_raw(obj))
+    with action.context():
+        from twisted.internet import reactor
+        d = poll(reactor, action, lambda: client.get(obj), repeat(0.5, 100))
+        d = DeferredContext(d)
+        # Once we get a NOT FOUND error, we're done.
+        def trap_not_found(reason):
+            reason.trap(KubernetesError)
+            if reason.value.code == NOT_FOUND:
+                return None
+            return reason
+        d.addErrback(trap_not_found)
+        def trap_stop_iteration(reason):
+            reason.trap(StopIteration)
+            Message.log(does_not_exist=u"timeout", obj=iobject_to_raw(obj))
+            return None
+        d.addErrback(trap_stop_iteration)
+        return d.addActionFinish()
+
+
 def needs(**to_create):
     """
     Create a function decorator which will create certain Kubernetes objects
@@ -142,15 +223,35 @@ def needs(**to_create):
     This requires the decorated functions accept a first argument with a
     ``client`` attribute bound to an ``IKubernetesClient``.
 
-    :param to_create: Keyword arguments with ``IObject`` providers as values.
-        After being created, these objects will be passed to the decorated
-        function using the same keyword arguments.
+    :param to_create: Keyword arguments with values of Hypothesis strategies
+        which build ``IObject`` providers.  After being created, these objects
+        will be passed to the decorated function using the same keyword
+        arguments.
 
     :return: A function decorator.
     """
+    def build_objects():
+        objs = {}
+        names = set()
+        for name, strategy in to_create.iteritems():
+            while True:
+                obj = strategy.example()
+                if obj.metadata.name not in names:
+                    names.add(obj.metadata.name)
+                    break
+            objs[name] = obj
+        return objs
+    return _needs_objects(build_objects)
+
+
+
+def _needs_objects(get_objects):
     def decorator(f):
         @wraps(f)
         def wrapper(self, *a, **kw):
+            # Get the objects we're supposed to create.
+            to_create = get_objects()
+
             # Check to make sure there aren't keyword argument conflicts.  I
             # doubt this is an exhaustive safety check.
             overlap = set(to_create) & set(kw)
@@ -159,14 +260,24 @@ def needs(**to_create):
                     "Conflict between @needs() and **kw: {}".format(overlap)
                 )
 
-            # Create the objects.
+            # Keep track of the objects we created - keyed on name.
             created = {}
+
+            # Create an object, deleting an existing one that's in the way
+            # first, if necessary.
+            def create(obj):
+                d = self.client.delete(obj)
+                # Some Kubernetes objects take a while to be deleted.
+                # Specifically, Namespaces go though a slow "Terminating"
+                # phase where things they contain are cleaned up.  Delay
+                # cleanup completion until objects are *really* gone.
+                d.addBoth(lambda ignored: does_not_exist(self.client, obj))
+                d.addCallback(lambda ignored: self.client.create(obj))
+                return d
+
+            # Create the objects.
             task = cooperate(
-                self.client.create(
-                    obj
-                ).addCallback(
-                    partial(setitem, created, name)
-                )
+                create(obj).addCallback(partial(setitem, created, name))
                 for (name, obj)
                 in sorted(to_create.items())
             )
@@ -175,19 +286,6 @@ def needs(**to_create):
             # Call the decorated function.
             d.addCallback(lambda ignored: kw.update(created))
             d.addCallback(lambda ignored: f(self, *a, **kw))
-
-            # Delete the created objects.
-            def cleanup(passthrough):
-                task = cooperate(
-                    self.client.delete(created[name])
-                    for name
-                    in sorted(to_create, reverse=True)
-                    if name in created
-                )
-                d = task.whenDone()
-                d.addCallback(lambda ignored: passthrough)
-                return d
-            d.addBoth(cleanup)
             return d
         return wrapper
     return decorator
@@ -289,7 +387,7 @@ class _NamespaceTestsMixin(object):
 
 class _ConfigMapTestsMixin(TestCase):
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_duplicate_configmap_rejected(self, namespace):
         """
         ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
@@ -303,7 +401,7 @@ class _ConfigMapTestsMixin(TestCase):
 
 
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_configmap(self, namespace):
         """
         ``ConfigMap`` objects can be created and retrieved using the ``create``
@@ -330,7 +428,7 @@ class _ConfigMapTestsMixin(TestCase):
 
 
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_configmap_replacement(self, namespace):
         """
         A specific ``ConfigMap`` object can be replaced by name using
@@ -355,23 +453,24 @@ class _ConfigMapTestsMixin(TestCase):
         )
 
 
+    ns_strategy = creatable_namespaces()
     @async
-    def test_configmaps_sorted(self):
+    @needs(ns_a=ns_strategy, ns_b=ns_strategy)
+    def test_configmaps_sorted(self, ns_a, ns_b):
         """
         ``ConfigMap`` objects retrieved with ``IKubernetesClient.list`` appear in
         sorted order, with (namespace, name) as the sort key.
         """
         strategy = configmaps()
-        objs = [strategy.example(), strategy.example()]
-        ns = list(
-            v1.Namespace(
-                metadata=v1.ObjectMeta(name=obj.metadata.namespace),
-                status=None,
-            )
-            for obj
-            in objs
-        )
-        d = gatherResults(list(self.client.create(obj) for obj in ns + objs))
+        objs = [
+            strategy.example().transform(
+                [u"metadata", u"namespace"], ns_a.metadata.name,
+            ),
+            strategy.example().transform(
+                [u"metadata", u"namespace"], ns_b.metadata.name,
+            ),
+        ]
+        d = gatherResults(list(self.client.create(obj) for obj in objs))
         def created_configmaps(ignored):
             return self.client.list(v1.ConfigMap)
         d.addCallback(created_configmaps)
@@ -384,7 +483,7 @@ class _ConfigMapTestsMixin(TestCase):
 
 class _DeploymentTestsMixin(object):
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_deployment(self, namespace):
         """
         ``Deployment`` objects can be created and retrieved using the ``create``
@@ -397,7 +496,7 @@ class _DeploymentTestsMixin(object):
 
 
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_duplicate_deployment_rejected(self, namespace):
         """
         ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
@@ -425,7 +524,7 @@ class _DeploymentTestsMixin(object):
 
 
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_deployment_replacement(self, namespace):
         """
         A specific ``Deployment`` object can be replaced by name using
@@ -453,7 +552,7 @@ class _DeploymentTestsMixin(object):
 
 class _ServiceTestsMixin(object):
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_service(self, namespace):
         """
         ``Service`` objects can be created and retrieved using the ``create`` and
@@ -466,7 +565,7 @@ class _ServiceTestsMixin(object):
 
 
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_duplicate_service_rejected(self, namespace):
         """
         ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
@@ -494,7 +593,7 @@ class _ServiceTestsMixin(object):
 
 
     @async
-    @needs(namespace=creatable_namespaces().example())
+    @needs(namespace=creatable_namespaces())
     def test_service_replacement(self, namespace):
         """
         A specific ``Service`` object can be replaced by name using
@@ -765,9 +864,10 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
+        ns_strategy = creatable_namespaces()
         @needs(
-            victim_namespace=creatable_namespaces().example(),
-            bystander_namespace=creatable_namespaces().example()
+            victim_namespace=ns_strategy,
+            bystander_namespace=ns_strategy,
         )
         def _namespaced_object_deletion_by_name_test(
             self, strategy, cls, victim_namespace, bystander_namespace
@@ -796,18 +896,24 @@ def kubernetes_client_tests(get_kubernetes):
             :return: A ``Deferred`` that fires when the behavior has been
                 verified.
             """
+            # This object will be the target of the deletion.
             victim = strategy.example()
+            # These bystanders should be left alone.
             bystander_a = strategy.example()
             bystander_b = strategy.example()
-            # Put the victim and a bystander into the victim namespace.
             victim = victim.transform(
+                # Put the victim in the victim namespace.
                 [u"metadata", u"namespace"], victim_namespace.metadata.name,
             )
             bystander_a = bystander_a.transform(
+                # Put a bystander in the victim namespace, too.
                 [u"metadata", u"namespace"], victim_namespace.metadata.name,
+                # Also, be completely certain the bystander has a different
+                # name.
+                [u"metadata", u"name"], different_name(victim.metadata.name),
             )
-            # And the other in another namespace.
             bystander_b = bystander_b.transform(
+                # Put a bystander in another namespace too.
                 [u"metadata", u"namespace"], bystander_namespace.metadata.name,
             )
             d = gatherResults(list(
@@ -845,7 +951,7 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        @needs(namespace=creatable_namespaces().example())
+        @needs(namespace=creatable_namespaces())
         def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, group, namespace):
             """
             Verify that a particular kind of namespaced Kubernetes object (such as
@@ -895,11 +1001,7 @@ def kubernetes_client_tests(get_kubernetes):
                 # namespace.  We shouldn't find it.
                 #
                 # First, compute a legal but non-existing namespace name.
-                bogus_namespace = obj.metadata.namespace
-                if len(bogus_namespace) > 1:
-                    bogus_namespace = bogus_namespace[:-1]
-                else:
-                    bogus_namespace += u"x"
+                bogus_namespace = different_name(obj.metadata.namespace)
                 return self.client.get(
                     _named(
                         cls,
