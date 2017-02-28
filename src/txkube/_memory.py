@@ -527,6 +527,9 @@ class _Kubernetes(object):
 
         @app.route(u"/pods", methods=[u"GET"])
         def list_pods(self, request):
+            """
+            Get all existing Pods.
+            """
             return self._list(request, None, u"pods")
 
         @app.route(u"/namespaces/<namespace>/pods/<pod>", methods=[u"PUT"])
