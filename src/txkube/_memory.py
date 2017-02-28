@@ -265,6 +265,7 @@ class _KubernetesState(PClass):
     namespaces = field(initial=v1.NamespaceList())
     configmaps = field(initial=v1.ConfigMapList())
     services = field(initial=v1.ServiceList())
+    pods = field(initial=v1.PodList())
 
     deployments = field(initial=v1beta1.DeploymentList())
 
@@ -509,6 +510,38 @@ class _Kubernetes(object):
                 None,
                 namespace,
             )
+
+        @app.route(u"/namespaces/<namespace>/pods", methods=[u"POST"])
+        def create_pod(self, request, namespace):
+            """
+            Create a new Pod.
+            """
+            return self._create(request, u"pods")
+
+        @app.route(u"/namespaces/<namespace>/pods/<pod>", methods=[u"DELETE"])
+        def delete_pod(self, request, namespace, pod):
+            """
+            Delete one Pod by name
+            """
+            return self._delete(request, u"pods", namespace, pod)
+
+        @app.route(u"/pods", methods=[u"GET"])
+        def list_pods(self, request):
+            return self._list(request, None, u"pods")
+
+        @app.route(u"/namespaces/<namespace>/pods/<pod>", methods=[u"PUT"])
+        def replace_pod(self, request, namespace, pod):
+            """
+            Replace an existing Pod.
+            """
+            return self._replace(request, u"pods", namespace, pod)
+
+        @app.route(u"/namespaces/<namespace>/pods/<pod>", methods=[u"GET"])
+        def get_pod(self, request, namespace, pod):
+            """
+            Get one Pod by name.
+            """
+            return self._get(request, u"pods", namespace, pod)
 
         @app.route(u"/configmaps", methods=[u"GET"])
         def list_configmaps(self, request):

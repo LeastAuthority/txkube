@@ -9,7 +9,7 @@ from string import ascii_lowercase, digits
 
 from hypothesis.strategies import (
     none, builds, fixed_dictionaries, lists, sampled_from, one_of, text,
-    dictionaries, tuples, integers,
+    dictionaries, tuples, integers, booleans,
 )
 
 from .. import v1, v1beta1
@@ -252,6 +252,16 @@ def podspecs():
     """
     return builds(
         v1.PodSpec,
+        activeDeadlineSeconds=one_of(
+            none(),
+            integers(min_value=0, max_value=2 ** 63 - 1),
+        ),
+        dnsPolicy=sampled_from([u"ClusterFirst", u"Default"]),
+        hostIPC=booleans(),
+        hostNetwork=booleans(),
+        hostPID=booleans(),
+        hostname=dns_labels(),
+        # And plenty more ...
         containers=lists(
             containers(),
             min_size=1,
@@ -307,6 +317,25 @@ def deployments():
         # XXX Spec is only required if you want to be able to create the
         # Deployment.
         spec=deploymentspecs(),
+    )
+
+
+def podstatuses():
+    """
+    Build ``v1.PodStatus``.
+    """
+    return none()
+
+
+def pods():
+    """
+    Builds ``v1.Pod``.
+    """
+    return builds(
+        v1.Pod,
+        metadata=namespaced_object_metadatas(),
+        spec=podspecs(),
+        status=podstatuses(),
     )
 
 
