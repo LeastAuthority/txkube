@@ -6,18 +6,18 @@ Integration between Eliot, eliottree, and testtools to provide easily
 readable Eliot logs for failing tests.
 """
 
-from io import BytesIO as TextIO
+from io import StringIO as TextIO
 
 from fixtures import Fixture
 
 from eliot import add_destination, remove_destination
-from eliottree import Tree, render_task_nodes
+from eliottree import tasks_from_iterable, render_tasks
 
 from testtools.content import Content
 from testtools.content_type import UTF8_TEXT
 
 
-def _eliottree(logs):
+def _eliottree(events):
     """
     Render some Eliot log events into a tree-like string.
 
@@ -26,17 +26,18 @@ def _eliottree(logs):
 
     :return bytes: The rendered string.
     """
-    tree = Tree()
-    tree.merge_tasks(logs)
-    nodes = tree.nodes()
-
     out = TextIO()
-    render_task_nodes(
+    render_tasks(
         write=out.write,
-        nodes=nodes,
+        tasks=tasks_from_iterable(events),
         field_limit=0,
     )
-    return out.getvalue()
+    return out.getvalue(
+    ).replace(u"\u2514", u"\\"
+    ).replace(u"\u2500", u"-"
+    ).replace(u"\u251c", u"|"
+    ).encode("utf-8"
+    )
 
 
 
@@ -60,8 +61,6 @@ class CaptureEliotLogs(Fixture):
             self.LOG_DETAIL_NAME,
             Content(
                 UTF8_TEXT,
-                # Safeguard the logs against _tearDown.  Capture the list
-                # object in the lambda's defaults.
-                lambda logs=self.logs: [_eliottree(logs)],
+                lambda: [_eliottree(self.logs)],
             ),
         )
