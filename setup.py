@@ -22,7 +22,7 @@ setuptools.setup(
     zip_safe=False,
     install_requires=[
         "zope.interface",
-        "attr",
+        "attrs",
         "pyrsistent",
         "incremental",
         # See https://github.com/twisted/treq/issues/167
