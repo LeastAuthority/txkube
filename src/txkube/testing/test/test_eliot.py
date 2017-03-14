@@ -32,4 +32,7 @@ class EliotTreeTests(TestCase):
 
         # I don't know exactly what the tree rendering looks like.  That's why
         # I'm using eliot-tree!  So this assertion is sort of lame.
-        self.assertThat(_eliottree(events), Contains(u"foo@1/started"))
+        self.assertThat(
+            _eliottree(events).decode("utf-8"),
+            Contains(u"foo@1/started"),
+        )
