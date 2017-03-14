@@ -12,12 +12,20 @@ from os import environ
 from zope.interface import implementer
 from zope.interface.verify import verifyClass
 
-from testtools.matchers import Equals
+from testtools.matchers import AnyMatch, ContainsDict, Equals
+
+from eliot.testing import capture_logging
+
+from twisted.test.proto_helpers import MemoryReactor
+from twisted.python.url import URL
+from twisted.web.client import Agent
 
 from ..testing import TestCase
 from ..testing.integration import kubernetes_client_tests
 
-from .. import IObject, v1, network_kubernetes_from_context
+from .. import (
+    IObject, v1, network_kubernetes, network_kubernetes_from_context,
+)
 
 from .._network import collection_location
 
@@ -148,3 +156,29 @@ class CollectionLocationTests(TestCase):
             namespace=u"ns",
             instance=True,
         )
+
+
+class ExtraNetworkClientTests(TestCase):
+    """
+    Direct tests for ``_NetworkClient`` that go beyond the guarantees of
+    ``IKubernetesClient``.
+    """
+    @capture_logging(
+        lambda self, logger: self.expectThat(
+            logger.messages,
+            AnyMatch(ContainsDict({
+                u"action_type": Equals(u"network-client:list"),
+                u"apiVersion": Equals(u"v1"),
+                u"kind": Equals(u"Pod"),
+            })),
+        ),
+    )
+    def test_list_logging(self, logger):
+        """
+        ``_NetworkClient.list`` logs an Eliot event describing its given type.
+        """
+        client = network_kubernetes(
+            base_url=URL.fromText(u"http://127.0.0.1/"),
+            agent=Agent(MemoryReactor()),
+        ).client()
+        client.list(v1.Pod)

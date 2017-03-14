@@ -254,7 +254,8 @@ class _NetworkClient(object):
         """
         action = start_action(
             action_type=u"network-client:list",
-            kind=kind,
+            kind=kind.kind,
+            apiVersion=kind.apiVersion,
         )
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(kind))
