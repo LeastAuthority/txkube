@@ -20,7 +20,7 @@ class EliotTreeTests(TestCase):
     """
     def test_tree(self):
         """
-        ``_eliottree`` returns a ``unicode`` string containing a rendered tree of
+        ``_eliottree`` returns a ``bytes`` string containing a rendered tree of
         Eliot actions and messages.
         """
         events = []
@@ -32,4 +32,7 @@ class EliotTreeTests(TestCase):
 
         # I don't know exactly what the tree rendering looks like.  That's why
         # I'm using eliot-tree!  So this assertion is sort of lame.
-        self.assertThat(_eliottree(events), Contains(u"foo@1/started"))
+        self.assertThat(
+            _eliottree(events).decode("utf-8"),
+            Contains(u"foo@1/started"),
+        )

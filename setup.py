@@ -41,7 +41,7 @@ setuptools.setup(
             "testtools",
             "hypothesis",
             "eliot",
-            "eliot-tree",
+            "eliot-tree>=17.0.0",
             "klein",
         ],
     },
