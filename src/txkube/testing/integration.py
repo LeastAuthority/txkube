@@ -344,16 +344,13 @@ class _NamespaceTestsMixin(object):
 
 
     @async
-    def test_namespace_deletion(self):
+    @needs(obj=creatable_namespaces())
+    def test_namespace_deletion(self, obj):
         """
         ``IKubernetesClient.delete`` can be used to delete ``Namespace``
         objects.
         """
-        obj = creatable_namespaces().example()
-        d = self.client.create(obj)
-        def created_namespace(created):
-            return self.client.delete(created)
-        d.addCallback(created_namespace)
+        d = self.client.delete(obj)
         def deleted_namespace(ignored):
             return self.client.list(v1.Namespace)
         d.addCallback(deleted_namespace)
