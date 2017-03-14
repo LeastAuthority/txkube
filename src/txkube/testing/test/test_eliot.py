@@ -20,7 +20,7 @@ class EliotTreeTests(TestCase):
     """
     def test_tree(self):
         """
-        ``_eliottree`` returns a ``unicode`` string containing a rendered tree of
+        ``_eliottree`` returns a ``bytes`` string containing a rendered tree of
         Eliot actions and messages.
         """
         events = []
