@@ -254,6 +254,10 @@ def podspecs():
         v1.PodSpec,
         activeDeadlineSeconds=one_of(
             none(),
+            # The Swagger specification claims this is an int64.  The prose
+            # documentation says it must be a positive integer.  The Golang
+            # PodSpec struct (pkg/api/v1/types.go:PodSpec) declares it a field
+            # of type ``*int64`` - a signed type.
             integers(min_value=0, max_value=2 ** 63 - 1),
         ),
         dnsPolicy=sampled_from([u"ClusterFirst", u"Default"]),
