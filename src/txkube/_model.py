@@ -160,6 +160,22 @@ class Deployment(v1beta1.Deployment):
 
 
 
+@behavior(v1)
+@implementer(IObject)
+class Pod(v1.Pod):
+    """
+    ``Pod`` instances model ``Pod objects
+    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_pod>``.
+    """
+    def fill_defaults(self):
+        return self
+
+
+    def delete_from(self, collection):
+        return collection.remove(self)
+
+
+
 def object_sort_key(obj):
     """
     Define a predictable sort ordering for Kubernetes objects.
@@ -284,6 +300,13 @@ class ServiceList(_List, v1.ServiceList):
 @behavior(v1beta1)
 @implementer(IObject)
 class DeploymentList(_List, v1beta1.DeploymentList):
+    pass
+
+
+
+@behavior(v1)
+@implementer(IObject)
+class PodList(_List, v1.PodList):
     pass
 
 

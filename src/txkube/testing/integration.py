@@ -39,7 +39,7 @@ from .. import (
 )
 
 from .strategies import (
-    labels, creatable_namespaces, configmaps, deployments, services,
+    labels, creatable_namespaces, configmaps, deployments, pods, services,
 )
 
 
@@ -88,6 +88,12 @@ def matches_deployment(deployment):
                 template=matches_metadata(deployment.spec.template.metadata),
             ),
         ),
+    )
+
+
+def matches_pod(pod):
+    return MatchesAll(
+        matches_metadata(pod.metadata),
     )
 
 
@@ -481,6 +487,74 @@ class _ConfigMapTestsMixin(TestCase):
 
 
 
+class _PodTestsMixin(object):
+    @async
+    @needs(namespace=creatable_namespaces())
+    def test_pod(self, namespace):
+        """
+        ``Pod`` objects can be created and retrieved using the ``create`` and
+        ``list`` methods of ``IKubernetesClient``.
+        """
+        return self._create_list_test(
+            namespace, pods(), v1.Pod,
+            v1.PodList, matches_pod,
+        )
+
+
+    @async
+    @needs(namespace=creatable_namespaces())
+    def test_duplicate_pod_rejected(self, namespace):
+        """
+        ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+        ``KubernetesError`` if it is called with a ``Pod`` object with the
+        same name as a *Pod* which already exists in the same namespace.
+        """
+        return self._create_duplicate_rejected_test(
+            namespace, pods(), u"pods", None,
+        )
+
+
+    @async
+    def test_pod_retrieval(self):
+        """
+        A specific ``Pod`` object can be retrieved by name using
+        ``IKubernetesClient.get``.
+        """
+        return self._namespaced_object_retrieval_by_name_test(
+            pods(),
+            v1.Pod,
+            matches_pod,
+            group=None,
+        )
+
+
+    @async
+    @needs(namespace=creatable_namespaces())
+    def test_pod_replacement(self, namespace):
+        """
+        A specific ``Pod`` object can be replaced by name using
+        ``IKubernetesClient.replace``.
+        """
+        return self._object_replacement_test(
+            namespace,
+            pods(),
+            matches_pod,
+        )
+
+
+    @async
+    def test_pod_deletion(self):
+        """
+        A specific ``Pod`` object can be deleted by name using
+        ``IKubernetesClient.delete``.
+        """
+        return self._namespaced_object_deletion_by_name_test(
+            pods(),
+            v1.Pod,
+        )
+
+
+
 class _DeploymentTestsMixin(object):
     @async
     @needs(namespace=creatable_namespaces())
@@ -624,6 +698,7 @@ def kubernetes_client_tests(get_kubernetes):
         _NamespaceTestsMixin,
         _ConfigMapTestsMixin,
         _DeploymentTestsMixin,
+        _PodTestsMixin,
         _ServiceTestsMixin,
         TestCase
     ):
