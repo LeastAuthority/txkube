@@ -290,6 +290,39 @@ def podtemplatespecs():
     )
 
 
+
+def replicasetspecs():
+    """
+    Build ``v1beta1.ReplicaSetSpec"".
+    """
+    return builds(
+        lambda template, **kw: v1beta1.ReplicaSetSpec(
+            # Make sure the selector will match Pods from the pod template
+            # spec.
+            selector={u"matchLabels": template.metadata.labels},
+            template=template,
+            **kw
+        ),
+        template=podtemplatespecs(),
+        minReadySeconds=integers(min_value=0, max_value=2 ** 31 - 1),
+        # Strictly speaking, the max value is more like 2 ** 31 -1.  However,
+        # if we actually sent such a thing to Kubernetes we could probably
+        # expect only undesirable consequences.
+        replicas=integers(min_value=0, max_value=3),
+    )
+
+
+def replicasets():
+    """
+    Build ``v1beta1.ReplicaSet``.
+    """
+    return builds(
+        v1beta1.ReplicaSet,
+        metadata=object_metadatas(),
+        spec=replicasetspecs(),
+    )
+
+
 def deploymentspecs():
     """
     Build ``v1beta1.DeploymentSpec``.
@@ -420,6 +453,13 @@ def podlists():
     return _collections(v1.PodList, pods(), _unique_names_with_namespaces)
 
 
+def replicasetlists():
+    """
+    Build ``v1beta1.ReplicaSetList``.
+    """
+    return _collections(v1beta1.ReplicaSetList, replicasets(), _unique_names_with_namespaces)
+
+
 def configmaplists():
     """
     Build ``v1.ConfigMapList``.
@@ -450,6 +490,7 @@ def objectcollections(namespaces=creatable_namespaces()):
         namespacelists(namespaces),
         deploymentlists(),
         podlists(),
+        replicasetlists(),
         servicelists(),
     )
 
@@ -480,6 +521,7 @@ def iobjects():
         configmaps(),
         deployments(),
         pods(),
+        replicasets(),
         services(),
         objectcollections(),
     )
