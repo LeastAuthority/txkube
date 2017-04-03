@@ -268,6 +268,8 @@ class _KubernetesState(PClass):
     pods = field(initial=v1.PodList())
 
     deployments = field(initial=v1beta1.DeploymentList())
+    replicasets = field(initial=v1beta1.ReplicaSetList())
+
 
     def create(self, collection_name, obj):
         """
@@ -684,4 +686,54 @@ class _Kubernetes(object):
             """
             return self._delete(
                 request, u"deployments", namespace, deployment,
+            )
+
+        @app.route(u"/namespaces/<namespace>/replicasets", methods=[u"POST"])
+        def create_replicaset(self, request, namespace):
+            """
+            Create a new ReplicaSet.
+            """
+            return self._create(
+                request,
+                u"replicasets",
+            )
+
+        @app.route(u"/namespaces/<namespace>/replicasets/<replicaset>", methods=[u"PUT"])
+        def replace_replicaset(self, request, namespace, replicaset):
+            """
+            Replace an existing ReplicaSet.
+            """
+            return self._replace(
+                request,
+                u"replicasets",
+                namespace,
+                replicaset,
+            )
+
+        @app.route(u"/replicasets", methods=[u"GET"])
+        def list_replicasets(self, request):
+            """
+            Get all existing ReplicaSets.
+            """
+            return self._list(request, None, u"replicasets")
+
+        @app.route(u"/namespaces/<namespace>/replicasets/<replicaset>", methods=[u"GET"])
+        def get_replicaset(self, request, namespace, replicaset):
+            """
+            Get one ReplicaSet by name.
+            """
+            return self._get(
+                request,
+                u"replicasets",
+                namespace,
+                replicaset,
+            )
+
+        @app.route(u"/namespaces/<namespace>/replicasets/<replicaset>", methods=[u"DELETE"])
+        def delete_replicaset(self, request, namespace, replicaset):
+            """
+            Delete one ReplicaSet by name.
+            """
+            return self._delete(
+                request, u"replicasets", namespace, replicaset,
             )
