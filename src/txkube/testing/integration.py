@@ -869,10 +869,7 @@ def kubernetes_client_tests(get_kubernetes):
             corresponding to that kind as long as the object has its *name*
             metadata populated.
             """
-            d = self.client.create(obj)
-            def created_object(created):
-                return self.client.get(_named(kind, name=obj.metadata.name))
-            d.addCallback(created_object)
+            d = self.client.get(_named(kind, name=obj.metadata.name))
             def got_object(retrieved):
                 self.assertThat(retrieved, matches(obj))
             d.addCallback(got_object)
