@@ -413,6 +413,13 @@ def deploymentlists():
     return _collections(v1beta1.DeploymentList, deployments(), _unique_names_with_namespaces)
 
 
+def podlists():
+    """
+    Build ``v1.PodList``.
+    """
+    return _collections(v1.PodList, pods(), _unique_names_with_namespaces)
+
+
 def configmaplists():
     """
     Build ``v1.ConfigMapList``.
@@ -442,6 +449,7 @@ def objectcollections(namespaces=creatable_namespaces()):
         configmaplists(),
         namespacelists(namespaces),
         deploymentlists(),
+        podlists(),
         servicelists(),
     )
 
@@ -471,6 +479,7 @@ def iobjects():
         retrievable_namespaces(),
         configmaps(),
         deployments(),
+        pods(),
         services(),
         objectcollections(),
     )

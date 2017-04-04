@@ -144,7 +144,7 @@ def set_if_none(desired_value):
 @implementer(IObject)
 class Deployment(v1beta1.Deployment):
     """
-    ``Deployment`` instances model ``Deployment objects
+    ``Deployment`` instances model `Deployment objects
     <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
     """
     def fill_defaults(self):
@@ -164,8 +164,8 @@ class Deployment(v1beta1.Deployment):
 @implementer(IObject)
 class Pod(v1.Pod):
     """
-    ``Pod`` instances model ``Pod objects
-    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_pod>``.
+    ``Pod`` instances model `Pod objects
+    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_pod>`_.
     """
     def fill_defaults(self):
         return self
