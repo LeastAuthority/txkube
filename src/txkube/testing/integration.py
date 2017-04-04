@@ -259,6 +259,8 @@ def needs(**to_create):
 
 
 def _needs_objects(get_objects):
+    no_grace = v1.DeleteOptions(gracePeriodSeconds=0)
+
     def decorator(f):
         @wraps(f)
         def wrapper(self, *a, **kw):
@@ -276,7 +278,7 @@ def _needs_objects(get_objects):
             def cleanup(obj):
                 # Delete an object, if it exists, and wait for it to stop
                 # existing.
-                d = self.client.delete(obj)
+                d = self.client.delete(obj, no_grace)
                 # Some Kubernetes objects take a while to be deleted.
                 # Specifically, Namespaces go though a slow "Terminating"
                 # phase where things they contain are cleaned up.  Delay
@@ -1079,10 +1081,13 @@ def kubernetes_client_tests(get_kubernetes):
                 in [victim, bystander_a, bystander_b]
             ))
             def created_object(ignored):
-                return self.client.delete(_named(
-                    cls,
-                    namespace=victim.metadata.namespace, name=victim.metadata.name,
-                ))
+                return self.client.delete(
+                    _named(
+                        cls,
+                        namespace=victim.metadata.namespace, name=victim.metadata.name,
+                    ),
+                    v1.DeleteOptions(gracePeriodSeconds=0),
+                )
             d.addCallback(created_object)
             def deleted_object(result):
                 self.expectThat(result, Is(None))
