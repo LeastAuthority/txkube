@@ -39,7 +39,8 @@ from .. import (
 )
 
 from .strategies import (
-    labels, creatable_namespaces, configmaps, deployments, pods, services,
+    labels, creatable_namespaces, configmaps,
+    deployments, replicasets, pods, services,
 )
 
 
@@ -88,6 +89,12 @@ def matches_deployment(deployment):
                 template=matches_metadata(deployment.spec.template.metadata),
             ),
         ),
+    )
+
+
+def matches_replicaset(replicaset):
+    return MatchesAll(
+        matches_metadata(replicaset.metadata),
     )
 
 
@@ -487,6 +494,75 @@ class _ConfigMapTestsMixin(TestCase):
 
 
 
+class _ReplicaSetTestsMixin(object):
+    @async
+    @needs(namespace=creatable_namespaces())
+    def test_replicaset(self, namespace):
+        """
+        ``ReplicaSet`` objects can be created and retrieved using the ``create``
+        and ``list`` methods of ``IKubernetesClient``.
+        """
+        return self._create_list_test(
+            namespace, replicasets(), v1beta1.ReplicaSet,
+            v1beta1.ReplicaSetList, matches_replicaset,
+        )
+
+
+    @async
+    @needs(namespace=creatable_namespaces())
+    def test_duplicate_replicaset_rejected(self, namespace):
+        """
+        ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
+        ``KubernetesError`` if it is called with a ``ReplicaSet`` object with
+        the same name as a *ReplicaSet* which already exists in the same
+        namespace.
+        """
+        return self._create_duplicate_rejected_test(
+            namespace, replicasets(), u"replicasets", None,
+        )
+
+
+    @async
+    def test_replicaset_retrieval(self):
+        """
+        A specific ``ReplicaSet`` object can be retrieved by name using
+        ``IKubernetesClient.get``.
+        """
+        return self._namespaced_object_retrieval_by_name_test(
+            replicasets(),
+            v1beta1.ReplicaSet,
+            matches_replicaset,
+            group=None,
+        )
+
+
+    @async
+    @needs(namespace=creatable_namespaces())
+    def test_replicaset_replacement(self, namespace):
+        """
+        A specific ``ReplicaSet`` object can be replaced by name using
+        ``IKubernetesClient.replace``.
+        """
+        return self._object_replacement_test(
+            namespace,
+            replicasets(),
+            matches_replicaset,
+        )
+
+
+    @async
+    def test_replicaset_deletion(self):
+        """
+        A specific ``ReplicaSet`` object can be deleted by name using
+        ``IKubernetesClient.delete``.
+        """
+        return self._namespaced_object_deletion_by_name_test(
+            replicasets(),
+            v1beta1.ReplicaSet,
+        )
+
+
+
 class _PodTestsMixin(object):
     @async
     @needs(namespace=creatable_namespaces())
@@ -698,6 +774,7 @@ def kubernetes_client_tests(get_kubernetes):
         _NamespaceTestsMixin,
         _ConfigMapTestsMixin,
         _DeploymentTestsMixin,
+        _ReplicaSetTestsMixin,
         _PodTestsMixin,
         _ServiceTestsMixin,
         TestCase

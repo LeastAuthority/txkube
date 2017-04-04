@@ -160,6 +160,22 @@ class Deployment(v1beta1.Deployment):
 
 
 
+@behavior(v1beta1)
+@implementer(IObject)
+class ReplicaSet(v1beta1.ReplicaSet):
+    """
+    ``ReplicaSet`` instances model `ReplicaSet objects
+    <https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/>`_.
+    """
+    def fill_defaults(self):
+        return self
+
+
+    def delete_from(self, collection):
+        return collection.remove(self)
+
+
+
 @behavior(v1)
 @implementer(IObject)
 class Pod(v1.Pod):
@@ -300,6 +316,13 @@ class ServiceList(_List, v1.ServiceList):
 @behavior(v1beta1)
 @implementer(IObject)
 class DeploymentList(_List, v1beta1.DeploymentList):
+    pass
+
+
+
+@behavior(v1beta1)
+@implementer(IObject)
+class ReplicaSetList(_List, v1beta1.ReplicaSetList):
     pass
 
 
