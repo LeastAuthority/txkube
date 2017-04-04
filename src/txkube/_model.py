@@ -81,13 +81,8 @@ class Namespace(v1.Namespace):
 
 
     def delete_from(self, collection):
-        # TODO: Add deletionTimestamp?  See #24
-        return collection.replace(
-            self,
-            self.transform(
-                [u"status"], v1.NamespaceStatus.terminating(),
-            ),
-        )
+        # TODO: deletionTimestamp?  Terminating status?  See #24
+        return collection.remove(self)
 
 
 
