@@ -273,24 +273,39 @@ def _needs_objects(get_objects):
                     "Conflict between @needs() and **kw: {}".format(overlap)
                 )
 
-            # Keep track of the objects we created - keyed on name.
-            created = {}
-
-            # Create an object, deleting an existing one that's in the way
-            # first, if necessary.
-            def create(obj):
+            def cleanup(obj):
+                # Delete an object, if it exists, and wait for it to stop
+                # existing.
                 d = self.client.delete(obj)
                 # Some Kubernetes objects take a while to be deleted.
                 # Specifically, Namespaces go though a slow "Terminating"
                 # phase where things they contain are cleaned up.  Delay
                 # cleanup completion until objects are *really* gone.
                 d.addBoth(lambda ignored: does_not_exist(self.client, obj))
-                d.addCallback(lambda ignored: self.client.create(obj))
+                return d
+
+            def create(obj):
+                # Create some object and arrange for it to be deleted later.
+                d = self.client.create(obj)
+                def created(result):
+                    self.addCleanup(lambda: cleanup(result))
+                    return result
+                d.addCallback(created)
+                return d
+
+            # Keep track of the objects we created - keyed on name.
+            created = {}
+
+            # Create an object, deleting an existing one that's in the way
+            # first, if necessary.
+            def ensure(obj):
+                d = cleanup(obj)
+                d.addCallback(lambda ignored: create(obj))
                 return d
 
             # Create the objects.
             task = cooperate(
-                create(obj).addCallback(partial(setitem, created, name))
+                ensure(obj).addCallback(partial(setitem, created, name))
                 for (name, obj)
                 in sorted(to_create.items())
             )
@@ -307,17 +322,13 @@ def _needs_objects(get_objects):
 
 class _NamespaceTestsMixin(object):
     @async
-    def test_namespace(self):
+    @needs(obj=creatable_namespaces())
+    def test_namespace(self, obj):
         """
         ``Namespace`` objects can be created and retrieved using the ``create``
         and ``list`` methods of ``IKubernetesClient``.
         """
-        obj = creatable_namespaces().example()
-        d = self.client.create(obj)
-        def created_namespace(created):
-            self.assertThat(created, matches_namespace(obj))
-            return self.client.list(v1.Namespace)
-        d.addCallback(created_namespace)
+        d = self.client.list(v1.Namespace)
         def check_namespaces(namespaces):
             self.assertThat(namespaces, IsInstance(v1.NamespaceList))
             # There are some built-in namespaces that we'll ignore.  If we
@@ -331,13 +342,14 @@ class _NamespaceTestsMixin(object):
 
 
     @async
-    def test_namespace_retrieval(self):
+    @needs(obj=creatable_namespaces())
+    def test_namespace_retrieval(self, obj):
         """
         A specific ``Namespace`` object can be retrieved by name using
         ``IKubernetesClient.get``.
         """
         return self._global_object_retrieval_by_name_test(
-            creatable_namespaces(),
+            obj,
             v1.Namespace,
             matches_namespace,
         )
@@ -357,16 +369,13 @@ class _NamespaceTestsMixin(object):
 
 
     @async
-    def test_namespace_deletion(self):
+    @needs(obj=creatable_namespaces())
+    def test_namespace_deletion(self, obj):
         """
         ``IKubernetesClient.delete`` can be used to delete ``Namespace``
         objects.
         """
-        obj = creatable_namespaces().example()
-        d = self.client.create(obj)
-        def created_namespace(created):
-            return self.client.delete(created)
-        d.addCallback(created_namespace)
+        d = self.client.delete(obj)
         def deleted_namespace(ignored):
             return self.client.list(v1.Namespace)
         d.addCallback(deleted_namespace)
@@ -852,7 +861,7 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        def _global_object_retrieval_by_name_test(self, strategy, kind, matches):
+        def _global_object_retrieval_by_name_test(self, obj, kind, matches):
             """
             Verify that a particular kind of non-namespaced Kubernetes object (such as
             *Namespace* or *PersistentVolume*) can be retrieved by name by
@@ -860,7 +869,6 @@ def kubernetes_client_tests(get_kubernetes):
             corresponding to that kind as long as the object has its *name*
             metadata populated.
             """
-            obj = strategy.example()
             d = self.client.create(obj)
             def created_object(created):
                 return self.client.get(_named(kind, name=obj.metadata.name))
