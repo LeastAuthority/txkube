@@ -32,17 +32,14 @@ setuptools.setup(
         "eliot",
         "python-dateutil",
         "pykube",
+        "treq",
+        "klein",
     ],
     extras_require={
         "dev": [
-            "treq",
-            "pem",
-            "pyyaml",
             "testtools",
             "hypothesis",
-            "eliot",
             "eliot-tree>=17.0.0",
-            "klein",
         ],
     },
 )
