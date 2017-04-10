@@ -21,7 +21,7 @@ __all__ = [
 from incremental import Version
 
 from ._metadata import version_tuple as _version_tuple
-version = Version("txkube", *_version_tuple)
+version = __version__ = Version("txkube", *_version_tuple)
 
 from ._exception import KubernetesError, UnrecognizedVersion, UnrecognizedKind
 from ._interface import IObject, IKubernetes, IKubernetesClient
