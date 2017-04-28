@@ -81,7 +81,7 @@ class TLSCredentials(PClass):
     ``TLSCredentials`` holds the information necessary to use a client
     certificate for a TLS handshake.
 
-    :ivar list[pem.Certificate] chain: The client certificate chain to use.
+    :ivar Chain chain: The client certificate chain to use.
     :ivar pem.Key key: The private key which corresponds to ``certificate``.
     """
     chain = field(mandatory=True, invariant=instance_of(Chain))
