@@ -214,21 +214,50 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         configuration file is used to configure the TLS context used when
         connecting to the API server.
         """
+        def sign_ca_cert(key, requestObject, dn):
+            from OpenSSL.crypto import X509, X509Extension
+            from twisted.internet.ssl import Certificate
+
+            req = requestObject.original
+            cert = X509()
+            dn._copyInto(cert.get_issuer())
+            cert.set_subject(req.get_subject())
+            cert.set_pubkey(req.get_pubkey())
+            cert.gmtime_adj_notBefore(0)
+            cert.gmtime_adj_notAfter(60 * 60)
+            cert.set_serial_number(1)
+            cert.add_extensions([
+                X509Extension(b"basicConstraints", True, b"CA:TRUE"),
+                # Not necessarily a good way to populate subjectAltName but it
+                # quiets the deprecation warning we get from service_identity.
+                X509Extension(b"subjectAltName", True, b"DNS:" + dn.commonName),
+            ])
+            cert.sign(key.original, "sha256")
+            return Certificate(cert)
+
         ca_key = KeyPair.generate()
-        ca_cert = ca_key.selfSignedCert(1, commonName="ca")
+        ca_req = ca_key.requestObject(DN(commonName="kubernetes"))
+        ca_cert = sign_ca_cert(ca_key, ca_req, DN(commonName="kubernetes"))
 
         intermediate_key = KeyPair.generate()
         intermediate_req = intermediate_key.requestObject(DN(commonName="intermediate"))
-        intermediate_cert = ca_key.signRequestObject(DN(commonName="ca"), intermediate_req, 1)
+        intermediate_cert = sign_ca_cert(ca_key, intermediate_req, DN(commonName="kubernetes"))
 
         client_key = KeyPair.generate()
         client_req = client_key.requestObject(DN(commonName="client"))
-        client_cert = ca_key.signRequestObject(DN(commonName="intermediate"), client_req, 1)
+        client_cert = intermediate_key.signRequestObject(DN(commonName="intermediate"), client_req, 1)
 
         chain = b"".join([
             client_cert.dumpPEM(),
             intermediate_cert.dumpPEM(),
         ])
+
+        FilePath("ca.key").setContent(ca_key.dump(FILETYPE_PEM))
+        FilePath("ca.crt").setContent(ca_cert.dump(FILETYPE_PEM))
+        FilePath("intermediate.crt").setContent(intermediate_cert.dump(FILETYPE_PEM))
+        FilePath("client.key").setContent(client_key.dump(FILETYPE_PEM))
+        FilePath("client.crt").setContent(client_cert.dump(FILETYPE_PEM))
+        FilePath("chain.crt").setContent(chain)
 
         config = self.write_config(ca_cert, chain, client_key)
         kubernetes = lambda reactor: network_kubernetes_from_context(
@@ -267,8 +296,8 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         d = endpoint.listen(Site(root))
         def listening(port):
             self.addCleanup(port.stopListening)
-            url = b"https://127.0.0.1:8443/"
             redirectable.set_redirect(port.getHost().host, port.getHost().port)
+            url = b"https://127.0.0.1:8443/"
             return agent.request(b"GET", url)
         d.addCallback(listening)
         return d
