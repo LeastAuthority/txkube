@@ -126,20 +126,24 @@ def pick_cert_for_twisted(netloc, possible):
     :param dict[TLSCredentials] possible: The available credentials from which
         to choose.
 
-    :return: A ``twisted.internet.ssl.PrivateCertificate`` instance
-        representing them if credentials are found.  Otherwise, ``None``.
+    :return: A two-tuple.  If no credentials were found, the elements are
+        ``None`` and ``[]``.  Otherwise, the first element is a
+        ``twisted.internet.ssl.PrivateCertificate`` instance representing the
+        client certificate to use and the second element is a ``tuple`` of
+        ``twisted.internet.ssl.Certificate`` instances representing the rest
+        of the chain necessary to validate the client certificate.
     """
     try:
         creds = possible[netloc]
     except KeyError:
-        return None
+        return (None, ())
 
     key = ssl.KeyPair.load(creds.key.as_bytes(), FILETYPE_PEM)
     return (
         ssl.PrivateCertificate.load(
             creds.chain.certificates[0].as_bytes(), key, FILETYPE_PEM,
         ),
-        list(
+        tuple(
             ssl.Certificate.load(cert.as_bytes(), FILETYPE_PEM)
             for cert
             in creds.chain.certificates[1:]
@@ -200,7 +204,7 @@ class ClientCertificatePolicyForHTTPS(PClass):
         hostname = hostname.decode("ascii")
 
         netloc = NetLocation(host=hostname, port=port)
-        client_cert, client_chain = pick_cert_for_twisted(
+        client_cert, extra_cert_chain = pick_cert_for_twisted(
             netloc, self.credentials,
         )
         trust_root = pick_trust_for_twisted(netloc, self.trust_roots)
@@ -216,7 +220,7 @@ class ClientCertificatePolicyForHTTPS(PClass):
             clientCertificate=client_cert,
             trustRoot=trust_root,
             extraCertificateOptions=dict(
-                extraCertChain=list(cert.original for cert in client_chain),
+                extraCertChain=tuple(cert.original for cert in extra_cert_chain),
             ),
         )
 
