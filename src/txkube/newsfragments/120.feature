@@ -1,0 +1,1 @@
+txkube.network_kubernetes_from_context can now load and authenticate with a client certificate chain.
