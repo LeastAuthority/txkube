@@ -2,12 +2,12 @@
 # See LICENSE for details.
 
 import os
-
+from itertools import count, islice
 from uuid import uuid4
 
 from fixtures import TempDir
 
-from testtools.matchers import Equals, Contains, raises
+from testtools.matchers import AfterPreprocessing, Equals, Contains, raises
 
 from twisted.python.filepath import FilePath
 from twisted.internet.protocol import Factory
@@ -17,6 +17,7 @@ from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactor
 
 from ..testing import TestCase
 
+from .._authentication import pairwise
 from .. import authenticate_with_serviceaccount
 
 # Just an arbitrary certificate pulled off the internet.  Details ought not
@@ -186,4 +187,49 @@ class AuthenticateWithServiceAccountTests(TestCase):
                 "Invalid certificate authority certificate found.",
                 "[('PEM routines', 'PEM_read_bio', 'bad base64 decode')]",
             )),
+        )
+
+
+
+class PairwiseTests(TestCase):
+    """
+    Tests for ``pairwise``.
+    """
+    def test_pairs(self):
+        a = object()
+        b = object()
+        c = object()
+        d = object()
+
+        self.expectThat(
+            pairwise([]),
+            AfterPreprocessing(list, Equals([])),
+        )
+        self.expectThat(
+            pairwise([a]),
+            AfterPreprocessing(list, Equals([])),
+        )
+        self.expectThat(
+            pairwise([a, b]),
+            AfterPreprocessing(list, Equals([(a, b)])),
+        )
+
+        self.expectThat(
+            pairwise([a, b, c]),
+            AfterPreprocessing(list, Equals([(a, b), (b, c)])),
+        )
+        self.expectThat(
+            pairwise([a, b, c, d]),
+            AfterPreprocessing(list, Equals([(a, b), (b, c), (c, d)])),
+        )
+
+
+    def test_lazy(self):
+        """
+        ``pairwise`` only consumes as much of its iterable argument as necessary
+        to satisfy iteration of its own result.
+        """
+        self.expectThat(
+            islice(pairwise(count()), 3),
+            AfterPreprocessing(list, Equals([(0, 1), (1, 2), (2, 3)])),
         )

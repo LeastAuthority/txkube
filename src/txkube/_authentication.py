@@ -23,6 +23,21 @@ from pykube import KubeConfig
 
 from ._invariants import instance_of
 
+def pairwise(iterable):
+    """
+    Generate consecutive pairs of elements from the given iterable.
+    """
+    iterator = iter(iterable)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        return
+    for element in iterator:
+        yield first, element
+        first = element
+
+
+
 class TLSCredentials(PClass):
     """
     ``TLSCredentials`` holds the information necessary to use a client
