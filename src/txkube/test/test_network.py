@@ -289,6 +289,12 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         root = Resource()
         root.putChild(b"", Data(b"success", b"text/plain"))
 
+        # Construct the Kubernetes client objects with a Redirectable reactor.
+        # This is necessary because the URL we pass to the Agent we get needs
+        # to agree with the configuration file that was already written (or it
+        # won't select the right client certificate).  Just one of the many
+        # reasons it would be better if we didn't have to do real networking
+        # here.
         redirectable = Redirectable(reactor)
         client = get_kubernetes(redirectable).client()
         agent = client.agent
@@ -304,6 +310,21 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
 
 
     def write_config(self, ca_cert, chain, client_key):
+        """
+        Dump a kubectl config with the given details and return its location.
+
+        :param Certificate ca_cert: The certificate authority certificate
+            expected to have signed the server's certificate.
+
+        :param unicode chain: PEM-encoded certificates starting with the
+            client certificate and proceeding along a signature chain to a
+            certificate signed by a certificate authority which the server
+            recognizes.
+
+        :param KeyPair client_key: The client's private key.
+
+        :return FilePath: The path to the written configuration file.
+        """
         config = FilePath(self.mktemp())
         config.setContent(safe_dump({
             "apiVersion": "v1",
@@ -341,10 +362,25 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
 
 @attr.s
 class Redirectable(proxyForInterface(IReactorSSL)):
+    """
+    An ``IReactorSSL`` which ignores the requested destination and always
+    connects to an alternate address instead.
+
+    :ivar host: The host portion of the alternate address.
+    :ivar port: The host portion of the alternate address.
+    """
     original = attr.ib()
 
     def set_redirect(self, host, port):
+        """
+        Specify the alternate address to which connections will be directed.
+        """
         self.host, self.port = host, port
 
+
     def connectSSL(self, host, port, *a, **kw):
+        """
+        Establish a TLS connection to the alternate address instead of the given
+        address.
+        """
         return self.original.connectSSL(self.host, self.port, *a, **kw)
