@@ -135,7 +135,16 @@ def pick_cert_for_twisted(netloc, possible):
         return None
 
     key = ssl.KeyPair.load(creds.key.as_bytes(), FILETYPE_PEM)
-    return ssl.PrivateCertificate.load(creds.certificate.as_bytes(), key, FILETYPE_PEM)
+    return (
+        ssl.PrivateCertificate.load(
+            creds.chain.certificates[0].as_bytes(), key, FILETYPE_PEM,
+        ),
+        list(
+            ssl.Certificate.load(cert.as_bytes(), FILETYPE_PEM)
+            for cert
+            in creds.chain.certificates[1:]
+        ),
+    )
 
 
 def pick_trust_for_twisted(netloc, possible):
@@ -191,7 +200,9 @@ class ClientCertificatePolicyForHTTPS(PClass):
         hostname = hostname.decode("ascii")
 
         netloc = NetLocation(host=hostname, port=port)
-        client_cert = pick_cert_for_twisted(netloc, self.credentials)
+        client_cert, client_chain = pick_cert_for_twisted(
+            netloc, self.credentials,
+        )
         trust_root = pick_trust_for_twisted(netloc, self.trust_roots)
 
         return ssl.optionsForClientTLS(
@@ -204,6 +215,9 @@ class ClientCertificatePolicyForHTTPS(PClass):
             u"kubernetes",
             clientCertificate=client_cert,
             trustRoot=trust_root,
+            extraCertificateOptions=dict(
+                extraCertChain=list(cert.original for cert in client_chain),
+            ),
         )
 
 

@@ -13,9 +13,9 @@ from base64 import b64encode
 from zope.interface import implementer
 from zope.interface.verify import verifyClass
 
-from yaml import safe_dump
+import attr
 
-from fixtures import TempDir
+from yaml import safe_dump
 
 from testtools.matchers import AnyMatch, ContainsDict, Equals
 
@@ -28,9 +28,11 @@ from twisted.trial.unittest import TestCase as TwistedTestCase
 
 from twisted.python.filepath import FilePath
 from twisted.python.url import URL
+from twisted.python.components import proxyForInterface
 from twisted.internet.ssl import (
     CertificateOptions, DN, KeyPair, trustRootFromCertificates,
 )
+from twisted.internet.interfaces import IReactorSSL
 from twisted.internet.endpoints import SSL4ServerEndpoint
 from twisted.web.client import Agent
 from twisted.web.server import Site
@@ -228,6 +230,51 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             intermediate_cert.dumpPEM(),
         ])
 
+        config = self.write_config(ca_cert, chain, client_key)
+        kubernetes = lambda reactor: network_kubernetes_from_context(
+            reactor, "foo-ctx", path=config,
+        )
+        return self.check_tls_config(ca_key, ca_cert, kubernetes)
+
+
+    def check_tls_config(self, ca_key, ca_cert, get_kubernetes):
+        """
+        Verify that a TLS server configured with the given key and certificate and
+        the Kubernetes client returned by ``get_kubernetes`` can negotiate a
+        TLS connection.
+        """
+        # Set up an HTTPS server that requires the certificate chain from the
+        # configuration file.  This, because there's no way to pry inside a
+        # Context and inspect its state nor any easy way to make Agent talk
+        # over an in-memory transport.
+        from twisted.internet import reactor
+        endpoint = SSL4ServerEndpoint(
+            reactor,
+            0,
+            CertificateOptions(
+                privateKey=ca_key.original,
+                certificate=ca_cert.original,
+                trustRoot=trustRootFromCertificates([ca_cert]),
+            ),
+        )
+        root = Resource()
+        root.putChild(b"", Data(b"success", b"text/plain"))
+
+        redirectable = Redirectable(reactor)
+        client = get_kubernetes(redirectable).client()
+        agent = client.agent
+
+        d = endpoint.listen(Site(root))
+        def listening(port):
+            self.addCleanup(port.stopListening)
+            url = b"https://127.0.0.1:8443/"
+            redirectable.set_redirect(port.getHost().host, port.getHost().port)
+            return agent.request(b"GET", url)
+        d.addCallback(listening)
+        return d
+
+
+    def write_config(self, ca_cert, chain, client_key):
         config = FilePath(self.mktemp())
         config.setContent(safe_dump({
             "apiVersion": "v1",
@@ -259,35 +306,16 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
                 },
             ],
         }))
+        return config
 
-        # Set up an HTTPS server that requires the certificate chain from the
-        # configuration file.  This, because there's no way to pry inside a
-        # Context and inspect its state nor any easy way to make Agent talk
-        # over an in-memory transport.
-        from twisted.internet import reactor
-        endpoint = SSL4ServerEndpoint(
-            reactor,
-            0,
-            CertificateOptions(
-                privateKey=ca_key.original,
-                certificate=ca_cert.original,
-                trustRoot=trustRootFromCertificates([ca_cert]),
-            ),
-        )
-        root = Resource()
-        root.putChild(b"", Data(b"success", b"text/plain"))
 
-        kubernetes = network_kubernetes_from_context(
-            reactor, "foo-ctx", path=config,
-        )
-        client = kubernetes.client()
 
-        d = endpoint.listen(Site(root))
-        def listening(port):
-            self.addCleanup(port.stopListening)
-            url = u"https://{}:{}/".format(
-                port.getHost().host, port.getHost().port,
-            ).encode("utf-8")
-            return client.agent.request(b"GET", url)
-        d.addCallback(listening)
-        return d
+@attr.s
+class Redirectable(proxyForInterface(IReactorSSL)):
+    original = attr.ib()
+
+    def set_redirect(self, host, port):
+        self.host, self.port = host, port
+
+    def connectSSL(self, host, port, *a, **kw):
+        return self.original.connectSSL(self.host, self.port, *a, **kw)
