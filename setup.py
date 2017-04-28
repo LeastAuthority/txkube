@@ -14,7 +14,7 @@ setuptools.setup(
     version=_metadata["version_string"],
     description="A Twisted-based Kubernetes client.",
     author="txkube Developers",
-    url="https://github.com/leastauthority.com/txkube",
+    url="https://github.com/LeastAuthority/txkube",
     license="MIT",
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
