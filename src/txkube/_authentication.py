@@ -11,7 +11,7 @@ from OpenSSL.crypto import FILETYPE_PEM, Error as OpenSSLError
 
 from zope.interface import implementer
 
-from pyrsistent import PClass, field, pmap_field
+from pyrsistent import CheckedPVector, PClass, field, pmap_field
 
 from twisted.python.url import URL
 from twisted.internet import ssl
@@ -22,6 +22,44 @@ from twisted.web.client import Agent
 from pykube import KubeConfig
 
 from ._invariants import instance_of
+
+
+class Certificates(CheckedPVector):
+    """
+    A vector of ``pem.Certificate`` instances.
+    """
+    __type__ = pem.Certificate
+
+
+
+class Chain(PClass):
+    """
+    A certificate chain.
+    """
+    certificates = field(mandatory=True, invariant=instance_of(Certificates))
+
+    def __invariant__(self):
+        if not self.certificates:
+            return (
+                False,
+                "Certificate chain must contain at least one certificate.",
+            )
+        for subject, issuer in pairwise(self.certificates):
+            subject_cert = ssl.Certificate.loadPEM(subject.as_bytes())
+            subject_dn = subject_cert.getIssuer()
+            issuer_dn = ssl.Certificate.loadPEM(issuer.as_bytes()).getSubject()
+            if subject_dn != issuer_dn:
+                return (
+                    False,
+                    "{} issued by {} but followed by {} in the chain".format(
+                        subject_cert.getSubject(),
+                        subject_dn,
+                        issuer_dn,
+                    ),
+                )
+        return (True, "")
+
+
 
 def pairwise(iterable):
     """
@@ -43,11 +81,27 @@ class TLSCredentials(PClass):
     ``TLSCredentials`` holds the information necessary to use a client
     certificate for a TLS handshake.
 
-    :ivar pem.Certificate certificate: The client certificate to use.
+    :ivar list[pem.Certificate] chain: The client certificate chain to use.
     :ivar pem.Key key: The private key which corresponds to ``certificate``.
     """
-    certificate = field(mandatory=True, invariant=instance_of(pem.Certificate))
+    chain = field(mandatory=True, invariant=instance_of(Chain))
     key = field(mandatory=True, invariant=instance_of(pem.Key))
+
+    def __invariant__(self):
+        certs = list(
+            ssl.Certificate.loadPEM(cert.as_bytes())
+            for cert
+            in self.chain.certificates
+        )
+        key = ssl.KeyPair.load(self.key.as_bytes(), FILETYPE_PEM)
+
+        # Invoke CertificateOptions' key/certificate match checking logic.
+        ssl.CertificateOptions(
+            privateKey=key.original,
+            certificate=certs[0].original,
+            extraCertChain=list(cert.original for cert in certs[1:]),
+        ).getContext()
+        return (True, "")
 
 
 class NetLocation(PClass):
@@ -153,7 +207,7 @@ class ClientCertificatePolicyForHTTPS(PClass):
         )
 
 
-def authenticate_with_certificate(reactor, base_url, client_cert, client_key, ca_cert):
+def authenticate_with_certificate_chain(reactor, base_url, client_chain, client_key, ca_cert):
     """
     Create an ``IAgent`` which can issue authenticated requests to a
     particular Kubernetes server using a client certificate.
@@ -163,7 +217,8 @@ def authenticate_with_certificate(reactor, base_url, client_cert, client_key, ca
     :param twisted.python.url.URL base_url: The base location of the
         Kubernetes API.
 
-    :param pem.Certificate client_cert: The client certificate to use.
+    :param list[pem.Certificate] client_chain: The client certificate (and
+        chain, if applicable) to use.
 
     :param pem.Key client_key: The private key to use with the client
         certificate.
@@ -185,13 +240,28 @@ def authenticate_with_certificate(reactor, base_url, client_cert, client_key, ca
     netloc = NetLocation(host=base_url.host, port=base_url.port)
     policy = ClientCertificatePolicyForHTTPS(
         credentials={
-            netloc: TLSCredentials(certificate=client_cert, key=client_key),
+            netloc: TLSCredentials(
+                chain=Chain(certificates=Certificates(client_chain)),
+                key=client_key,
+            ),
         },
         trust_roots={
             netloc: ca_cert,
         },
     )
     return Agent(reactor, contextFactory=policy)
+
+
+
+def authenticate_with_certificate(reactor, base_url, client_cert, client_key, ca_cert):
+    """
+    See ``authenticate_with_certificate_chain``.
+
+    :param pem.Certificate client_cert: The client certificate to use.
+    """
+    return authenticate_with_certificate_chain(
+        reactor, base_url, [client_cert], client_key, ca_cert,
+    )
 
 
 

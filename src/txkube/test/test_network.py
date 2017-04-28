@@ -8,17 +8,34 @@ See ``get_kubernetes`` for pre-requisites.
 """
 
 from os import environ
+from base64 import b64encode
 
 from zope.interface import implementer
 from zope.interface.verify import verifyClass
+
+from yaml import safe_dump
+
+from fixtures import TempDir
 
 from testtools.matchers import AnyMatch, ContainsDict, Equals
 
 from eliot.testing import capture_logging
 
+from OpenSSL.crypto import FILETYPE_PEM
+
 from twisted.test.proto_helpers import MemoryReactor
+from twisted.trial.unittest import TestCase as TwistedTestCase
+
+from twisted.python.filepath import FilePath
 from twisted.python.url import URL
+from twisted.internet.ssl import (
+    CertificateOptions, DN, KeyPair, trustRootFromCertificates,
+)
+from twisted.internet.endpoints import SSL4ServerEndpoint
 from twisted.web.client import Agent
+from twisted.web.server import Site
+from twisted.web.resource import Resource
+from twisted.web.static import Data
 
 from ..testing import TestCase
 from ..testing.integration import kubernetes_client_tests
@@ -182,3 +199,95 @@ class ExtraNetworkClientTests(TestCase):
             agent=Agent(MemoryReactor()),
         ).client()
         client.list(v1.Pod)
+
+
+
+class NetworkKubernetesFromContextTests(TwistedTestCase):
+    """
+    Direct tests for ``network_kubernetes_from_context``.
+    """
+    def test_client_chain_certificate(self):
+        """
+        A certificate chain in the *client-certificate* section of in the kube
+        configuration file is used to configure the TLS context used when
+        connecting to the API server.
+        """
+        ca_key = KeyPair.generate()
+        ca_cert = ca_key.selfSignedCert(1, commonName="ca")
+
+        intermediate_key = KeyPair.generate()
+        intermediate_req = intermediate_key.requestObject(DN(commonName="intermediate"))
+        intermediate_cert = ca_key.signRequestObject(DN(commonName="ca"), intermediate_req, 1)
+
+        client_key = KeyPair.generate()
+        client_req = client_key.requestObject(DN(commonName="client"))
+        client_cert = ca_key.signRequestObject(DN(commonName="intermediate"), client_req, 1)
+
+        chain = b"".join([
+            client_cert.dumpPEM(),
+            intermediate_cert.dumpPEM(),
+        ])
+
+        config = FilePath(self.mktemp())
+        config.setContent(safe_dump({
+            "apiVersion": "v1",
+            "contexts": [
+                {
+                    "name": "foo-ctx",
+                    "context": {
+                        "cluster": "foo-cluster",
+                        "user": "foo-user",
+                    },
+                },
+            ],
+            "clusters": [
+                {
+                    "name": "foo-cluster",
+                    "cluster": {
+                        "certificate-authority-data": b64encode(ca_cert.dump(FILETYPE_PEM)),
+                        "server": "https://127.0.0.1:8443/",
+                    },
+                },
+            ],
+            "users": [
+                {
+                    "name": "foo-user",
+                    "user": {
+                        "client-certificate-data": b64encode(chain),
+                        "client-key-data": b64encode(client_key.dump(FILETYPE_PEM)),
+                    },
+                },
+            ],
+        }))
+
+        # Set up an HTTPS server that requires the certificate chain from the
+        # configuration file.  This, because there's no way to pry inside a
+        # Context and inspect its state nor any easy way to make Agent talk
+        # over an in-memory transport.
+        from twisted.internet import reactor
+        endpoint = SSL4ServerEndpoint(
+            reactor,
+            0,
+            CertificateOptions(
+                privateKey=ca_key.original,
+                certificate=ca_cert.original,
+                trustRoot=trustRootFromCertificates([ca_cert]),
+            ),
+        )
+        root = Resource()
+        root.putChild(b"", Data(b"success", b"text/plain"))
+
+        kubernetes = network_kubernetes_from_context(
+            reactor, "foo-ctx", path=config,
+        )
+        client = kubernetes.client()
+
+        d = endpoint.listen(Site(root))
+        def listening(port):
+            self.addCleanup(port.stopListening)
+            url = u"https://{}:{}/".format(
+                port.getHost().host, port.getHost().port,
+            ).encode("utf-8")
+            return client.agent.request(b"GET", url)
+        d.addCallback(listening)
+        return d

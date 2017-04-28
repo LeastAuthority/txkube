@@ -16,6 +16,7 @@ __all__ = [
     "network_kubernetes",  "network_kubernetes_from_context",
     "authenticate_with_serviceaccount",
     "authenticate_with_certificate",
+    "authenticate_with_certificate_chain",
 ]
 
 from incremental import Version
@@ -33,7 +34,9 @@ from ._model import (
 )
 
 from ._authentication import (
-    authenticate_with_serviceaccount, authenticate_with_certificate,
+    authenticate_with_serviceaccount,
+    authenticate_with_certificate,
+    authenticate_with_certificate_chain,
 )
 from ._network import network_kubernetes, network_kubernetes_from_context
 from ._memory import memory_kubernetes
