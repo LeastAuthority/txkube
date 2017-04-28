@@ -8,11 +8,14 @@ import setuptools
 _metadata = {}
 with open("src/txkube/_metadata.py") as f:
     exec(f.read(), _metadata)
+with open("README.rst") as f:
+    _metadata["description"] = f.read()
 
 setuptools.setup(
     name="txkube",
     version=_metadata["version_string"],
     description="A Twisted-based Kubernetes client.",
+    long_description=_metadata["description"],
     author="txkube Developers",
     url="https://github.com/LeastAuthority/txkube",
     license="MIT",
