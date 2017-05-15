@@ -35,7 +35,7 @@ from pykube import KubeConfig
 from . import (
     IObject, IKubernetes, IKubernetesClient, KubernetesError,
     iobject_from_raw, iobject_to_raw,
-    authenticate_with_certificate,
+    authenticate_with_certificate_chain,
 )
 
 def network_kubernetes(**kw):
@@ -83,11 +83,11 @@ def network_kubernetes_from_context(reactor, context, path=None):
     base_url = URL.fromText(cluster[u"server"].decode("ascii"))
     [ca_cert] = parse(cluster[u"certificate-authority"].bytes())
 
-    [client_cert] = parse(user[u"client-certificate"].bytes())
+    client_chain = parse(user[u"client-certificate"].bytes())
     [client_key] = parse(user[u"client-key"].bytes())
 
-    agent = authenticate_with_certificate(
-        reactor, base_url, client_cert, client_key, ca_cert,
+    agent = authenticate_with_certificate_chain(
+        reactor, base_url, client_chain, client_key, ca_cert,
     )
 
     return network_kubernetes(

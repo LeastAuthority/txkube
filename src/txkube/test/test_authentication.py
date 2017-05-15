@@ -2,12 +2,31 @@
 # See LICENSE for details.
 
 import os
-
+from itertools import count, islice
 from uuid import uuid4
+from datetime import datetime, timedelta
+
+import pem
+
+from pyrsistent import InvariantException
 
 from fixtures import TempDir
 
-from testtools.matchers import Equals, Contains, raises
+from testtools.matchers import AfterPreprocessing, Equals, Contains, IsInstance, raises
+
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives.hashes import SHA256
+from cryptography.hazmat.primitives import serialization
+from cryptography.x509 import (
+    CertificateBuilder,
+    SubjectAlternativeName,
+    BasicConstraints,
+    DNSName,
+    Name,
+    NameAttribute,
+)
+from cryptography.hazmat.backends import default_backend
 
 from twisted.python.filepath import FilePath
 from twisted.internet.protocol import Factory
@@ -17,6 +36,7 @@ from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactor
 
 from ..testing import TestCase
 
+from .._authentication import Certificates, Chain, pairwise
 from .. import authenticate_with_serviceaccount
 
 # Just an arbitrary certificate pulled off the internet.  Details ought not
@@ -186,4 +206,122 @@ class AuthenticateWithServiceAccountTests(TestCase):
                 "Invalid certificate authority certificate found.",
                 "[('PEM routines', 'PEM_read_bio', 'bad base64 decode')]",
             )),
+        )
+
+
+
+class PairwiseTests(TestCase):
+    """
+    Tests for ``pairwise``.
+    """
+    def test_pairs(self):
+        a = object()
+        b = object()
+        c = object()
+        d = object()
+
+        self.expectThat(
+            pairwise([]),
+            AfterPreprocessing(list, Equals([])),
+        )
+        self.expectThat(
+            pairwise([a]),
+            AfterPreprocessing(list, Equals([])),
+        )
+        self.expectThat(
+            pairwise([a, b]),
+            AfterPreprocessing(list, Equals([(a, b)])),
+        )
+
+        self.expectThat(
+            pairwise([a, b, c]),
+            AfterPreprocessing(list, Equals([(a, b), (b, c)])),
+        )
+        self.expectThat(
+            pairwise([a, b, c, d]),
+            AfterPreprocessing(list, Equals([(a, b), (b, c), (c, d)])),
+        )
+
+
+    def test_lazy(self):
+        """
+        ``pairwise`` only consumes as much of its iterable argument as necessary
+        to satisfy iteration of its own result.
+        """
+        self.expectThat(
+            islice(pairwise(count()), 3),
+            AfterPreprocessing(list, Equals([(0, 1), (1, 2), (2, 3)])),
+        )
+
+
+
+class ChainTests(TestCase):
+    """
+    Tests for ``Chain``.
+    """
+    def test_empty(self):
+        """
+        A ``Chain`` must have certificates.
+        """
+        self.assertRaises(
+            InvariantException,
+            lambda: Chain(certificates=Certificates([])),
+        )
+
+
+    def test_ordering(self):
+        """
+        Each certificate in ``Chain`` must be signed by the following certificate.
+        """
+        a_key, b_key, c_key = tuple(
+            rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=512,
+                backend=default_backend(),
+            )
+            for i in range(3)
+        )
+
+        def cert(issuer, subject, pubkey, privkey, ca):
+            builder = CertificateBuilder(
+            ).issuer_name(
+                Name([NameAttribute(NameOID.COMMON_NAME, issuer)]),
+            ).subject_name(
+                Name([NameAttribute(NameOID.COMMON_NAME, subject)]),
+            ).add_extension(
+                SubjectAlternativeName([DNSName(subject)]),
+                critical=False,
+            )
+            if ca:
+                builder = builder.add_extension(
+                    BasicConstraints(True, None),
+                    critical=True,
+                )
+            return builder.public_key(a_key.public_key(),
+            ).serial_number(1,
+            ).not_valid_before(datetime.utcnow(),
+            ).not_valid_after(datetime.utcnow() + timedelta(seconds=1),
+            ).sign(a_key, SHA256(), default_backend(),
+            )
+
+        a_cert = cert(u"a.invalid", u"a.invalid", a_key.public_key(), a_key, True)
+        b_cert = cert(u"a.invalid", u"b.invalid", b_key.public_key(), a_key, True)
+        c_cert = cert(u"b.invalid", u"c.invalid", c_key.public_key(), b_key, False)
+
+        a, b, c = pem.parse("\n".join(
+            cert.public_bytes(serialization.Encoding.PEM)
+            for cert
+            in (a_cert, b_cert, c_cert)
+        ))
+
+        # a is not signed by b.  Rather, the reverse.  Therefore this ordering
+        # is an error.
+        self.expectThat(
+            lambda: Chain(certificates=Certificates([c, a, b])),
+            raises(InvariantException),
+        )
+        # c is signed by b and b is signed by a.  Therefore this is perfect.
+        self.expectThat(
+            Chain(certificates=Certificates([c, b, a])),
+            IsInstance(Chain),
         )
