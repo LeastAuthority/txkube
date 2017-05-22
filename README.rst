@@ -26,13 +26,13 @@ Usage Sample
    from __future__ import print_function
    from twisted.internet.task import react
 
-   from txkube import v1, network_kubernetes_from_context
+   from txkube import network_kubernetes_from_context
 
    @react
    def main(reactor):
        k8s = network_kubernetes_from_context(reactor, u"minikube")
        client = k8s.client()
-       d = client.list(v1.Namespace)
+       d = client.list(client.model.v1.Namespace)
        d.addCallback(print)
        return d
 
