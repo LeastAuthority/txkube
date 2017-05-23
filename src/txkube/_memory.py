@@ -27,8 +27,7 @@ from treq.testing import RequestTraversalAgent
 
 from . import (
     IKubernetes, KubernetesError, network_kubernetes,
-    v1, v1beta1,
-    iobject_from_raw, iobject_to_raw,
+    v1_5_model,
 )
 
 
@@ -51,11 +50,15 @@ class _MemoryKubernetes(object):
     ``_MemoryKubernetes`` maintains state in-memory which approximates
     the state of a real Kubernetes deployment sufficiently to expose a
     subset of the external Kubernetes API.
+
+    :ivar model: All of the Kubernetes model objects as understood by this
+        service.
     """
     def __init__(self):
         base_url = URL.fromText(u"https://kubernetes.example.invalid./")
-        self._state = _KubernetesState()
-        self._resource = _kubernetes_resource(self)
+        self.model = v1_5_model
+        self._state = _KubernetesState.for_model(self.model)
+        self._resource = _kubernetes_resource(self, self.model)
         self._kubernetes = network_kubernetes(
             base_url=base_url,
             agent=RequestTraversalAgent(self._resource),
@@ -74,6 +77,14 @@ class _MemoryKubernetes(object):
         self._state = state
 
 
+    def versioned_client(self, *args, **kwargs):
+        """
+        :return IKubernetesClient: A new client which interacts with this
+            object rather than a real Kubernetes deployment.
+        """
+        return self._kubernetes.versioned_client(*args, **kwargs)
+
+
     def client(self, *args, **kwargs):
         """
         :return IKubernetesClient: A new client which interacts with this
@@ -83,8 +94,8 @@ class _MemoryKubernetes(object):
 
 
 
-def _kubernetes_resource(memory_service):
-    return _Kubernetes(memory_service).app.resource()
+def _kubernetes_resource(memory_service, model):
+    return _Kubernetes(memory_service, model).app.resource()
 
 
 
@@ -125,11 +136,20 @@ def _transform_object(obj, *transformation):
 
 
 
-# Help figure out what API group some types are associated with.
-_groups = {
-    v1beta1.Deployment: u"extensions",
-    v1beta1.DeploymentList: u"extensions",
-}
+def _api_group_for_type(cls):
+    """
+    Determine which Kubernetes API group a particular PClass is likely to
+    belong with.
+
+    This is basically nonsense.  The question being asked is wrong.  An
+    abstraction has failed somewhere.  Fixing that will get rid of the need
+    for this.
+    """
+    _groups = {
+        (u"v1beta1", u"Deployment"): u"extensions",
+        (u"v1beta1", u"DeploymentList"): u"extensions",
+    }
+    return _groups.get((cls.apiVersion, cls.__name__), None)
 
 
 
@@ -209,6 +229,7 @@ class NullAgency(object):
 
 
 @implementer(IAgency)
+@attr.s(frozen=True)
 class AdHocAgency(object):
     """
     ``AdHocAgency`` implements some object changes which I observed to happen
@@ -221,12 +242,14 @@ class AdHocAgency(object):
     Perhaps in the future this will be replaced by something with less of an
     ad hoc nature.
     """
+    model = attr.ib()
+
     def before_create(self, state, obj):
         return obj.fill_defaults()
 
 
     def after_create(self, state, obj):
-        if isinstance(obj, v1beta1.Deployment):
+        if isinstance(obj, self.model.v1beta1.Deployment):
             obj = _transform_object(
                 obj,
                 [u"metadata", u"annotations", u"deployment.kubernetes.io/revision"],
@@ -243,7 +266,7 @@ class AdHocAgency(object):
 
     def before_replace(self, state, old, new):
         if old.metadata.resourceVersion != new.metadata.resourceVersion:
-            group = _groups.get(type(old), None)
+            group = _api_group_for_type(type(old))
             details = {
                 u"group": group,
                 u"kind": old.kind,
@@ -260,16 +283,30 @@ class _KubernetesState(PClass):
     :ivar IAgency agency: Any behavior to apply to transformations of this
         state.
     """
-    agency = field(initial=AdHocAgency())
+    agency = field()
 
-    namespaces = field(initial=v1.NamespaceList())
-    configmaps = field(initial=v1.ConfigMapList())
-    services = field(initial=v1.ServiceList())
-    pods = field(initial=v1.PodList())
+    namespaces = field()
+    configmaps = field()
+    services = field()
+    pods = field()
 
-    deployments = field(initial=v1beta1.DeploymentList())
-    replicasets = field(initial=v1beta1.ReplicaSetList())
+    deployments = field()
+    replicasets = field()
 
+
+    @classmethod
+    def for_model(cls, model):
+        return cls(
+            agency=AdHocAgency(model=model),
+
+            namespaces=model.v1.NamespaceList(),
+            configmaps=model.v1.ConfigMapList(),
+            services=model.v1.ServiceList(),
+            pods=model.v1.PodList(),
+
+            deployments=model.v1beta1.DeploymentList(),
+            replicasets=model.v1beta1.ReplicaSetList(),
+        )
 
     def create(self, collection_name, obj):
         """
@@ -361,8 +398,12 @@ class _Kubernetes(object):
 
     :ivar _MemoryKubernetes service: The Kubernetes-alike holding the
         in-memory Kubernetes state with which the API will be interacting.
+
+    :ivar model: All of the Kubernetes model objects as understood by this
+        service.
     """
     service = attr.ib()
+    model = attr.ib()
 
     # This could be a property except
     # https://github.com/hynek/attrs/issues/144
@@ -388,7 +429,7 @@ class _Kubernetes(object):
             collection = self._collection_by_name(collection_name)
             if namespace is not None:
                 collection = self._reduce_to_namespace(collection, namespace)
-            return response(request, OK, iobject_to_raw(collection))
+            return response(request, OK, self.model.iobject_to_raw(collection))
 
     def _get(self, request, collection_name, namespace, name):
         collection = self._collection_by_name(collection_name)
@@ -400,13 +441,14 @@ class _Kubernetes(object):
             raise KubernetesError.not_found({
                 u"name": name,
                 u"kind": collection_name,
-                u"group": _groups.get(type(collection), None),
+                u"group": _api_group_for_type(type(collection))
+
             })
-        return response(request, OK, iobject_to_raw(obj))
+        return response(request, OK, self.model.iobject_to_raw(obj))
 
     def _create(self, request, collection_name):
         with start_action(action_type=u"memory:create", kind=collection_name):
-            obj = iobject_from_raw(loads(request.content.read()))
+            obj = self.model.iobject_from_raw(loads(request.content.read()))
             try:
                 state = self._get_state().create(collection_name, obj)
             except InvariantException:
@@ -414,25 +456,25 @@ class _Kubernetes(object):
                 details = {
                     u"name": obj.metadata.name,
                     u"kind": collection_name,
-                    u"group": _groups.get(type(collection), None),
+                    u"group": _api_group_for_type(type(collection)),
                 }
                 raise KubernetesError.already_exists(details)
             self._set_state(state)
-            return response(request, CREATED, iobject_to_raw(obj))
+            return response(request, CREATED, self.model.iobject_to_raw(obj))
 
     def _replace(self, request, collection_name, namespace, name):
         collection = self._collection_by_name(collection_name)
         if namespace is not None:
             collection = self._reduce_to_namespace(collection, namespace)
         old = collection.item_by_name(name)
-        new = iobject_from_raw(loads(request.content.read()))
+        new = self.model.iobject_from_raw(loads(request.content.read()))
         try:
             state = self._get_state().replace(collection_name, old, new)
         except KubernetesError as e:
-            return response(request, e.code, iobject_to_raw(e.status))
+            return response(request, e.code, self.model.iobject_to_raw(e.status))
 
         self._set_state(state)
-        return response(request, OK, iobject_to_raw(new))
+        return response(request, OK, self.model.iobject_to_raw(new))
 
     def _delete(self, request, collection_name, namespace, name):
         collection = self._collection_by_name(collection_name)
@@ -442,12 +484,12 @@ class _Kubernetes(object):
             obj = collection.item_by_name(name)
         except KeyError:
             raise KubernetesError.not_found({
-                u"group": _groups.get(type(collection), None),
+                u"group": _api_group_for_type(type(collection)),
                 u"kind": collection_name,
                 u"name": name,
             })
         self._set_state(self._get_state().delete(collection_name, obj))
-        return response(request, OK, iobject_to_raw(obj))
+        return response(request, OK, self.model.iobject_to_raw(obj))
 
     app = Klein()
     @app.handle_errors(NotFound)
@@ -455,7 +497,7 @@ class _Kubernetes(object):
         return response(
             request,
             NOT_FOUND,
-            iobject_to_raw(v1.Status(
+            self.model.iobject_to_raw(self.model.v1.Status(
                 status=u"Failure",
                 message=u"the server could not find the requested resource",
                 reason=u"NotFound",
@@ -468,7 +510,25 @@ class _Kubernetes(object):
     @app.handle_errors(KubernetesError)
     def object_not_found(self, request, reason):
         exc = reason.value
-        return response(request, exc.code, iobject_to_raw(exc.status))
+        return response(request, exc.code, self.model.iobject_to_raw(exc.status))
+
+    @app.route(u"/version", methods=[u"GET"])
+    def get_version(self, request):
+        """
+        Get version information about this server.
+        """
+        version = self.model.spec.pclass_for_definition(u"version.Info")(
+            major=u"1",
+            minor=u"5",
+            gitVersion=u"",
+            gitCommit=u"",
+            gitTreeState=u"",
+            buildDate=u"",
+            goVersion=u"",
+            compiler=u"",
+            platform=u"",
+        )
+        return response(request, OK, version.serialize())
 
     with app.subroute(u"/api/v1") as app:
         @app.route(u"/namespaces", methods=[u"GET"])
