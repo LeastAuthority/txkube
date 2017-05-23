@@ -30,7 +30,7 @@ from ..testing.strategies import (
 from .. import (
     UnrecognizedVersion, UnrecognizedKind,
     IObject,
-    v1_5_model, v1_6_model,
+    v1_5_model, v1_6_model, v1_7_model,
 )
 
 from .._model import set_if_none
@@ -38,7 +38,7 @@ from .._model import set_if_none
 
 
 def models():
-    return sampled_from([v1_5_model, v1_6_model])
+    return sampled_from([v1_5_model, v1_6_model, v1_7_model])
 
 
 
