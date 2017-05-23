@@ -34,7 +34,7 @@ from pykube import KubeConfig
 
 from . import (
     IObject, IKubernetes, IKubernetesClient, KubernetesError,
-    v1_5_model,
+    v1_5_model, v1_6_model, v1_7_model,
     authenticate_with_certificate_chain,
 )
 
@@ -182,11 +182,11 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(u"version")
             d = DeferredContext(self._get(url))
-            d.addCallback(check_status, (OK,))
+            d.addCallback(check_status, (OK,), self.model)
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(self.model.spec.pclass_for_definition(u"version.Info").create)
+            d.addCallback(self.model.version_type.create)
             return d.addActionFinish()
 
 
@@ -203,7 +203,7 @@ class _NetworkClient(object):
             document = self.model.iobject_to_raw(obj)
             Message.log(submitted_object=document)
             d = DeferredContext(self._post(url, document))
-            d.addCallback(check_status, (CREATED,))
+            d.addCallback(check_status, (CREATED,), self.model)
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
@@ -223,7 +223,7 @@ class _NetworkClient(object):
             document = self.model.iobject_to_raw(obj)
             Message.log(submitted_object=document)
             d = DeferredContext(self._put(url, document))
-            d.addCallback(check_status, (OK,))
+            d.addCallback(check_status, (OK,), self.model)
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
@@ -247,7 +247,7 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(*object_location(obj))
             d = DeferredContext(self._get(url))
-            d.addCallback(check_status, (OK,))
+            d.addCallback(check_status, (OK,), self.model)
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
@@ -271,7 +271,7 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(*object_location(obj))
             d = DeferredContext(self._delete(url, options))
-            d.addCallback(check_status, (OK,))
+            d.addCallback(check_status, (OK,), self.model)
             d.addCallback(readBody)
             d.addCallback(lambda raw: None)
             return d.addActionFinish()
@@ -289,7 +289,7 @@ class _NetworkClient(object):
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(kind))
             d = DeferredContext(self._get(url))
-            d.addCallback(check_status, (OK,))
+            d.addCallback(check_status, (OK,), self.model)
             d.addCallback(readBody)
             d.addCallback(
                 lambda body: self.model.iobject_from_raw(loads(body)),
@@ -312,8 +312,13 @@ def object_location(obj):
 
 
 version_to_segments = {
+    # 1.5
     u"v1": (u"api", u"v1"),
     u"v1beta1": (u"apis", u"extensions", u"v1beta1"),
+
+    # 1.6, 1.7
+    u"io.k8s.kubernetes.pkg.api.v1": (u"api", u"v1"),
+    u"io.k8s.kubernetes.pkg.apis.extensions.v1beta1": (u"apis", u"extensions", u"v1beta1"),
 }
 
 
@@ -379,6 +384,8 @@ class _NetworkKubernetes(object):
 
     _versions = {
         (u"1", u"5"): v1_5_model,
+        (u"1", u"6"): v1_6_model,
+        (u"1", u"7"): v1_7_model,
     }
 
     def _version_to_client(self, version, client):
@@ -415,9 +422,9 @@ def log_response_object(document, action):
     return document
 
 
-def check_status(response, expected):
+def check_status(response, expected, model):
     if response.code not in expected:
-        d = KubernetesError.from_response(response)
+        d = KubernetesError.from_model_and_response(model, response)
         d.addCallback(Failure)
         return d
     return response
