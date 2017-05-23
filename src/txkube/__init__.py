@@ -49,3 +49,36 @@ from ._authentication import (
 )
 from ._network import network_kubernetes, network_kubernetes_from_context
 from ._memory import memory_kubernetes
+
+
+def _deprecations():
+    from twisted.python.deprecate import deprecatedModuleAttribute
+
+    _0_2_0 = Version("txkube", 0, 2, 0)
+    deprecatedModuleAttribute(
+        _0_2_0,
+        "See v1_{5,6,7}_model.v1 instead.",
+        "txkube",
+        "v1",
+    )
+    deprecatedModuleAttribute(
+        _0_2_0,
+        "See v1_{5,6,7}_model.v1beta1 instead.",
+        "txkube",
+        "v1beta1",
+    )
+    deprecatedModuleAttribute(
+        _0_2_0,
+        "See v1_{5,6,7}_model.iobject_to_raw instead.",
+        "txkube",
+        "iobject_to_raw",
+    )
+    deprecatedModuleAttribute(
+        _0_2_0,
+        "See v1_{5,6,7}_model.iobject_from_raw instead.",
+        "txkube",
+        "iobject_from_raw",
+    )
+
+_deprecations()
+del _deprecations
