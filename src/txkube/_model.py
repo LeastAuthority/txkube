@@ -26,17 +26,27 @@ class _KubernetesDataModel(object):
     particular version of Kubernetes.
     """
     spec = attr.ib()
+    version_type = attr.ib()
+    version = attr.ib()
 
     v1 = attr.ib()
     v1beta1 = attr.ib()
 
     @classmethod
-    def from_path(cls, path, v1, v1beta1):
+    def from_path(cls, path, version_type_name, version_details, v1, v1beta1):
         swagger = Swagger.from_path(path)
         spec = VersionedPClasses.transform_definitions(swagger)
         v1 = VersionedPClasses(spec, v1)
         v1beta1 = VersionedPClasses(spec, v1beta1)
-        return cls(spec=spec, v1=v1, v1beta1=v1beta1)
+        version_type = spec.pclass_for_definition(version_type_name)
+        version = version_type(**version_details)
+        return cls(
+            spec=spec,
+            version_type=version_type,
+            version=version,
+            v1=v1,
+            v1beta1=v1beta1,
+        )
 
 
     @mutant
@@ -49,9 +59,14 @@ class _KubernetesDataModel(object):
         :return IObject: The loaded object.
         """
         versions = {
-            u"v1": self.v1,
-            u"v1beta1": self.v1beta1,
+            version: v
+            for v in (self.v1, self.v1beta1)
+            for version in v.versions
         }
+        versions.update({
+            "v1": self.v1,
+            "v1beta1": self.v1beta1,
+        })
         kind = obj[u"kind"]
         apiVersion = _unmutilate(obj[u"apiVersion"])
         try:
@@ -79,6 +94,17 @@ class _KubernetesDataModel(object):
 # A representation of txkube's understanding of the Kubernetes 1.5 model.
 v1_5_model = _KubernetesDataModel.from_path(
     FilePath(__file__).sibling(u"kubernetes-1.5.json"),
+    u"version.Info", dict(
+        major=u"1",
+        minor=u"5",
+        gitVersion=u"",
+        gitCommit=u"",
+        gitTreeState=u"",
+        buildDate=u"",
+        goVersion=u"",
+        compiler=u"",
+        platform=u"",
+    ),
     {u"v1"},
     {u"v1beta1"},
 )
@@ -90,6 +116,17 @@ v1beta1 = v1_5_model.v1beta1
 # A representation of txkube's understanding of the Kubernetes 1.6 model.
 v1_6_model = _KubernetesDataModel.from_path(
     FilePath(__file__).sibling(u"kubernetes-1.6.json"),
+    u"io.k8s.apimachinery.pkg.version.Info", dict(
+        major=u"1",
+        minor=u"6",
+        gitVersion=u"",
+        gitCommit=u"",
+        gitTreeState=u"",
+        buildDate=u"",
+        goVersion=u"",
+        compiler=u"",
+        platform=u"",
+    ),
     {
         u"io.k8s.kubernetes.pkg.api.v1",
         u"io.k8s.apimachinery.pkg.apis.meta.v1",
@@ -103,6 +140,17 @@ v1_6_model = _KubernetesDataModel.from_path(
 # A representation of txkube's understanding of the Kubernetes 1.7 model.
 v1_7_model = _KubernetesDataModel.from_path(
     FilePath(__file__).sibling(u"kubernetes-1.7.json"),
+    u"io.k8s.apimachinery.pkg.version.Info", dict(
+        major=u"1",
+        minor=u"7",
+        gitVersion=u"",
+        gitCommit=u"",
+        gitTreeState=u"",
+        buildDate=u"",
+        goVersion=u"",
+        compiler=u"",
+        platform=u"",
+    ),
     {
         u"io.k8s.kubernetes.pkg.api.v1",
         u"io.k8s.apimachinery.pkg.apis.meta.v1",
