@@ -517,18 +517,7 @@ class _Kubernetes(object):
         """
         Get version information about this server.
         """
-        version = self.model.spec.pclass_for_definition(u"version.Info")(
-            major=u"1",
-            minor=u"5",
-            gitVersion=u"",
-            gitCommit=u"",
-            gitTreeState=u"",
-            buildDate=u"",
-            goVersion=u"",
-            compiler=u"",
-            platform=u"",
-        )
-        return response(request, OK, version.serialize())
+        return response(request, OK, self.model.version.serialize())
 
     with app.subroute(u"/api/v1") as app:
         @app.route(u"/namespaces", methods=[u"GET"])
