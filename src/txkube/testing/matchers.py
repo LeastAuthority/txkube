@@ -14,6 +14,28 @@ from pyrsistent import PClass, field
 from testtools.matchers import Mismatch
 
 
+class EqualElements(object):
+    """
+    Match iterables for which all elements compare equal to the first element.
+
+    For example, ``[1, 1, 1]`` matches and ``[1, 1, 2]`` does not match.
+
+    Iterables with zero or one elements always match.
+    """
+    def match(self, actual):
+        actual_iter = iter(actual)
+        try:
+            first = next(actual_iter)
+        except StopIteration:
+            pass
+        else:
+            for item in actual_iter:
+                if item != first:
+                    return Mismatch("{} != {}".format(first, item))
+        return None
+
+
+
 class MappingLikeEquals(PClass):
     expected = field()
 

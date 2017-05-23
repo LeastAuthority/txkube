@@ -7,7 +7,10 @@ Tests for ``txkube._model``.
 
 from json import loads, dumps
 
+from zope.interface import implementer
 from zope.interface.verify import verifyObject
+
+import attr
 
 from pyrsistent import freeze
 
@@ -15,12 +18,23 @@ from testtools.matchers import (
     Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
     IsInstance,
 )
+from testtools.twistedsupport import succeeded
 
 from hypothesis import given, assume
 from hypothesis.strategies import sampled_from, choices
 
+from twisted.python.failure import Failure
+from twisted.internet.defer import gatherResults
+from twisted.web.iweb import IResponse
+from twisted.web.http_headers import Headers
+from twisted.web.client import ResponseDone
+
 from ..testing import TestCase
-from ..testing.matchers import PClassEquals, MappingEquals
+from ..testing.matchers import (
+    EqualElements,
+    PClassEquals,
+    MappingEquals,
+)
 from ..testing.strategies import (
     iobjects,
     namespacelists,
@@ -29,6 +43,7 @@ from ..testing.strategies import (
 
 from .. import (
     UnrecognizedVersion, UnrecognizedKind,
+    KubernetesError,
     IObject,
     v1_5_model, v1_6_model, v1_7_model,
 )
@@ -273,3 +288,57 @@ class SetIfNoneTests(TestCase):
         structure = freeze({u"foo": u"baz"})
         transformed = structure.transform([u"foo"], set_if_none(u"bar"))
         self.assertThat(transformed[u"foo"], Equals(u"baz"))
+
+
+
+@implementer(IResponse)
+@attr.s
+class MemoryResponse(object):
+    version = attr.ib()
+    code = attr.ib()
+    phrase = attr.ib()
+    headers = attr.ib()
+    length = attr.ib()
+
+    request = attr.ib()
+    previousResponse = attr.ib()
+
+    _body = attr.ib()
+
+    def deliverBody(self, protocol):
+        protocol.makeConnection(None)
+        protocol.dataReceived(self._body)
+        protocol.connectionLost(Failure(ResponseDone()))
+
+
+
+class KubernetesErrorTests(TestCase):
+    """
+    Tests for ``KubernetesError``.
+    """
+    def test_from_response(self):
+        """
+        ``from_response`` returns the same value as ``from_model_and_response``
+        when called with the v1.5 model.
+        """
+        def response():
+            body = dumps(v1_5_model.iobject_to_raw(v1_5_model.v1.Status()))
+            return MemoryResponse(
+                version=(b"HTTP", 1, 1),
+                code=200,
+                phrase=b"OK",
+                headers=Headers(),
+                length=len(body),
+                request=None,
+                previousResponse=None,
+                body=body,
+            )
+
+        ds = gatherResults([
+            KubernetesError.from_response(response()),
+            KubernetesError.from_model_and_response(v1_5_model, response()),
+        ])
+        self.assertThat(
+            ds,
+            succeeded(EqualElements()),
+        )
