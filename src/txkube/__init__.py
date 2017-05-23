@@ -19,7 +19,7 @@ __all__ = [
     "authenticate_with_certificate",
     "authenticate_with_certificate_chain",
 
-    # Pending deprecation
+    # Deprecated.
     "v1", "v1beta1", "iobject_from_raw", "iobject_to_raw",
 ]
 
@@ -36,7 +36,7 @@ from ._model import (
     v1_6_model,
     v1_7_model,
 
-    # Pending deprecation
+    # Deprecated.
     iobject_from_raw,
     iobject_to_raw,
     v1, v1beta1,
