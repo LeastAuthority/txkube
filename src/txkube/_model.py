@@ -165,6 +165,8 @@ v1_7_model = _KubernetesDataModel.from_path(
     },
 )
 
+_ALL_MODELS = [v1_5_model, v1_6_model, v1_7_model]
+
 
 def behavior(namespace):
     """
@@ -471,7 +473,7 @@ def define_behaviors(v):
 
 
 
-for v in [v1_5_model, v1_6_model]:
+for v in _ALL_MODELS:
     define_behaviors(v)
 
 
