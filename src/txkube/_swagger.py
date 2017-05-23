@@ -783,28 +783,34 @@ class VersionedPClasses(object):
 
        spec = Swagger.from_path(...)
        v1beta1 = VersionedPClasses(
-           spec, u"v1beta1", u"kind", u"apiVersion",
+           spec, {u"v1beta1"}, u"kind", u"apiVersion",
        )
        deployment = v1beta1.Deployment(...)
     """
-    def __init__(self, spec, version, name_field=None, version_field=None):
+    def __init__(self, spec, versions, name_field=None, version_field=None):
         self.spec = spec
-        self.version = version
+        self.versions = versions
         self.name_field = name_field
         self.version_field = version_field
 
 
     def __getattr__(self, name):
+        for version in sorted(self.versions):
+            try:
+                return self._pclass_for_version(version, name)
+            except KeyError:
+                pass
+        raise AttributeError(name)
+
+
+    def _pclass_for_version(self, version, name):
         name = name.decode("ascii")
         constant_fields = {}
         if self.name_field is not None:
             constant_fields[self.name_field] = name
         if self.version_field is not None:
-            constant_fields[self.version_field] = self.version
-        definition_name = self.version + u"." + name
-        try:
-            return self.spec.pclass_for_definition(
-                definition_name, constant_fields=constant_fields,
-            )
-        except KeyError:
-            raise AttributeError(name)
+            constant_fields[self.version_field] = version
+        definition_name = version + u"." + name
+        return self.spec.pclass_for_definition(
+            definition_name, constant_fields=constant_fields,
+        )
