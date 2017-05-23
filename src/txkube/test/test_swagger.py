@@ -217,6 +217,13 @@ class SwaggerTests(TestCase):
         self.spec = Swagger.from_document(self.spec_document)
 
 
+    def test_hashing(self):
+        self.assertThat(
+            hash(self.spec),
+            IsInstance(int),
+        )
+
+
     def test_simple_type(self):
         self.assertThat(
             lambda: self.spec.pclass_for_definition(u"simple-type"),
