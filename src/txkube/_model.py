@@ -8,6 +8,8 @@ state.
 
 from uuid import uuid4
 
+import attr
+
 from zope.interface import implementer
 
 from pyrsistent import mutant
@@ -17,95 +19,99 @@ from twisted.python.filepath import FilePath
 from . import UnrecognizedVersion, UnrecognizedKind, IObject
 from ._swagger import Swagger, VersionedPClasses
 
-spec = VersionedPClasses.transform_definitions(
-    Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
+@attr.s(frozen=True)
+class _KubernetesDataModel(object):
+    """
+    A representation of txkube's understanding of the data model of some
+    particular version of Kubernetes.
+    """
+    spec = attr.ib()
+
+    v1 = attr.ib()
+    v1beta1 = attr.ib()
+
+    @classmethod
+    def from_path(cls, path, v1, v1beta1):
+        swagger = Swagger.from_path(path)
+        spec = VersionedPClasses.transform_definitions(swagger)
+        v1 = VersionedPClasses(spec, v1)
+        v1beta1 = VersionedPClasses(spec, v1beta1)
+        return cls(spec=spec, v1=v1, v1beta1=v1beta1)
+
+
+    @mutant
+    def iobject_from_raw(self, obj):
+        """
+        Load an object of unspecified type from the raw representation of it.
+
+        :raise KeyError: If the kind of object is unsupported.
+
+        :return IObject: The loaded object.
+        """
+        versions = {
+            u"v1": self.v1,
+            u"v1beta1": self.v1beta1,
+        }
+        kind = obj[u"kind"]
+        apiVersion = _unmutilate(obj[u"apiVersion"])
+        try:
+            v = versions[apiVersion]
+        except KeyError:
+            raise UnrecognizedVersion(apiVersion, obj)
+        try:
+            cls = getattr(v, kind)
+        except AttributeError:
+            raise UnrecognizedKind(apiVersion, kind, obj)
+        others = obj.discard(u"kind").discard(u"apiVersion")
+        return cls.create(others)
+
+
+    def iobject_to_raw(self, obj):
+        result = obj.serialize()
+        result.update({
+            u"kind": obj.kind,
+            u"apiVersion": _mutilate(obj.apiVersion),
+        })
+        return result
+
+
+
+# A representation of txkube's understanding of the Kubernetes 1.5 model.
+v1_5_model = _KubernetesDataModel.from_path(
+    FilePath(__file__).sibling(u"kubernetes-1.5.json"),
+    {u"v1"},
+    {u"v1beta1"},
 )
-v1 = VersionedPClasses(spec, u"v1")
-v1beta1 = VersionedPClasses(spec, u"v1beta1")
+iobject_to_raw = v1_5_model.iobject_to_raw
+iobject_from_raw = v1_5_model.iobject_from_raw
+v1 = v1_5_model.v1
+v1beta1 = v1_5_model.v1beta1
 
+# A representation of txkube's understanding of the Kubernetes 1.6 model.
+v1_6_model = _KubernetesDataModel.from_path(
+    FilePath(__file__).sibling(u"kubernetes-1.6.json"),
+    {
+        u"io.k8s.kubernetes.pkg.api.v1",
+        u"io.k8s.apimachinery.pkg.apis.meta.v1",
+    },
+    {
+        u"io.k8s.kubernetes.pkg.apis.extensions.v1beta1",
+        u"io.k8s.kubernetes.pkg.apis.certificates.v1beta1",
+    },
+)
 
-@v1.add_behavior_for_pclass
-class NamespaceStatus(object):
-    """
-    ``NamespaceStatus`` instances model `Kubernetes namespace status
-    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
-    """
-    @classmethod
-    def active(cls):
-        return cls(phase=u"Active")
-
-
-    @classmethod
-    def terminating(cls):
-        return cls(phase=u"Terminating")
-
-
-
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class Namespace(object):
-    """
-    ``Namespace`` instances model `Kubernetes namespaces
-    <https://kubernetes.io/docs/user-guide/namespaces/>`_.
-    """
-    @classmethod
-    def default(cls):
-        """
-        Get the default namespace.
-        """
-        return cls(metadata=v1.ObjectMeta(name=u"default"))
-
-
-    def fill_defaults(self):
-        return self.transform(
-            # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
-            # Also, should this clobber existing values or leave them alone?
-            # See https://github.com/LeastAuthority/txkube/issues/36
-            [u"metadata", u"uid"], unicode(uuid4()),
-            [u"status"], v1.NamespaceStatus.active(),
-        )
-
-
-    def delete_from(self, collection):
-        # TODO: deletionTimestamp?  Terminating status?  See #24
-        return collection.remove(self)
-
-
-
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class ConfigMap():
-    """
-    ``ConfigMap`` instances model `ConfigMap objects
-    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
-    """
-    def fill_defaults(self):
-        # TODO Surely some stuff to fill.
-        # See https://github.com/LeastAuthority/txkube/issues/36
-        return self
-
-
-    def delete_from(self, collection):
-        return collection.remove(self)
-
-
-
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class Service(object):
-    """
-    ``Service`` instances model `Service objects
-    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_service>`_.
-    """
-    def fill_defaults(self):
-        # TODO Surely some stuff to fill.
-        # See https://github.com/LeastAuthority/txkube/issues/36
-        return self
-
-
-    def delete_from(self, collection):
-        return collection.remove(self)
-
+# A representation of txkube's understanding of the Kubernetes 1.7 model.
+v1_7_model = _KubernetesDataModel.from_path(
+    FilePath(__file__).sibling(u"kubernetes-1.7.json"),
+    {
+        u"io.k8s.kubernetes.pkg.api.v1",
+        u"io.k8s.apimachinery.pkg.apis.meta.v1",
+    },
+    {
+        u"io.k8s.kubernetes.pkg.apis.extensions.v1beta1",
+        u"io.k8s.kubernetes.pkg.apis.certificates.v1beta1",
+    },
+)
 
 
 def set_if_none(desired_value):
@@ -118,58 +124,6 @@ def set_if_none(desired_value):
             return desired_value
         return current_value
     return transform
-
-
-
-@v1beta1.add_behavior_for_pclass
-@implementer(IObject)
-class Deployment(object):
-    """
-    ``Deployment`` instances model `Deployment objects
-    <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
-    """
-    def fill_defaults(self):
-        # Copying apparent Kubernetes behavior.
-        return self.transform(
-            [u"metadata", u"labels"],
-            set_if_none(self.spec.template.metadata.labels),
-        )
-
-
-    def delete_from(self, collection):
-        return collection.remove(self)
-
-
-
-@v1beta1.add_behavior_for_pclass
-@implementer(IObject)
-class ReplicaSet(object):
-    """
-    ``ReplicaSet`` instances model `ReplicaSet objects
-    <https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/>`_.
-    """
-    def fill_defaults(self):
-        return self
-
-
-    def delete_from(self, collection):
-        return collection.remove(self)
-
-
-
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class Pod(object):
-    """
-    ``Pod`` instances model `Pod objects
-    <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_pod>`_.
-    """
-    def fill_defaults(self):
-        return self
-
-
-    def delete_from(self, collection):
-        return collection.remove(self)
 
 
 
@@ -214,6 +168,7 @@ def add(value):
     def evolver(pvector):
         return sorted(pvector.append(value), key=object_sort_key)
     return evolver
+
 
 
 def remove(value):
@@ -273,52 +228,189 @@ class _List(object):
 
 
 
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class NamespaceList(_List):
-    pass
+def define_behaviors(v):
+    @v1.add_behavior_for_pclass
+    class NamespaceStatus(object):
+        """
+        ``NamespaceStatus`` instances model `Kubernetes namespace status
+        <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
+        """
+        @classmethod
+        def active(cls):
+            return cls(phase=u"Active")
+
+
+        @classmethod
+        def terminating(cls):
+            return cls(phase=u"Terminating")
 
 
 
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class ConfigMapList(_List):
-    pass
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class Namespace(object):
+        """
+        ``Namespace`` instances model `Kubernetes namespaces
+        <https://kubernetes.io/docs/user-guide/namespaces/>`_.
+        """
+        @classmethod
+        def default(cls):
+            """
+            Get the default namespace.
+            """
+            return cls(metadata=v.v1.ObjectMeta(name=u"default"))
+
+
+        def fill_defaults(self):
+            return self.transform(
+                # TODO Also creationTimestamp, resourceVersion, maybe selfLink.
+                # Also, should this clobber existing values or leave them alone?
+                # See https://github.com/LeastAuthority/txkube/issues/36
+                [u"metadata", u"uid"], unicode(uuid4()),
+                [u"status"], v1.NamespaceStatus.active(),
+            )
+
+
+        def delete_from(self, collection):
+            # TODO: deletionTimestamp?  Terminating status?  See #24
+            return collection.remove(self)
 
 
 
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class ServiceList(_List):
-    pass
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class NamespaceList(_List):
+        pass
 
 
 
-@v1beta1.add_behavior_for_pclass
-@implementer(IObject)
-class DeploymentList(_List):
-    pass
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class ConfigMap(object):
+        """
+        ``ConfigMap`` instances model `ConfigMap objects
+        <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
+        """
+        def fill_defaults(self):
+            # TODO Surely some stuff to fill.
+            # See https://github.com/LeastAuthority/txkube/issues/36
+            return self
+
+
+        def delete_from(self, collection):
+            return collection.remove(self)
 
 
 
-@v1beta1.add_behavior_for_pclass
-@implementer(IObject)
-class ReplicaSetList(_List):
-    pass
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class ConfigMapList(_List):
+            pass
 
 
 
-@v1.add_behavior_for_pclass
-@implementer(IObject)
-class PodList(_List):
-    pass
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class Service(object):
+        """
+        ``Service`` instances model `Service objects
+        <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_service>`_.
+        """
+        def fill_defaults(self):
+            # TODO Surely some stuff to fill.
+            # See https://github.com/LeastAuthority/txkube/issues/36
+            return self
+
+
+        def delete_from(self, collection):
+            return collection.remove(self)
 
 
 
-_versions = {
-    u"v1": v1,
-    u"v1beta1": v1beta1,
-}
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class ServiceList(_List):
+        pass
+
+
+
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class Deployment(object):
+        """
+        ``Deployment`` instances model `Deployment objects
+        <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
+        """
+        def fill_defaults(self):
+            # Copying apparent Kubernetes behavior.
+            return self.transform(
+                [u"metadata", u"labels"],
+                set_if_none(self.spec.template.metadata.labels),
+            )
+
+
+        def delete_from(self, collection):
+            return collection.remove(self)
+
+
+
+    @v1beta1.add_behavior_for_pclass
+    @implementer(IObject)
+    class DeploymentList(_List):
+        pass
+
+
+
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class ReplicaSet(object):
+        """
+        ``ReplicaSet`` instances model `ReplicaSet objects
+        <https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/>`_.
+        """
+        def fill_defaults(self):
+            return self
+
+
+        def delete_from(self, collection):
+            return collection.remove(self)
+
+
+
+    @v1beta1.add_behavior_for_pclass
+    @implementer(IObject)
+    class ReplicaSetList(_List):
+        pass
+
+
+
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class Pod(object):
+        """
+        ``Pod`` instances model `Pod objects
+        <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_pod>`_.
+        """
+        def fill_defaults(self):
+            return self
+
+
+        def delete_from(self, collection):
+            return collection.remove(self)
+
+
+
+    @v1.add_behavior_for_pclass
+    @implementer(IObject)
+    class PodList(_List):
+        pass
+
+
+
+for v in [v1_5_model, v1_6_model]:
+    define_behaviors(v)
+
+
 
 def _mutilate(version):
     if version == u"v1beta1":
@@ -331,48 +423,3 @@ def _unmutilate(version):
     if version.startswith(u"extensions/"):
         return version[len(u"extensions/"):]
     return version
-
-
-
-def iobject_to_raw(obj):
-    result = obj.serialize()
-    result.update({
-        u"kind": obj.kind,
-        u"apiVersion": _mutilate(obj.apiVersion),
-    })
-    return result
-
-@mutant
-def iobject_from_raw(obj):
-    """
-    Load an object of unspecified type from the raw representation of it.
-
-    :raise KeyError: If the kind of object is unsupported.
-
-    :return IObject: The loaded object.
-    """
-    kind = obj[u"kind"]
-    apiVersion = _unmutilate(obj[u"apiVersion"])
-    try:
-        v = _versions[apiVersion]
-    except KeyError:
-        raise UnrecognizedVersion(apiVersion, obj)
-    try:
-        cls = getattr(v, kind)
-    except AttributeError:
-        raise UnrecognizedKind(apiVersion, kind, obj)
-    others = obj.discard(u"kind").discard(u"apiVersion")
-    return cls.create(others)
-
-
-
-class v1_5_model(object):
-    """
-    A representation of txkube's understanding of the Kubernetes 1.5 model.
-    """
-    spec = spec
-    v1 = v1
-    v1beta1 = v1beta1
-
-    iobject_to_raw = staticmethod(iobject_to_raw)
-    iobject_from_raw = staticmethod(iobject_from_raw)

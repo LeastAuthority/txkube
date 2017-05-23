@@ -11,7 +11,7 @@ __all__ = [
 
     "KubernetesError", "UnrecognizedVersion", "UnrecognizedKind",
 
-    "v1_5_model",
+    "v1_5_model", "v1_6_model",
 
     "memory_kubernetes",
     "network_kubernetes",  "network_kubernetes_from_context",
@@ -33,10 +33,12 @@ from ._interface import IObject, IKubernetes, IKubernetesClient
 
 from ._model import (
     v1_5_model,
+    v1_6_model,
 
-    v1, v1beta1,
+    # Pending deprecation
     iobject_from_raw,
     iobject_to_raw,
+    v1, v1beta1,
 )
 
 from ._authentication import (
