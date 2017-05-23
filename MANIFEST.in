@@ -1,1 +1,3 @@
 include src/txkube/kubernetes-1.5.json
+include src/txkube/kubernetes-1.6.json
+include src/txkube/kubernetes-1.7.json
