@@ -51,14 +51,24 @@ class Swagger(PClass):
         same attributes and behavior).  This plays better with Python's type
         system than the alternative.
     """
-    info = field()
-    paths = field()
-    definitions = field(factory=freeze)
-    securityDefinitions = field()
-    security = field()
-    swagger = field()
+    info = field(mandatory=True, initial=None, factory=freeze)
+    paths = field(mandatory=True, initial=None, factory=freeze)
+    definitions = field(mandatory=True, initial=None, factory=freeze)
+    securityDefinitions = field(mandatory=True, initial=None, factory=freeze)
+    security = field(mandatory=True, initial=None, factory=freeze)
+    swagger = field(mandatory=True, initial=None, factory=freeze)
 
     _pclasses = field(mandatory=True, type=dict)
+
+    def __hash__(self):
+        return hash((
+            self.info,
+            self.paths,
+            self.definitions,
+            self.securityDefinitions,
+            self.security,
+            self.swagger,
+        ))
 
     @classmethod
     def from_path(cls, spec_path):
