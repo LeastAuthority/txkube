@@ -34,7 +34,7 @@ from pykube import KubeConfig
 
 from . import (
     IObject, IKubernetes, IKubernetesClient, KubernetesError,
-    iobject_from_raw, iobject_to_raw,
+    v1_5_model,
     authenticate_with_certificate_chain,
 )
 
@@ -132,6 +132,8 @@ class _NetworkClient(object):
     kubernetes = attr.ib(validator=validators.provides(IKubernetes))
     agent = attr.ib(validator=validators.provides(IAgent))
 
+    model = attr.ib()
+
     def _request(self, method, url, headers=None, bodyProducer=None):
         action = start_action(
             action_type=u"network-client:request",
@@ -152,7 +154,9 @@ class _NetworkClient(object):
     def _delete(self, url, options):
         bodyProducer = None
         if options is not None:
-            bodyProducer = _BytesProducer(dumps(iobject_to_raw(options)))
+            bodyProducer = _BytesProducer(
+                dumps(self.model.iobject_to_raw(options)),
+            )
         return self._request(b"DELETE", url, bodyProducer=bodyProducer)
 
 
@@ -168,6 +172,25 @@ class _NetworkClient(object):
         )
 
 
+    def version(self):
+        """
+        Issue a I{GET} for the Kubernetes server version.
+        """
+        action = start_action(
+            action_type=u"network-client:version",
+        )
+        with action.context():
+            url = self.kubernetes.base_url.child(u"version")
+            d = DeferredContext(self._get(url))
+            d.addCallback(check_status, (OK,))
+            d.addCallback(readBody)
+            d.addCallback(loads)
+            d.addCallback(log_response_object, action)
+            d.addCallback(self.model.spec.pclass_for_definition(u"version.Info").create)
+            return d.addActionFinish()
+
+
+
     def create(self, obj):
         """
         Issue a I{POST} to create the given object.
@@ -177,14 +200,14 @@ class _NetworkClient(object):
         )
         with action.context():
             url = self.kubernetes.base_url.child(*collection_location(obj))
-            document = iobject_to_raw(obj)
+            document = self.model.iobject_to_raw(obj)
             Message.log(submitted_object=document)
             d = DeferredContext(self._post(url, document))
             d.addCallback(check_status, (CREATED,))
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(iobject_from_raw)
+            d.addCallback(self.model.iobject_from_raw)
             return d.addActionFinish()
 
 
@@ -197,14 +220,14 @@ class _NetworkClient(object):
         )
         with action.context():
             url = self.kubernetes.base_url.child(*object_location(obj))
-            document = iobject_to_raw(obj)
+            document = self.model.iobject_to_raw(obj)
             Message.log(submitted_object=document)
             d = DeferredContext(self._put(url, document))
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(iobject_from_raw)
+            d.addCallback(self.model.iobject_from_raw)
             return d.addActionFinish()
 
 
@@ -228,7 +251,7 @@ class _NetworkClient(object):
             d.addCallback(readBody)
             d.addCallback(loads)
             d.addCallback(log_response_object, action)
-            d.addCallback(iobject_from_raw)
+            d.addCallback(self.model.iobject_from_raw)
             return d.addActionFinish()
 
 
@@ -268,7 +291,9 @@ class _NetworkClient(object):
             d = DeferredContext(self._get(url))
             d.addCallback(check_status, (OK,))
             d.addCallback(readBody)
-            d.addCallback(lambda body: iobject_from_raw(loads(body)))
+            d.addCallback(
+                lambda body: self.model.iobject_from_raw(loads(body)),
+            )
             return d.addActionFinish()
 
 
@@ -341,8 +366,36 @@ class _NetworkKubernetes(object):
         default=attr.Factory(lambda: Agent(namedAny("twisted.internet.reactor"))),
     )
 
+    def versioned_client(self):
+        """
+        Ask the server for its version and then create a client using a matching
+        model.
+        """
+        client = self.client()
+        d = client.version()
+        d.addCallback(self._version_to_client, client)
+        return d
+
+
+    _versions = {
+        (u"1", u"5"): v1_5_model,
+    }
+
+    def _version_to_client(self, version, client):
+        try:
+            model = self._versions[version.major, version.minor]
+        except KeyError:
+            raise ValueError(
+                "Unsupported Kubernetes version: {}.{}".format(
+                    version.major, version.minor,
+                ),
+            )
+        else:
+            return _NetworkClient(self, self._agent, model)
+
+
     def client(self):
-        return _NetworkClient(self, self._agent)
+        return _NetworkClient(self, self._agent, v1_5_model)
 
 
 

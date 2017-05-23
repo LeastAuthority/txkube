@@ -31,8 +31,10 @@ Usage Sample
    @react
    def main(reactor):
        k8s = network_kubernetes_from_context(reactor, u"minikube")
-       client = k8s.client()
-       d = client.list(client.model.v1.Namespace)
+       d = k8s.versioned_client()
+       d.addCallback(
+           lambda client: client.list(client.model.v1.Namespace)
+       )
        d.addCallback(print)
        return d
 

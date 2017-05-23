@@ -17,6 +17,7 @@ from twisted.python.filepath import FilePath
 from . import UnrecognizedVersion, UnrecognizedKind, IObject
 from ._swagger import Swagger, VersionedPClasses
 
+
 spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
 v1 = VersionedPClasses(
     spec, u"v1", name_field=u"kind", version_field=u"apiVersion",
@@ -377,3 +378,16 @@ def iobject_from_raw(obj):
         raise UnrecognizedKind(apiVersion, kind, obj)
     others = obj.discard(u"kind").discard(u"apiVersion")
     return cls.create(others)
+
+
+
+class v1_5_model(object):
+    """
+    A representation of txkube's understanding of the Kubernetes 1.5 model.
+    """
+    spec = spec
+    v1 = v1
+    v1beta1 = v1beta1
+
+    iobject_to_raw = staticmethod(iobject_to_raw)
+    iobject_from_raw = staticmethod(iobject_from_raw)
