@@ -870,9 +870,9 @@ class VersionedPClasses(object):
        deployment.foo(bar)
 
     """
-    def __init__(self, spec, version):
+    def __init__(self, spec, versions):
         self.spec = spec
-        self.version = version
+        self.versions = versions
 
 
     @classmethod
@@ -910,10 +910,12 @@ class VersionedPClasses(object):
 
 
     def __getattr__(self, name):
-        try:
-            return self.spec.pclass_for_definition(self.full_name(name))
-        except NoSuchDefinition:
-            raise AttributeError(name)
+        for version in sorted(self.versions):
+            try:
+                return self.spec.pclass_for_definition(self.full_name(name))
+            except NoSuchDefinition:
+                pass
+        raise AttributeError(name)
 
 
     def add_behavior_for_pclass(self, cls):

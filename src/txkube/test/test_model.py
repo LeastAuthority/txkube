@@ -20,7 +20,7 @@ from testtools.matchers import (
 )
 
 from hypothesis import given, assume
-from hypothesis.strategies import choices
+from hypothesis.strategies import sampled_from, choices
 
 from ..testing import TestCase
 from ..testing.matchers import (
@@ -36,10 +36,17 @@ from ..testing.strategies import (
 
 from .. import (
     UnrecognizedVersion, UnrecognizedKind,
-    IObject, v1, v1beta1, iobject_to_raw, iobject_from_raw,
+    IObject,
+    v1_5_model, v1_6_model,
 )
 
 from .._model import set_if_none
+
+
+
+def models():
+    return sampled_from([v1_5_model, v1_6_model])
+
 
 
 class SerializationTests(TestCase):
@@ -50,15 +57,17 @@ class SerializationTests(TestCase):
         """
         Objects from ``v1`` serialize with an *apiVersion* of ``u"v1"``.
         """
-        obj = v1.ComponentStatus()
-        raw = iobject_to_raw(obj)
+        model = v1_5_model
+
+        obj = model.v1.ComponentStatus()
+        raw = model.iobject_to_raw(obj)
         self.expectThat(
             raw[u"apiVersion"],
             Equals(u"v1"),
         )
         self.expectThat(
-            iobject_from_raw(raw),
-            IsInstance(v1.ComponentStatus),
+            model.iobject_from_raw(raw),
+            IsInstance(model.v1.ComponentStatus),
         )
 
 
@@ -67,15 +76,17 @@ class SerializationTests(TestCase):
         Objects from ``v1beta1`` serialize with an *apiVersion* of
         ``u"extensions/v1beta1"``.
         """
-        obj = v1beta1.CertificateSigningRequest()
-        raw = iobject_to_raw(obj)
+        model = v1_5_model
+
+        obj = model.v1beta1.CertificateSigningRequest()
+        raw = model.iobject_to_raw(obj)
         self.expectThat(
             raw[u"apiVersion"],
             Equals(u"extensions/v1beta1"),
         )
         self.expectThat(
-            iobject_from_raw(raw),
-            IsInstance(v1beta1.CertificateSigningRequest),
+            model.iobject_from_raw(raw),
+            IsInstance(model.v1beta1.CertificateSigningRequest),
         )
 
 
@@ -120,7 +131,9 @@ class IObjectTests(TestCase):
         An ``IObject`` provider can be round-trip through JSON using
         ``iobject_to_raw`` and ``iobject_from_raw``.
         """
-        marshalled = iobject_to_raw(obj)
+        model = v1_5_model
+
+        marshalled = model.iobject_to_raw(obj)
 
         # Every IObject has these marshalled fields - and when looking at the
         # marshalled form, they're necessary to figure out the
@@ -131,13 +144,13 @@ class IObjectTests(TestCase):
 
         # We should be able to unmarshal the data back to the same model
         # object as we started with.
-        reloaded = iobject_from_raw(marshalled)
+        reloaded = model.iobject_from_raw(marshalled)
         self.expectThat(obj, PClassEquals(reloaded))
 
         # And, to be extra sure (ruling out any weird Python object
         # semantic hijinx), that that reconstituted object should marshal
         # back to exactly the same simplified object graph.
-        remarshalled = iobject_to_raw(reloaded)
+        remarshalled = model.iobject_to_raw(reloaded)
         self.expectThat(marshalled, MappingEquals(remarshalled))
 
         # Also, the marshalled form must be JSON compatible.
@@ -176,12 +189,14 @@ class IObjectTests(TestCase):
         ``iobject_from_raw`` raises ``UnrecognizedVersion`` if it does not
         recognize the *apiVersion* in the given data.
         """
+        model = v1_5_model
+
         obj = {
             u"apiVersion": u"invalid.example.txkube",
             u"kind": u"Service",
         }
         self.assertThat(
-            lambda: iobject_from_raw(obj),
+            lambda: model.iobject_from_raw(obj),
             raises(UnrecognizedVersion(obj[u"apiVersion"], obj)),
         )
 
@@ -191,13 +206,14 @@ class IObjectTests(TestCase):
         ``iobject_from_raw`` raises ``UnrecognizedKind`` if it does not recognize
         the *kind* in the given data.
         """
+        model = v1_5_model
 
         obj = {
             u"apiVersion": u"v1",
             u"kind": u"SomethingFictional",
         }
         self.assertThat(
-            lambda: iobject_from_raw(obj),
+            lambda: model.iobject_from_raw(obj),
             raises(UnrecognizedKind(u"v1", u"SomethingFictional", obj)),
         )
 
@@ -207,12 +223,13 @@ class NamespaceTests(TestCase):
     """
     Other tests for ``Namespace``.
     """
-    def test_default(self):
+    @given(models())
+    def test_default(self, model):
         """
         ``Namespace.default`` returns the *default* namespace.
         """
         self.assertThat(
-            v1.Namespace.default(),
+            model.v1.Namespace.default(),
             MatchesStructure(
                 metadata=MatchesStructure(
                     name=Equals(u"default"),
@@ -221,14 +238,15 @@ class NamespaceTests(TestCase):
         )
 
 
-    def test_fill_defaults(self):
+    @given(models())
+    def test_fill_defaults(self, model):
         """
         ``Namespace.fill_defaults`` returns a ``Namespace`` with *uid* metadata
         and an active *status*.
         """
         # If they are not set already, a uid is generated and put into the
         # metadata and the status is set to active.
-        sparse = v1.Namespace(metadata=v1.ObjectMeta(name=u"foo"))
+        sparse = model.v1.Namespace(metadata=model.v1.ObjectMeta(name=u"foo"))
         filled = sparse.fill_defaults()
         self.expectThat(
             filled,
@@ -236,7 +254,7 @@ class NamespaceTests(TestCase):
                 metadata=MatchesStructure(
                     uid=Not(Is(None)),
                 ),
-                status=Equals(v1.NamespaceStatus.active()),
+                status=Equals(model.v1.NamespaceStatus.active()),
             ),
         )
 
