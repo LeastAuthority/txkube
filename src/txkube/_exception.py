@@ -32,6 +32,11 @@ class KubernetesError(Exception):
         self.code = code
         self.status = status
 
+    def __cmp__(self, other):
+        if isinstance(other, self.__class__):
+            return cmp((self.code, self.status), (other.code, other.status))
+        return NotImplemented
+
     @classmethod
     def not_found(cls, details):
         # Circular imports :(  See below.
