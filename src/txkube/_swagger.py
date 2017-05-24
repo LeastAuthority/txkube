@@ -20,7 +20,7 @@ from zope.interface import Attribute, Interface, implementer
 
 from pyrsistent import (
     CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
-    pmap_field, freeze,
+    pmap_field, thaw, freeze,
 )
 
 from twisted.python.compat import nativeString
@@ -131,6 +131,21 @@ class Swagger(PClass):
             raise ValueError("Class for {} already created.".format(definition))
 
         self._behaviors.setdefault(definition, []).append(cls)
+
+
+    def to_document(self):
+        """
+        Serialize this specification to a JSON-compatible object representing a
+        Swagger specification.
+        """
+        return dict(
+            info=thaw(self.info),
+            paths=thaw(self.paths),
+            definitions=thaw(self.definitions),
+            securityDefinitions=thaw(self.securityDefinitions),
+            security=thaw(self.security),
+            swagger=thaw(self.swagger),
+        )
 
 
     def pclass_for_definition(self, name):

@@ -7,6 +7,7 @@ state.
 """
 
 from uuid import uuid4
+from json import loads
 
 import attr
 
@@ -34,19 +35,31 @@ class _KubernetesDataModel(object):
 
     @classmethod
     def from_path(cls, path, version_type_name, version_details, v1, v1beta1):
-        swagger = Swagger.from_path(path)
+        return cls.from_swagger(
+            Swagger.from_path(path),
+            version_type_name,
+            version_details,
+            v1,
+            v1beta1,
+        )
+
+
+    @classmethod
+    def from_swagger(cls, swagger, version_type_name, version_details, v1, v1beta1):
         spec = VersionedPClasses.transform_definitions(swagger)
         v1 = VersionedPClasses(spec, v1)
         v1beta1 = VersionedPClasses(spec, v1beta1)
         version_type = spec.pclass_for_definition(version_type_name)
         version = version_type(**version_details)
-        return cls(
+        model = cls(
             spec=spec,
             version_type=version_type,
             version=version,
             v1=v1,
             v1beta1=v1beta1,
         )
+        define_behaviors(model)
+        return model
 
 
     @mutant
@@ -91,77 +104,68 @@ class _KubernetesDataModel(object):
 
 
 
-# A representation of txkube's understanding of the Kubernetes 1.5 model.
-v1_5_model = _KubernetesDataModel.from_path(
-    FilePath(__file__).sibling(u"kubernetes-1.5.json"),
-    u"version.Info", dict(
-        major=u"1",
-        minor=u"5",
-        gitVersion=u"",
-        gitCommit=u"",
-        gitTreeState=u"",
-        buildDate=u"",
-        goVersion=u"",
-        compiler=u"",
-        platform=u"",
-    ),
-    {u"v1"},
-    {u"v1beta1"},
-)
-iobject_to_raw = v1_5_model.iobject_to_raw
-iobject_from_raw = v1_5_model.iobject_from_raw
-v1 = v1_5_model.v1
-v1beta1 = v1_5_model.v1beta1
+def openapi_to_data_model(openapi):
+    version = openapi[u"info"][u"version"]
+    if version == u"unversioned":
+        # Kubernetes 1.5.x probably.
+        return _openapi_to_v1_5_data_model(openapi)
+    elif version.startswith(u"v1.6."):
+        return _openapi_to_v1_6_data_model(openapi)
+    elif version.startswith(u"v1.7."):
+        return _openapi_to_v1_7_data_model(openapi)
+    else:
+        # Optimistic...
+        return _openapi_to_newest_data_model(openapi)
 
-# A representation of txkube's understanding of the Kubernetes 1.6 model.
-v1_6_model = _KubernetesDataModel.from_path(
-    FilePath(__file__).sibling(u"kubernetes-1.6.json"),
-    u"io.k8s.apimachinery.pkg.version.Info", dict(
-        major=u"1",
-        minor=u"6",
-        gitVersion=u"",
-        gitCommit=u"",
-        gitTreeState=u"",
-        buildDate=u"",
-        goVersion=u"",
-        compiler=u"",
-        platform=u"",
-    ),
-    {
-        u"io.k8s.kubernetes.pkg.api.v1",
-        u"io.k8s.apimachinery.pkg.apis.meta.v1",
-    },
-    {
-        u"io.k8s.kubernetes.pkg.apis.extensions.v1beta1",
-        u"io.k8s.kubernetes.pkg.apis.certificates.v1beta1",
-    },
-)
 
-# A representation of txkube's understanding of the Kubernetes 1.7 model.
-v1_7_model = _KubernetesDataModel.from_path(
-    FilePath(__file__).sibling(u"kubernetes-1.7.json"),
-    u"io.k8s.apimachinery.pkg.version.Info", dict(
-        major=u"1",
-        minor=u"7",
-        gitVersion=u"",
-        gitCommit=u"",
-        gitTreeState=u"",
-        buildDate=u"",
-        goVersion=u"",
-        compiler=u"",
-        platform=u"",
-    ),
-    {
-        u"io.k8s.kubernetes.pkg.api.v1",
-        u"io.k8s.apimachinery.pkg.apis.meta.v1",
-    },
-    {
-        u"io.k8s.kubernetes.pkg.apis.extensions.v1beta1",
-        u"io.k8s.kubernetes.pkg.apis.certificates.v1beta1",
-    },
-)
+def _openapi_to_v1_5_data_model(openapi):
+    return _KubernetesDataModel.from_swagger(
+        Swagger.from_document(openapi),
+        u"version.Info", dict(
+            major=u"1",
+            minor=u"5",
+            gitVersion=u"",
+            gitCommit=u"",
+            gitTreeState=u"",
+            buildDate=u"",
+            goVersion=u"",
+            compiler=u"",
+            platform=u"",
+        ),
+        {u"v1"},
+        {u"v1beta1"},
+    )
 
-_ALL_MODELS = [v1_5_model, v1_6_model, v1_7_model]
+def _openapi_to_v1_6_data_model(openapi):
+    return _KubernetesDataModel.from_swagger(
+        Swagger.from_document(openapi),
+        u"io.k8s.apimachinery.pkg.version.Info", dict(
+            major=u"1",
+            minor=u"6",
+            gitVersion=u"",
+            gitCommit=u"",
+            gitTreeState=u"",
+            buildDate=u"",
+            goVersion=u"",
+            compiler=u"",
+            platform=u"",
+        ),
+        {
+            u"io.k8s.kubernetes.pkg.api.v1",
+            u"io.k8s.apimachinery.pkg.apis.meta.v1",
+        },
+        {
+            u"io.k8s.kubernetes.pkg.apis.extensions.v1beta1",
+            u"io.k8s.kubernetes.pkg.apis.certificates.v1beta1",
+        },
+    )
+
+# 1.6 and 1.7 happen to look similar enough that no *tested* functionality
+# requires us to differentiate between them here.
+_openapi_to_v1_7_data_model = _openapi_to_v1_6_data_model
+
+# Keep this up to date with whatever the newest thing we know about is...
+_openapi_to_newest_data_model =  _openapi_to_v1_7_data_model
 
 
 def set_if_none(desired_value):
@@ -457,12 +461,11 @@ def define_behaviors(v):
 
 
 
-for v in _ALL_MODELS:
-    define_behaviors(v)
-
-
-
 def _mutilate(version):
+    try:
+        group, version = version.rsplit(u".", 1)
+    except ValueError:
+        pass
     if version == u"v1beta1":
         return u"extensions/v1beta1"
     return version
@@ -473,3 +476,12 @@ def _unmutilate(version):
     if version.startswith(u"extensions/"):
         return version[len(u"extensions/"):]
     return version
+
+
+with FilePath(__file__).sibling(u"kubernetes-1.5.json").open() as v1_5_file:
+    v1_5_model = openapi_to_data_model(loads(v1_5_file.read()))
+
+iobject_to_raw = v1_5_model.iobject_to_raw
+iobject_from_raw = v1_5_model.iobject_from_raw
+v1 = v1_5_model.v1
+v1beta1 = v1_5_model.v1beta1

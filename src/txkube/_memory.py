@@ -519,6 +519,13 @@ class _Kubernetes(object):
         """
         return response(request, OK, self.model.version.serialize())
 
+    @app.route(u"/swagger.json", methods=[u"GET"])
+    def get_openapi(self, request):
+        """
+        Get the OpenAPI specification for this server.
+        """
+        return response(request, OK, self.model.spec.to_document())
+
     with app.subroute(u"/api/v1") as app:
         @app.route(u"/namespaces", methods=[u"GET"])
         def list_namespaces(self, request):
