@@ -21,7 +21,7 @@ from zope.interface import Attribute, Interface, implementer
 
 from pyrsistent import (
     CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
-    pmap_field, freeze, pmap,
+    pmap_field, thaw, freeze, pmap,
 )
 
 from twisted.python.compat import nativeString
@@ -90,6 +90,21 @@ class Swagger(PClass):
             parsing a Swagger JSON specification string.
         """
         return cls(_pclasses={}, **document)
+
+
+    def to_document(self):
+        """
+        Serialize this specification to a JSON-compatible object representing a
+        Swagger specification.
+        """
+        return dict(
+            info=thaw(self.info),
+            paths=thaw(self.paths),
+            definitions=thaw(self.definitions),
+            securityDefinitions=thaw(self.securityDefinitions),
+            security=thaw(self.security),
+            swagger=thaw(self.swagger),
+        )
 
 
     def pclass_for_definition(self, name, constant_fields=pmap()):
