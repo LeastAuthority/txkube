@@ -650,7 +650,7 @@ class _DeploymentTestsMixin(object):
         and ``list`` methods of ``IKubernetesClient``.
         """
         return self._create_list_test(
-            namespace, deployments(), self.model.v1beta1.Deployment,
+            namespace, deployments(self.model), self.model.v1beta1.Deployment,
             self.model.v1beta1.DeploymentList, matches_deployment,
         )
 
@@ -664,7 +664,7 @@ class _DeploymentTestsMixin(object):
         namespace.
         """
         return self._create_duplicate_rejected_test(
-            namespace, deployments(), u"deployments", u"extensions",
+            namespace, deployments(self.model), u"deployments", u"extensions",
         )
 
 
@@ -674,7 +674,7 @@ class _DeploymentTestsMixin(object):
         ``IKubernetesClient.get``.
         """
         return self._namespaced_object_retrieval_by_name_test(
-            deployments(),
+            deployments(self.model),
             self.model.v1beta1.Deployment,
             matches_deployment,
             group=u"extensions",

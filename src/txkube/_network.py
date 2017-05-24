@@ -34,7 +34,7 @@ from pykube import KubeConfig
 
 from . import (
     IObject, IKubernetes, IKubernetesClient, KubernetesError,
-    v1_5_model, v1_6_model, v1_7_model,
+    v1_5_model, openapi_to_data_model,
     authenticate_with_certificate_chain,
 )
 
@@ -170,6 +170,22 @@ class _NetworkClient(object):
         return self._request(
             b"PUT", url, bodyProducer=_BytesProducer(dumps(obj)),
         )
+
+
+    def openapi(self):
+        """
+        Issue a I{GET} for the Kubernetes OpenAPI specification.
+        """
+        action = start_action(
+            action_type=u"network-client:openapi",
+        )
+        with action.context():
+            url = self.kubernetes.base_url.child(u"swagger.json")
+            d = DeferredContext(self._get(url))
+            d.addCallback(check_status, (OK,), self.model)
+            d.addCallback(readBody)
+            d.addCallback(loads)
+            return d.addActionFinish()
 
 
     def version(self):
@@ -358,6 +374,16 @@ def collection_location(obj):
 
 
 
+@attr.s
+class _Memo(object):
+    value = attr.ib(default=None)
+
+    def cache(self, value):
+        self.value = value
+        return value
+
+
+
 @implementer(IKubernetes)
 @attr.s(frozen=True)
 class _NetworkKubernetes(object):
@@ -371,34 +397,33 @@ class _NetworkKubernetes(object):
         default=attr.Factory(lambda: Agent(namedAny("twisted.internet.reactor"))),
     )
 
+    # Mutable slot on an immutable type.  Yay.
+    _model = attr.ib(default=attr.Factory(_Memo))
+
     def versioned_client(self):
         """
         Ask the server for its version and then create a client using a matching
         model.
         """
         client = self.client()
-        d = client.version()
-        d.addCallback(self._version_to_client, client)
+        d = self._get_model(client)
+        d.addCallback(self._model_to_client)
         return d
 
 
-    _versions = {
-        (u"1", u"5"): v1_5_model,
-        (u"1", u"6"): v1_6_model,
-        (u"1", u"7"): v1_7_model,
-    }
-
-    def _version_to_client(self, version, client):
-        try:
-            model = self._versions[version.major, version.minor]
-        except KeyError:
-            raise ValueError(
-                "Unsupported Kubernetes version: {}.{}".format(
-                    version.major, version.minor,
-                ),
-            )
+    def _get_model(self, client):
+        if self._model.value is None:
+            # XXX Not exactly concurrent correct...  So tedious.
+            d = client.openapi()
+            d.addCallback(openapi_to_data_model)
+            d.addCallback(self._model.cache)
         else:
-            return _NetworkClient(self, self._agent, model)
+            d = succeed(self._model.value)
+        return d
+
+
+    def _model_to_client(self, model):
+        return _NetworkClient(self, self._agent, model)
 
 
     def client(self):
