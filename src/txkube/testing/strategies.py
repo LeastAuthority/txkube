@@ -229,7 +229,7 @@ def configmaps(model=default_model):
     """
     return builds(
         model.v1.ConfigMap,
-        metadata=namespaced_object_metadatas(),
+        metadata=namespaced_object_metadatas(model),
         data=configmap_datas(),
     )
 
