@@ -1218,7 +1218,7 @@ _CORE_PREFIXES = [
     u"io.k8s.apimachinery.pkg.apis.meta.",
 
     # 1.5
-    u"v1beta1",
+    u"v1",
 ]
 
 

@@ -119,8 +119,17 @@ def openapi_to_data_model(openapi):
 
 
 def _openapi_to_v1_5_data_model(openapi):
+    base = loads(
+        FilePath(__file__).sibling("extra-1.5.json").getContent()
+    )
+    for k, v in openapi.iteritems():
+        if isinstance(v, dict):
+            base.setdefault(k, {}).update(v)
+        else:
+            base[k] = v
+
     return _KubernetesDataModel.from_swagger(
-        Swagger.from_document(openapi),
+        Swagger.from_document(base),
         u"version.Info", dict(
             major=u"1",
             minor=u"5",
@@ -321,7 +330,7 @@ def define_behaviors(v):
                 # Also, should this clobber existing values or leave them alone?
                 # See https://github.com/LeastAuthority/txkube/issues/36
                 [u"metadata", u"uid"], unicode(uuid4()),
-                [u"status"], v1.NamespaceStatus.active(),
+                [u"status"], v.v1.NamespaceStatus.active(),
             )
 
 
@@ -415,7 +424,7 @@ def define_behaviors(v):
 
 
 
-    @v1.add_behavior_for_pclass
+    @v1beta1.add_behavior_for_pclass
     @implementer(IObject)
     class ReplicaSet(object):
         """
