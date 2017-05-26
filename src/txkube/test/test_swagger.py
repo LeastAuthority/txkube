@@ -680,7 +680,12 @@ class VersionedPClassesTests(TestCase):
             u"definitions": {
                 u"a.foo": {
                     u"type": u"object",
-                    u"properties": {},
+                    u"properties": {
+                        u"v": {
+                            u"description": u"",
+                            u"type": u"boolean"
+                        },
+                    },
                 },
             },
         })
@@ -730,3 +735,39 @@ class VersionedPClassesTests(TestCase):
         """
         a = VersionedPClasses(self.spec, u"a", version_field=u"version")
         self.assertThat(lambda: a.bar, raises(AttributeError("bar")))
+
+
+    def test_add_behavior_for_class(self):
+        """
+        A Python class can be mixed in to the hierarchy of the class returned by
+        ``VersionedPClasses`` attribute access using the class decorator
+        ``add_behavior_for_pclass``.
+        """
+        a = VersionedPClasses(
+            self.spec,
+            u"a",
+            version_field=u"version",
+            name_field=u"name",
+        )
+        def add_behavior():
+            @a.add_behavior_for_pclass
+            class foo(object):
+                def __invariant__(self):
+                    return [(self.v, "__invariant__!")]
+
+                def bar(self):
+                    return u"baz"
+        add_behavior()
+
+        an_a = a.foo(v=True)
+        self.expectThat(an_a.version, Equals(u"a"))
+        self.expectThat(an_a.name, Equals(u"foo"))
+        self.expectThat(an_a.bar(), Equals(u"baz"))
+
+        self.expectThat(
+            lambda: a.foo(v=False),
+            raises_exception(InvariantException),
+        )
+
+        # It's not allowed now that we've retrieved the foo class.
+        self.expectThat(add_behavior, raises_exception(ValueError))

@@ -58,6 +58,7 @@ class Swagger(PClass):
     security = field()
     swagger = field()
 
+    _behaviors = field(mandatory=True, type=dict)
     _pclasses = field(mandatory=True, type=dict)
 
     @classmethod
@@ -79,7 +80,30 @@ class Swagger(PClass):
         :param dict document: An object like the one that might be created by
             parsing a Swagger JSON specification string.
         """
-        return cls(_pclasses={}, **document)
+        return cls(_behaviors={}, _pclasses={}, **document)
+
+
+    def add_behavior_for_pclass(self, definition, cls):
+        """
+        Define an additional base class for the Python class created for a
+        particular definition.
+
+        :param unicode definition: The definition the Python class for which
+            the base class will be included.
+
+        :param type cls: The additional base class.
+
+        :raise ValueError: If a Python class for the given definition has
+            already been created.  Behavior cannot be retroactively added to a
+            Python class.  All behaviors must be registered before the first
+            call to ``pclass_for_definition`` for a particular definition.
+
+        :return: ``None``
+        """
+        if definition in self._pclasses:
+            raise ValueError("Class for {} already created.".format(definition))
+
+        self._behaviors.setdefault(definition, []).append(cls)
 
 
     def pclass_for_definition(self, name, constant_fields=pmap()):
@@ -101,7 +125,8 @@ class Swagger(PClass):
                 raise NotClassLike(name, definition)
             generator =  getattr(self, "_model_for_{}".format(kind))
             model = generator(name, definition, constant_fields)
-            cls = model.pclass()
+            bases = tuple(self._behaviors.get(name, []))
+            cls = model.pclass(bases)
             self._pclasses[name] = cls
         return cls
 
@@ -662,9 +687,12 @@ class _ClassModel(PClass):
         )
 
 
-    def pclass(self):
+    def pclass(self, bases):
         """
         Create a ``pyrsistent.PClass`` subclass representing this class.
+
+        :param tuple bases: Additional base classes to give the resulting
+            class.  These will appear to the left of ``PClass``.
         """
         content = {
             attr.name: attr.pclass_field_for_attribute()
@@ -673,7 +701,8 @@ class _ClassModel(PClass):
         }
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
-        return type(nativeString(self.name), (PClass,), content)
+        return type(nativeString(self.name), bases + (PClass,), content)
+
 
 
 omit = object()
@@ -776,12 +805,30 @@ class VersionedPClasses(object):
            spec, u"v1beta1", u"kind", u"apiVersion",
        )
        deployment = v1beta1.Deployment(...)
+
+    Additional base classes can be inserted in the resulting class using the
+    ``add_behavior_for_pclass`` decorator.  For example::
+
+    .. code-block: python
+
+      spec = ...
+      v1beta1 = ...
+
+      @v1beta1.add_behavior_for_pclass
+      class Deployment(object):
+          def foo(self, bar):
+              ...
+
+       deployment = v1beta1.Deployment(...)
+       deployment.foo(bar)
+
     """
     def __init__(self, spec, version, name_field=None, version_field=None):
         self.spec = spec
         self.version = version
         self.name_field = name_field
         self.version_field = version_field
+        self.behaviors = {}
 
 
     def __getattr__(self, name):
@@ -791,10 +838,43 @@ class VersionedPClasses(object):
             constant_fields[self.name_field] = name
         if self.version_field is not None:
             constant_fields[self.version_field] = self.version
-        definition_name = self.version + u"." + name
         try:
             return self.spec.pclass_for_definition(
-                definition_name, constant_fields=constant_fields,
+                self.full_name(name), constant_fields=constant_fields,
             )
         except KeyError:
             raise AttributeError(name)
+
+
+    def add_behavior_for_pclass(self, cls):
+        """
+        Define an additional base class for the Python class created for a
+        particular definition.
+
+        :param type cls: The additional base class.  Its name must exactly
+            match the name of a definition with a version matching this
+            object's version.
+
+        :return: ``None``
+        """
+        name = cls.__name__
+        self.spec.add_behavior_for_pclass(self.full_name(name), cls)
+        return None
+
+
+    def full_name(self, name):
+        """
+        Construct the full name of a definition based on this object's version and
+        a partial definition name.
+
+        :example:
+        .. code-block: python
+
+          assert v1.full_name(u"foo") == u"v1.foo"
+
+
+        :param unicode name: The unversioned portion of the definition name.
+
+        :return unicode: The full definition name.
+        """
+        return u".".join((self.version, name))
