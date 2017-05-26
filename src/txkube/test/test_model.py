@@ -9,7 +9,10 @@ from json import loads, dumps
 
 from zope.interface.verify import verifyObject
 
-from pyrsistent import freeze
+from pyrsistent import (
+    InvariantException,
+    freeze,
+)
 
 from testtools.matchers import (
     Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
@@ -20,7 +23,11 @@ from hypothesis import given, assume
 from hypothesis.strategies import choices
 
 from ..testing import TestCase
-from ..testing.matchers import PClassEquals, MappingEquals
+from ..testing.matchers import (
+    PClassEquals,
+    MappingEquals,
+    raises_exception,
+)
 from ..testing.strategies import (
     iobjects,
     namespacelists,
@@ -125,6 +132,21 @@ class IObjectTests(TestCase):
         """
         self.expectThat(collection.set(items=None).items, Equals([]))
         self.expectThat(collection.set(items=[]).items, Equals([]))
+
+
+
+    @given(collection=namespacelists(), choose=choices())
+    def test_unique_contents(self, collection, choose):
+        """
+        A collection type cannot contain more than one object with a particular
+        namespace / name pair.
+        """
+        assume(len(collection.items) > 0)
+        item = choose(collection.items)
+        self.expectThat(
+            lambda: collection.add(item),
+            raises_exception(InvariantException),
+        )
 
 
     def test_unknown_version(self):
