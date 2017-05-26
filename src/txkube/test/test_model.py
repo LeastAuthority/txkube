@@ -18,12 +18,12 @@ from pyrsistent import (
 )
 
 from testtools.matchers import (
-    Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
+    Equals, MatchesStructure, Not, Is, Contains, ContainsAll, Raises, raises,
     IsInstance,
 )
 from testtools.twistedsupport import succeeded
 
-from hypothesis import given, assume
+from hypothesis import HealthCheck, settings, given, assume
 from hypothesis.strategies import sampled_from, choices
 
 from twisted.python.failure import Failure
@@ -49,7 +49,7 @@ from .. import (
     UnrecognizedVersion, UnrecognizedKind,
     KubernetesError,
     IObject,
-    v1_5_model, v1_6_model, v1_7_model,
+    v1_5_model, openapi_to_data_model,
 )
 
 from .._model import set_if_none
@@ -57,7 +57,7 @@ from .._model import set_if_none
 
 
 def models():
-    return sampled_from([v1_5_model, v1_6_model, v1_7_model])
+    return sampled_from([v1_5_model])
 
 
 
@@ -277,6 +277,7 @@ class NamespaceListTests(TestCase):
     """
     Tests for ``NamespaceList``.
     """
+    @settings(suppress_health_check=[HealthCheck.exception_in_generation])
     @given(collection=namespacelists(), choose=choices())
     def test_remove(self, collection, choose):
         """
@@ -305,6 +306,20 @@ class NamespaceListTests(TestCase):
             lambda: collection.item_by_name(item.metadata.name),
             raises(KeyError(item.metadata.name)),
         )
+
+    @given(collection=namespacelists(), choose=choices())
+    def test_no_duplicates(self, collection, choose):
+        assume(len(collection.items) > 0)
+        self.expectThat(
+            lambda: collection.add(choose(collection.items)),
+            Raises(Exception),
+        )
+
+
+    @given(collection=namespacelists())
+    def test_constant_attributes(self, collection):
+        self.expectThat(collection.kind, Equals(u"NamespaceList"))
+        self.expectThat(collection.apiVersion, Equals(u"v1"))
 
 
 
@@ -384,3 +399,22 @@ class KubernetesErrorTests(TestCase):
             ds,
             succeeded(EqualElements()),
         )
+
+
+class Extra15DataModelTests(TestCase):
+    """
+    Tests for handling of certain Kubernetes 1.5 Swagger specifications.
+    """
+    def test_status(self):
+        """
+        If the Kubernetes-reported Swagger specification is missing the Status
+        definitions, ``openapi_to_data_model`` returns a data model that
+        defines them anyway.
+        """
+        openapi = v1_5_model.spec.to_document()
+        openapi[u"definitions"].clear()
+        model = openapi_to_data_model(openapi)
+        model.v1.Status
+        model.v1.StatusCause
+        model.v1.StatusDetails
+        model.v1.ListMeta

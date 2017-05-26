@@ -43,6 +43,11 @@ class NoSuchDefinition(Exception):
 
 
 
+class AlreadyCreatedClass(Exception):
+    pass
+
+
+
 class Swagger(PClass):
     """
     A ``Swagger`` contains a single Swagger specification.
@@ -128,8 +133,9 @@ class Swagger(PClass):
         :return: ``None``
         """
         if definition in self._pclasses:
-            raise ValueError("Class for {} already created.".format(definition))
-
+            raise AlreadyCreatedClass(definition)
+        if definition not in self.definitions:
+            raise NoSuchDefinition(definition)
         self._behaviors.setdefault(definition, []).append(cls)
 
 
@@ -170,7 +176,7 @@ class Swagger(PClass):
             kind = self._identify_kind(definition)
             if kind is None:
                 raise NotClassLike(name, definition)
-            generator =  getattr(self, "_model_for_{}".format(kind))
+            generator = getattr(self, "_model_for_{}".format(kind))
             model = generator(name, definition)
             bases = tuple(self._behaviors.get(name, []))
             cls = model.pclass(bases)
@@ -229,6 +235,7 @@ class IRangeModel(Interface):
             If it is ``False``, the second element gives a human-readable
             description of how the value fell out of the range.
         """
+
 
 
 class ITypeModel(Interface):
@@ -863,8 +870,8 @@ class VersionedPClasses(object):
 
     .. code-block: python
 
-       spec = Swagger.from_path(...)
-       spec = VersionedPClasses.transform_definitions(spec)
+       swagger = Swagger.from_path(...)
+       spec = VersionedPClasses.transform_definitions(swagger)
        v1beta1 = VersionedPClasses(spec, u"v1beta1")
        deployment = v1beta1.Deployment(...)
 
@@ -927,7 +934,7 @@ class VersionedPClasses(object):
     def __getattr__(self, name):
         for version in sorted(self.versions):
             try:
-                return self.spec.pclass_for_definition(self.full_name(name))
+                return self.spec.pclass_for_definition(self.full_name(version, name))
             except NoSuchDefinition:
                 pass
         raise AttributeError(name)
@@ -944,12 +951,18 @@ class VersionedPClasses(object):
 
         :return: ``None``
         """
-        name = cls.__name__
-        self.spec.add_behavior_for_pclass(self.full_name(name), cls)
-        return None
+        kind = cls.__name__
+        for version in sorted(self.versions):
+            try:
+                self.spec.add_behavior(self.full_name(version, kind), cls)
+            except NoSuchDefinition:
+                pass
+            else:
+                return None
+        raise NoSuchDefinition(kind)
 
 
-    def full_name(self, name):
+    def full_name(self, version, name):
         """
         Construct the full name of a definition based on this object's version and
         a partial definition name.
@@ -964,4 +977,4 @@ class VersionedPClasses(object):
 
         :return unicode: The full definition name.
         """
-        return u".".join((self.version, name))
+        return u".".join((version, name))
