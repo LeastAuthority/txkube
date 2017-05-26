@@ -20,8 +20,8 @@ from pyrsistent import (
 from twisted.python.filepath import FilePath
 
 from testtools.matchers import (
-    Equals, MatchesPredicate, MatchesStructure, Raises,
-    IsInstance, MatchesAll, AfterPreprocessing, Is, raises,
+    Equals, MatchesPredicate,
+    IsInstance, MatchesAll, Is, raises,
 )
 
 from .._swagger import (
@@ -30,6 +30,7 @@ from .._swagger import (
 )
 
 from ..testing import TestCase
+from ..testing.matchers import raises_exception
 
 
 def swagger_primitive_types():
@@ -586,24 +587,6 @@ def is_subclass(cls):
         lambda value: issubclass(value, cls),
         "%%s is not a subclass of %s" % (cls,),
     )
-
-
-def raises_exception(cls, **attributes):
-    def get_exception((type, exception, traceback)):
-        return exception
-    return Raises(
-        AfterPreprocessing(
-            get_exception,
-            MatchesAll(
-                IsInstance(cls),
-                MatchesStructure(**{
-                    k: Equals(v) for (k, v) in attributes.items()
-                }),
-                first_only=True,
-            ),
-        ),
-    )
-
 
 
 class PClassesTests(TestCase):

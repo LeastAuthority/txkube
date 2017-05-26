@@ -11,7 +11,15 @@ import attr
 
 from pyrsistent import PClass, field
 
-from testtools.matchers import Mismatch
+from testtools.matchers import (
+    Raises,
+    AfterPreprocessing,
+    MatchesAll,
+    IsInstance,
+    MatchesStructure,
+    Equals,
+    Mismatch,
+)
 
 
 class MappingLikeEquals(PClass):
@@ -145,3 +153,21 @@ class _MappingLikeMismatch(Mismatch):
             for mismatch
             in mismatched
         )
+
+
+
+def raises_exception(cls, **attributes):
+    def get_exception((type, exception, traceback)):
+        return exception
+    return Raises(
+        AfterPreprocessing(
+            get_exception,
+            MatchesAll(
+                IsInstance(cls),
+                MatchesStructure(**{
+                    k: Equals(v) for (k, v) in attributes.items()
+                }),
+                first_only=True,
+            ),
+        ),
+    )
