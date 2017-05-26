@@ -92,6 +92,28 @@ class IObjectTests(TestCase):
         verifyObject(IObject, obj)
 
 
+    def test_constant_attributes(self):
+        """
+        The ``apiVersion`` and ``kind`` attributes reflect the Kubernetes object
+        apiVersion and kind fields.
+        """
+        p = v1.Pod()
+        self.expectThat(p.apiVersion, Equals(u"v1"))
+        self.expectThat(p.kind, Equals(u"Pod"))
+
+        pl = v1.PodList()
+        self.expectThat(pl.apiVersion, Equals(u"v1"))
+        self.expectThat(pl.kind, Equals(u"PodList"))
+
+        d = v1beta1.Deployment()
+        self.expectThat(d.apiVersion, Equals(u"v1beta1"))
+        self.expectThat(d.kind, Equals(u"Deployment"))
+
+        dl = v1beta1.DeploymentList()
+        self.expectThat(dl.apiVersion, Equals(u"v1beta1"))
+        self.expectThat(dl.kind, Equals(u"DeploymentList"))
+
+
     @given(obj=iobjects())
     def test_serialization_roundtrip(self, obj):
         """
