@@ -13,7 +13,6 @@ objects and loaded from such objects.
 
 from json import load
 from datetime import datetime
-from itertools import chain
 
 from dateutil.parser import parse as parse_iso8601
 
@@ -21,7 +20,7 @@ from zope.interface import Attribute, Interface, implementer
 
 from pyrsistent import (
     CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
-    pmap_field, freeze, pmap,
+    pmap_field, thaw, freeze, pmap,
 )
 
 from twisted.python.compat import nativeString
@@ -51,14 +50,25 @@ class Swagger(PClass):
         same attributes and behavior).  This plays better with Python's type
         system than the alternative.
     """
-    info = field()
-    paths = field()
-    definitions = field(factory=freeze)
-    securityDefinitions = field()
-    security = field()
-    swagger = field()
+    info = field(mandatory=True, initial=None, factory=freeze)
+    paths = field(mandatory=True, initial=None, factory=freeze)
+    definitions = field(mandatory=True, initial=None, factory=freeze)
+    securityDefinitions = field(mandatory=True, initial=None, factory=freeze)
+    security = field(mandatory=True, initial=None, factory=freeze)
+    swagger = field(mandatory=True, initial=None, factory=freeze)
 
     _pclasses = field(mandatory=True, type=dict)
+    _behaviors = field(mandatory=True, type=dict)
+
+    def __hash__(self):
+        return hash((
+            self.info,
+            self.paths,
+            self.definitions,
+            self.securityDefinitions,
+            self.security,
+            self.swagger,
+        ))
 
     @classmethod
     def from_path(cls, spec_path):
@@ -79,7 +89,30 @@ class Swagger(PClass):
         :param dict document: An object like the one that might be created by
             parsing a Swagger JSON specification string.
         """
-        return cls(_pclasses={}, **document)
+        return cls(_behaviors={}, _pclasses={}, **document)
+
+
+    def to_document(self):
+        """
+        Serialize this specification to a JSON-compatible object representing a
+        Swagger specification.
+        """
+        return dict(
+            info=thaw(self.info),
+            paths=thaw(self.paths),
+            definitions=thaw(self.definitions),
+            securityDefinitions=thaw(self.securityDefinitions),
+            security=thaw(self.security),
+            swagger=thaw(self.swagger),
+        )
+
+
+    def add_behavior(self, name, cls):
+        if name in self._pclasses:
+            raise AlreadyCreatedClass(name)
+        if name not in self.definitions:
+            raise NoSuchDefinition(name)
+        self._behaviors.setdefault(name, []).append(cls)
 
 
     def pclass_for_definition(self, name, constant_fields=pmap()):
@@ -99,9 +132,9 @@ class Swagger(PClass):
             kind = self._identify_kind(definition)
             if kind is None:
                 raise NotClassLike(name, definition)
-            generator =  getattr(self, "_model_for_{}".format(kind))
+            generator = getattr(self, "_model_for_{}".format(kind))
             model = generator(name, definition, constant_fields)
-            cls = model.pclass()
+            cls = model.pclass(tuple(self._behaviors.get(name, ())))
             self._pclasses[name] = cls
         return cls
 
@@ -646,23 +679,25 @@ class _ClassModel(PClass):
 
         :return: A new model for the given definition.
         """
+        variable_attributes = list(
+            attr
+            for attr
+            in cls._attributes_for_definition(pclass_for_definition, definition)
+            if constant_fields is None or attr.name not in constant_fields
+        )
+        constant_attributes = list(
+            _ConstantModel(name=name, value=value)
+            for (name, value)
+            in constant_fields.items()
+        )
         return cls(
             name=name,
             doc=definition.get(u"description", name),
-            attributes=chain((
-                attr
-                for attr
-                in cls._attributes_for_definition(pclass_for_definition, definition)
-                if constant_fields is None or attr.name not in constant_fields
-            ), (
-                _ConstantModel(name=name, value=value)
-                for (name, value)
-                in constant_fields.items()
-            )),
+            attributes=variable_attributes + constant_attributes,
         )
 
 
-    def pclass(self):
+    def pclass(self, bases=()):
         """
         Create a ``pyrsistent.PClass`` subclass representing this class.
         """
@@ -673,7 +708,7 @@ class _ClassModel(PClass):
         }
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
-        return type(nativeString(self.name), (PClass,), content)
+        return type(nativeString(self.name), bases + (PClass,), content)
 
 
 omit = object()
@@ -773,28 +808,54 @@ class VersionedPClasses(object):
 
        spec = Swagger.from_path(...)
        v1beta1 = VersionedPClasses(
-           spec, u"v1beta1", u"kind", u"apiVersion",
+           spec, {u"v1beta1"}, u"kind", u"apiVersion",
        )
        deployment = v1beta1.Deployment(...)
     """
-    def __init__(self, spec, version, name_field=None, version_field=None):
+    def __init__(self, spec, versions, name_field=None, version_field=None):
         self.spec = spec
-        self.version = version
+        self.versions = versions
         self.name_field = name_field
         self.version_field = version_field
 
 
+    def add_behavior(self, kind, cls):
+        for version in sorted(self.versions):
+            try:
+                self.spec.add_behavior(u".".join((version, kind)), cls)
+            except NoSuchDefinition:
+                pass
+            else:
+                break
+
+
     def __getattr__(self, name):
+        for version in sorted(self.versions):
+            try:
+                return self._pclass_for_version(version, name)
+            except KeyError:
+                pass
+        raise AttributeError(name)
+
+
+    def _pclass_for_version(self, version, name):
         name = name.decode("ascii")
         constant_fields = {}
         if self.name_field is not None:
             constant_fields[self.name_field] = name
         if self.version_field is not None:
-            constant_fields[self.version_field] = self.version
-        definition_name = self.version + u"." + name
-        try:
-            return self.spec.pclass_for_definition(
-                definition_name, constant_fields=constant_fields,
-            )
-        except KeyError:
-            raise AttributeError(name)
+            constant_fields[self.version_field] = version
+        definition_name = version + u"." + name
+        return self.spec.pclass_for_definition(
+            definition_name, constant_fields=constant_fields,
+        )
+
+
+
+class NoSuchDefinition(Exception):
+    pass
+
+
+
+class AlreadyCreatedClass(Exception):
+    pass

@@ -16,10 +16,8 @@ from eliot.twisted import DeferredContext
 
 from testtools.matchers import (
     AnyMatch, MatchesAll, MatchesStructure, Is, IsInstance, Equals, Not,
-    Contains, AfterPreprocessing, MatchesPredicate,
+    Contains, AfterPreprocessing, MatchesPredicate, Always,
 )
-
-from testtools import run_test_with
 
 from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
@@ -28,14 +26,12 @@ from twisted.web.http import NOT_FOUND, CONFLICT
 
 from .._network import version_to_segments
 
-from ..testing.matchers import MappingEquals
+from ..testing.matchers import MappingEquals, KubernetesObjectDeleted
 from ..testing import TestCase, AsynchronousDeferredRunTest
 
 from .. import (
     KubernetesError,
     IKubernetesClient,
-    v1, v1beta1,
-    iobject_to_raw,
 )
 
 from .strategies import (
@@ -44,15 +40,13 @@ from .strategies import (
 )
 
 
-def async(f):
-    def _async(*a, **kw):
-        # This is a pretty long timeout but it includes sitting around waiting
-        # for Kubernetes to finish deleting things so we get better test
-        # isolation...  Namespace deletion, specifically, can be slow, with
-        # some attempts taking 5 minutes or more.
-        kw["timeout"] = 600.0
-        return AsynchronousDeferredRunTest(*a, **kw)
-    return run_test_with(_async)(f)
+
+def async_test_runner():
+    # This is a pretty long timeout but it includes sitting around waiting
+    # for Kubernetes to finish deleting things so we get better test
+    # isolation...  Namespace deletion, specifically, can be slow, with
+    # some attempts taking 5 minutes or more.
+    return AsynchronousDeferredRunTest.make_factory(timeout=600)
 
 
 
@@ -118,9 +112,10 @@ def has_uid():
 
 def is_active():
     return MatchesStructure(
-        status=Equals(v1.NamespaceStatus.active()),
+        status=MatchesStructure(
+            phase=Equals(u"Active"),
+        ),
     )
-
 
 
 def different_name(name):
@@ -130,8 +125,8 @@ def different_name(name):
 
 
 
-def _named(kind, name, namespace=None):
-    return kind(metadata=v1.ObjectMeta(name=name, namespace=namespace))
+def _named(model, kind, name, namespace=None):
+    return kind(metadata=model.v1.ObjectMeta(name=name, namespace=namespace))
 
 
 
@@ -174,7 +169,7 @@ _TRY_AGAIN = (
     u"please apply your changes to the latest version and try again"
 )
 
-def _replace(client, obj, transformation, retries=2):
+def _replace(client, obj, transformation, retries):
     """
     Try to replace the given object with one that differs by the given
     transformation.
@@ -208,7 +203,10 @@ def does_not_exist(client, obj):
 
     :return: A ``Deferred`` that fires when the object does not exist.
     """
-    action = start_action(action_type=u"poll:start", obj=iobject_to_raw(obj))
+    action = start_action(
+        action_type=u"poll:start",
+        obj=client.model.iobject_to_raw(obj),
+    )
     with action.context():
         from twisted.internet import reactor
         d = poll(reactor, action, lambda: client.get(obj), repeat(0.5, 100))
@@ -222,7 +220,10 @@ def does_not_exist(client, obj):
         d.addErrback(trap_not_found)
         def trap_stop_iteration(reason):
             reason.trap(StopIteration)
-            Message.log(does_not_exist=u"timeout", obj=iobject_to_raw(obj))
+            Message.log(
+                does_not_exist=u"timeout",
+                obj=client.model.iobject_to_raw(obj),
+            )
             return None
         d.addErrback(trap_stop_iteration)
         return d.addActionFinish()
@@ -259,7 +260,8 @@ def needs(**to_create):
 
 
 def _needs_objects(get_objects):
-    no_grace = v1.DeleteOptions(gracePeriodSeconds=0)
+    def no_grace(model):
+        return model.v1.DeleteOptions(gracePeriodSeconds=0)
 
     def decorator(f):
         @wraps(f)
@@ -278,7 +280,7 @@ def _needs_objects(get_objects):
             def cleanup(obj):
                 # Delete an object, if it exists, and wait for it to stop
                 # existing.
-                d = self.client.delete(obj, no_grace)
+                d = self.client.delete(obj, no_grace(self.model))
                 # Some Kubernetes objects take a while to be deleted.
                 # Specifically, Namespaces go though a slow "Terminating"
                 # phase where things they contain are cleaned up.  Delay
@@ -322,17 +324,34 @@ def _needs_objects(get_objects):
 
 
 
+class _VersionTestsMixin(object):
+    def test_version(self):
+        """
+        The server version can be retrieved using ``IKubernetesClient.version``.
+        """
+        d = self.client.version()
+        d.addCallback(
+            lambda version: self.assertThat(
+                version, MatchesStructure(
+                    major=IsInstance(unicode),
+                    minor=IsInstance(unicode),
+                ),
+            ),
+        )
+        return d
+
+
+
 class _NamespaceTestsMixin(object):
-    @async
     @needs(obj=creatable_namespaces())
     def test_namespace(self, obj):
         """
         ``Namespace`` objects can be created and retrieved using the ``create``
         and ``list`` methods of ``IKubernetesClient``.
         """
-        d = self.client.list(v1.Namespace)
+        d = self.client.list(self.model.v1.Namespace)
         def check_namespaces(namespaces):
-            self.assertThat(namespaces, IsInstance(v1.NamespaceList))
+            self.assertThat(namespaces, IsInstance(self.model.v1.NamespaceList))
             # There are some built-in namespaces that we'll ignore.  If we
             # find the one we created, that's sufficient.
             self.assertThat(
@@ -343,7 +362,6 @@ class _NamespaceTestsMixin(object):
         return d
 
 
-    @async
     @needs(obj=creatable_namespaces())
     def test_namespace_retrieval(self, obj):
         """
@@ -352,12 +370,11 @@ class _NamespaceTestsMixin(object):
         """
         return self._global_object_retrieval_by_name_test(
             obj,
-            v1.Namespace,
+            self.model.v1.Namespace,
             matches_namespace,
         )
 
 
-    @async
     def test_namespace_replacement(self):
         """
         A specific ``Namespace`` object can be replaced by name using
@@ -365,12 +382,11 @@ class _NamespaceTestsMixin(object):
         """
         return self._object_replacement_test(
             None,
-            creatable_namespaces(),
+            creatable_namespaces(self.model),
             matches_namespace,
         )
 
 
-    @async
     @needs(obj=creatable_namespaces())
     def test_namespace_deletion(self, obj):
         """
@@ -379,7 +395,7 @@ class _NamespaceTestsMixin(object):
         """
         d = self.client.delete(obj)
         def deleted_namespace(ignored):
-            return self.client.list(v1.Namespace)
+            return self.client.list(self.model.v1.Namespace)
         d.addCallback(deleted_namespace)
         def check_namespaces(collection):
             active = list(
@@ -396,7 +412,6 @@ class _NamespaceTestsMixin(object):
         return d
 
 
-    @async
     def test_duplicate_namespace_rejected(self):
         """
         ``IKubernetesClient.create`` returns a ``Deferred`` that fails with
@@ -404,13 +419,13 @@ class _NamespaceTestsMixin(object):
         with the same name as a *Namespace* which already exists.
         """
         return self._create_duplicate_rejected_test(
-            None, creatable_namespaces(), u"namespaces", None,
+            None,
+            strategy=creatable_namespaces(self.model),
         )
 
 
 
-class _ConfigMapTestsMixin(TestCase):
-    @async
+class _ConfigMapTestsMixin(object):
     @needs(namespace=creatable_namespaces())
     def test_duplicate_configmap_rejected(self, namespace):
         """
@@ -420,11 +435,11 @@ class _ConfigMapTestsMixin(TestCase):
         same namespace.
         """
         return self._create_duplicate_rejected_test(
-            namespace, configmaps(), u"configmaps", None,
+            namespace,
+            strategy=configmaps(self.model),
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_configmap(self, namespace):
         """
@@ -432,26 +447,24 @@ class _ConfigMapTestsMixin(TestCase):
         and ``list`` methods of ``IKubernetesClient``.
         """
         self._create_list_test(
-            namespace, configmaps(), v1.ConfigMap, v1.ConfigMapList,
+            namespace, configmaps(self.model), self.model.v1.ConfigMap,
+            self.model.v1.ConfigMapList,
             matches_configmap,
         )
 
 
-    @async
     def test_configmap_retrieval(self):
         """
         A specific ``ConfigMap`` object can be retrieved by name using
         ``IKubernetesClient.get``.
         """
         return self._namespaced_object_retrieval_by_name_test(
-            configmaps(),
-            v1.ConfigMap,
+            configmaps(self.model),
+            self.model.v1.ConfigMap,
             matches_configmap,
-            group=None,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_configmap_replacement(self, namespace):
         """
@@ -460,32 +473,30 @@ class _ConfigMapTestsMixin(TestCase):
         """
         return self._object_replacement_test(
             namespace,
-            configmaps(),
+            configmaps(self.model),
             matches_configmap,
         )
 
 
-    @async
     def test_configmap_deletion(self):
         """
         A specific ``ConfigMap`` object can be deleted by name using
         ``IKubernetesClient.delete``.
         """
         return self._namespaced_object_deletion_by_name_test(
-            configmaps(),
-            v1.ConfigMap,
+            configmaps(self.model),
+            self.model.v1.ConfigMap,
         )
 
 
     ns_strategy = creatable_namespaces()
-    @async
     @needs(ns_a=ns_strategy, ns_b=ns_strategy)
     def test_configmaps_sorted(self, ns_a, ns_b):
         """
         ``ConfigMap`` objects retrieved with ``IKubernetesClient.list`` appear in
         sorted order, with (namespace, name) as the sort key.
         """
-        strategy = configmaps()
+        strategy = configmaps(self.model)
         objs = [
             strategy.example().transform(
                 [u"metadata", u"namespace"], ns_a.metadata.name,
@@ -496,7 +507,7 @@ class _ConfigMapTestsMixin(TestCase):
         ]
         d = gatherResults(list(self.client.create(obj) for obj in objs))
         def created_configmaps(ignored):
-            return self.client.list(v1.ConfigMap)
+            return self.client.list(self.model.v1.ConfigMap)
         d.addCallback(created_configmaps)
         def check_configmaps(collection):
             self.expectThat(collection, items_are_sorted())
@@ -506,7 +517,6 @@ class _ConfigMapTestsMixin(TestCase):
 
 
 class _ReplicaSetTestsMixin(object):
-    @async
     @needs(namespace=creatable_namespaces())
     def test_replicaset(self, namespace):
         """
@@ -514,12 +524,11 @@ class _ReplicaSetTestsMixin(object):
         and ``list`` methods of ``IKubernetesClient``.
         """
         return self._create_list_test(
-            namespace, replicasets(), v1beta1.ReplicaSet,
-            v1beta1.ReplicaSetList, matches_replicaset,
+            namespace, replicasets(self.model), self.model.v1beta1.ReplicaSet,
+            self.model.v1beta1.ReplicaSetList, matches_replicaset,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_duplicate_replicaset_rejected(self, namespace):
         """
@@ -529,25 +538,23 @@ class _ReplicaSetTestsMixin(object):
         namespace.
         """
         return self._create_duplicate_rejected_test(
-            namespace, replicasets(), u"replicasets", None,
+            namespace,
+            strategy=replicasets(self.model),
         )
 
 
-    @async
     def test_replicaset_retrieval(self):
         """
         A specific ``ReplicaSet`` object can be retrieved by name using
         ``IKubernetesClient.get``.
         """
         return self._namespaced_object_retrieval_by_name_test(
-            replicasets(),
-            v1beta1.ReplicaSet,
+            replicasets(self.model),
+            self.model.v1beta1.ReplicaSet,
             matches_replicaset,
-            group=None,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_replicaset_replacement(self, namespace):
         """
@@ -556,26 +563,24 @@ class _ReplicaSetTestsMixin(object):
         """
         return self._object_replacement_test(
             namespace,
-            replicasets(),
+            replicasets(self.model),
             matches_replicaset,
         )
 
 
-    @async
     def test_replicaset_deletion(self):
         """
         A specific ``ReplicaSet`` object can be deleted by name using
         ``IKubernetesClient.delete``.
         """
         return self._namespaced_object_deletion_by_name_test(
-            replicasets(),
-            v1beta1.ReplicaSet,
+            replicasets(self.model),
+            self.model.v1beta1.ReplicaSet,
         )
 
 
 
 class _PodTestsMixin(object):
-    @async
     @needs(namespace=creatable_namespaces())
     def test_pod(self, namespace):
         """
@@ -583,12 +588,11 @@ class _PodTestsMixin(object):
         ``list`` methods of ``IKubernetesClient``.
         """
         return self._create_list_test(
-            namespace, pods(), v1.Pod,
-            v1.PodList, matches_pod,
+            namespace, pods(self.model), self.model.v1.Pod,
+            self.model.v1.PodList, matches_pod,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_duplicate_pod_rejected(self, namespace):
         """
@@ -597,25 +601,23 @@ class _PodTestsMixin(object):
         same name as a *Pod* which already exists in the same namespace.
         """
         return self._create_duplicate_rejected_test(
-            namespace, pods(), u"pods", None,
+            namespace,
+            strategy=pods(self.model),
         )
 
 
-    @async
     def test_pod_retrieval(self):
         """
         A specific ``Pod`` object can be retrieved by name using
         ``IKubernetesClient.get``.
         """
         return self._namespaced_object_retrieval_by_name_test(
-            pods(),
-            v1.Pod,
+            pods(self.model),
+            self.model.v1.Pod,
             matches_pod,
-            group=None,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_pod_replacement(self, namespace):
         """
@@ -624,26 +626,24 @@ class _PodTestsMixin(object):
         """
         return self._object_replacement_test(
             namespace,
-            pods(),
+            pods(self.model),
             matches_pod,
         )
 
 
-    @async
     def test_pod_deletion(self):
         """
         A specific ``Pod`` object can be deleted by name using
         ``IKubernetesClient.delete``.
         """
         return self._namespaced_object_deletion_by_name_test(
-            pods(),
-            v1.Pod,
+            pods(self.model),
+            self.model.v1.Pod,
         )
 
 
 
 class _DeploymentTestsMixin(object):
-    @async
     @needs(namespace=creatable_namespaces())
     def test_deployment(self, namespace):
         """
@@ -651,12 +651,11 @@ class _DeploymentTestsMixin(object):
         and ``list`` methods of ``IKubernetesClient``.
         """
         return self._create_list_test(
-            namespace, deployments(), v1beta1.Deployment,
-            v1beta1.DeploymentList, matches_deployment,
+            namespace, deployments(self.model), self.model.v1beta1.Deployment,
+            self.model.v1beta1.DeploymentList, matches_deployment,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_duplicate_deployment_rejected(self, namespace):
         """
@@ -666,25 +665,23 @@ class _DeploymentTestsMixin(object):
         namespace.
         """
         return self._create_duplicate_rejected_test(
-            namespace, deployments(), u"deployments", u"extensions",
+            namespace,
+            strategy=deployments(self.model),
         )
 
 
-    @async
     def test_deployment_retrieval(self):
         """
         A specific ``Deployment`` object can be retrieved by name using
         ``IKubernetesClient.get``.
         """
         return self._namespaced_object_retrieval_by_name_test(
-            deployments(),
-            v1beta1.Deployment,
+            deployments(self.model),
+            self.model.v1beta1.Deployment,
             matches_deployment,
-            group=u"extensions",
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_deployment_replacement(self, namespace):
         """
@@ -693,26 +690,24 @@ class _DeploymentTestsMixin(object):
         """
         return self._object_replacement_test(
             namespace,
-            deployments(),
+            deployments(self.model),
             matches_deployment,
         )
 
 
-    @async
     def test_deployment_deletion(self):
         """
         A specific ``Deployment`` object can be deleted by name using
         ``IKubernetesClient.delete``.
         """
         return self._namespaced_object_deletion_by_name_test(
-            deployments(),
-            v1beta1.Deployment,
+            deployments(self.model),
+            self.model.v1beta1.Deployment,
         )
 
 
 
 class _ServiceTestsMixin(object):
-    @async
     @needs(namespace=creatable_namespaces())
     def test_service(self, namespace):
         """
@@ -720,12 +715,12 @@ class _ServiceTestsMixin(object):
         ``list`` methods of ``IKubernetesClient``.
         """
         self._create_list_test(
-            namespace, services(), v1.Service, v1.ServiceList,
+            namespace, services(self.model), self.model.v1.Service,
+            self.model.v1.ServiceList,
             matches_service,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_duplicate_service_rejected(self, namespace):
         """
@@ -735,25 +730,23 @@ class _ServiceTestsMixin(object):
         same namespace.
         """
         return self._create_duplicate_rejected_test(
-            namespace, configmaps(), u"configmaps", None,
+            namespace,
+            strategy=configmaps(self.model),
         )
 
 
-    @async
     def test_service_retrieval(self):
         """
         A specific ``Service`` object can be retrieved by name using
         ``IKubernetesClient.get``.
         """
         return self._namespaced_object_retrieval_by_name_test(
-            services(),
-            v1.Service,
+            services(self.model),
+            self.model.v1.Service,
             matches_service,
-            group=None,
         )
 
 
-    @async
     @needs(namespace=creatable_namespaces())
     def test_service_replacement(self, namespace):
         """
@@ -762,26 +755,26 @@ class _ServiceTestsMixin(object):
         """
         return self._object_replacement_test(
             namespace,
-            services(),
+            services(self.model),
             matches_service,
         )
 
 
-    @async
     def test_service_deletion(self):
         """
         A specific ``Service`` object can be deleted by name using
         ``IKubernetesClient.delete``.
         """
         return self._namespaced_object_deletion_by_name_test(
-            services(),
-            v1.Service,
+            services(self.model),
+            self.model.v1.Service,
         )
 
 
 
 def kubernetes_client_tests(get_kubernetes):
     class KubernetesClientIntegrationTests(
+        _VersionTestsMixin,
         _NamespaceTestsMixin,
         _ConfigMapTestsMixin,
         _DeploymentTestsMixin,
@@ -790,11 +783,18 @@ def kubernetes_client_tests(get_kubernetes):
         _ServiceTestsMixin,
         TestCase
     ):
+        run_tests_with = async_test_runner()
+
         def setUp(self):
             super(KubernetesClientIntegrationTests, self).setUp()
             self.kubernetes = get_kubernetes(self)
-            self.client = self.kubernetes.client()
-            self.addCleanup(self._cleanup)
+            d = self.kubernetes.versioned_client()
+            def got_client(client):
+                self.client = client
+                self.model = self.client.model
+                self.addCleanup(self._cleanup)
+            d.addCallback(got_client)
+            return d
 
 
         def _cleanup(self):
@@ -817,7 +817,6 @@ def kubernetes_client_tests(get_kubernetes):
             verifyObject(IKubernetesClient, self.client)
 
 
-        @async
         def test_not_found(self):
             """
             ``IKubernetesClient.list`` returns a ``Deferred`` that fails with
@@ -830,7 +829,7 @@ def kubernetes_client_tests(get_kubernetes):
             class Mythical(object):
                 apiVersion = u"v6txkube2"
                 kind = u"Mythical"
-                metadata = v1.ObjectMeta()
+                metadata = self.model.v1.ObjectMeta()
 
             # The client won't know where to route the request without this.
             # There is a more general problem here that the model is missing
@@ -849,7 +848,7 @@ def kubernetes_client_tests(get_kubernetes):
                     reason.value,
                     MatchesStructure(
                         code=Equals(NOT_FOUND),
-                        status=Equals(v1.Status(
+                        status=Equals(self.model.v1.Status(
                             metadata={},
                             status=u"Failure",
                             message=u"the server could not find the requested resource",
@@ -871,7 +870,7 @@ def kubernetes_client_tests(get_kubernetes):
             corresponding to that kind as long as the object has its *name*
             metadata populated.
             """
-            d = self.client.get(_named(kind, name=obj.metadata.name))
+            d = self.client.get(_named(self.model, kind, name=obj.metadata.name))
             def got_object(retrieved):
                 self.assertThat(retrieved, matches(obj))
             d.addCallback(got_object)
@@ -924,7 +923,7 @@ def kubernetes_client_tests(get_kubernetes):
                     [u"metadata", u"labels"],
                     replacement_labels,
                 )
-                return _replace(self.client, created, transformation, retries=1)
+                return _replace(self.client, created, transformation, retries=2)
             d.addCallback(created)
             def replaced(result):
                 self.expectThat(
@@ -966,7 +965,7 @@ def kubernetes_client_tests(get_kubernetes):
             return d
 
 
-        def _create_duplicate_rejected_test(self, namespace, strategy, kind, group):
+        def _create_duplicate_rejected_test(self, namespace, strategy):
             """
             Verify an object cannot be created if its name (and maybe namespace) is
             already taken.
@@ -976,12 +975,9 @@ def kubernetes_client_tests(get_kubernetes):
             :param unicode kind: The name of the collection of the *kind* of
                 ``obj``, lowercase.  For example, *configmaps*.
             """
-            if group is None:
-                kind_identifier = kind
-            else:
-                kind_identifier = u"{}.{}".format(kind, group)
-
             obj = strategy.example()
+            group = _infer_api_group(obj.apiVersion)
+
             # Put it in the namespace.
             if namespace is not None:
                 obj = obj.transform(
@@ -999,24 +995,22 @@ def kubernetes_client_tests(get_kubernetes):
                     reason.value,
                     MatchesStructure(
                         code=Equals(CONFLICT),
-                        status=Equals(v1.Status(
-                            metadata={},
-                            status=u"Failure",
-                            # XXX This message is a little janky.  "namespaces
-                            # ... already exists"?  How about "Namespace
-                            # ... already exists"?  Maybe report it to
-                            # Kubernetes.
-                            message=u"{} \"{}\" already exists".format(
-                                kind_identifier, obj.metadata.name,
-                            ),
-                            reason=u"AlreadyExists",
-                            details=dict(
+                        status=MatchesStructure(
+                            metadata=Equals(self.model.v1.ListMeta()),
+                            status=Equals(u"Failure"),
+                            # Error text is wonky and changes from version to
+                            # version.  It's not a reliable source of
+                            # information so don't bother making any
+                            # particular assertions about its contents.
+                            message=Always(),
+                            reason=Equals(u"AlreadyExists"),
+                            details=MatchesStructure.byEquality(
                                 name=obj.metadata.name,
-                                kind=kind,
+                                kind=obj.kind.lower() + u"s",
                                 group=group,
                             ),
-                            code=CONFLICT,
-                        )),
+                            code=Equals(CONFLICT),
+                        ),
                     ),
                 )
             d.addBoth(failed)
@@ -1083,10 +1077,11 @@ def kubernetes_client_tests(get_kubernetes):
             def created_object(ignored):
                 return self.client.delete(
                     _named(
+                        self.model,
                         cls,
                         namespace=victim.metadata.namespace, name=victim.metadata.name,
                     ),
-                    v1.DeleteOptions(gracePeriodSeconds=0),
+                    self.model.v1.DeleteOptions(gracePeriodSeconds=0),
                 )
             d.addCallback(created_object)
             def deleted_object(result):
@@ -1094,19 +1089,12 @@ def kubernetes_client_tests(get_kubernetes):
                 return self.client.list(cls)
             d.addCallback(deleted_object)
             def listed_objects(collection):
-                def key(obj):
-                    return (obj.metadata.name, obj.metadata.namespace)
-                obj_names = set(
-                    key(obj)
-                    for obj
-                    in collection.items
-                )
                 self.expectThat(
-                    obj_names,
+                    collection,
                     MatchesAll(
-                        Contains(key(bystander_a)),
-                        Contains(key(bystander_b)),
-                        Not(Contains(key(victim))),
+                        Not(KubernetesObjectDeleted(bystander_a)),
+                        Not(KubernetesObjectDeleted(bystander_b)),
+                        KubernetesObjectDeleted(victim),
                     ),
                 )
             d.addCallback(listed_objects)
@@ -1114,7 +1102,7 @@ def kubernetes_client_tests(get_kubernetes):
 
 
         @needs(namespace=creatable_namespaces())
-        def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, group, namespace):
+        def _namespaced_object_retrieval_by_name_test(self, strategy, cls, matches, namespace):
             """
             Verify that a particular kind of namespaced Kubernetes object (such as
             *ConfigMap* or *PersistentVolumeClaim*) can be retrieved by name
@@ -1134,25 +1122,20 @@ def kubernetes_client_tests(get_kubernetes):
                 matcher can compare just the important, predictable parts of
                 the object.
 
-            :param unicode group: The name of the API group responsible for
-                this retrieval.  Objects are arbitrarily collected into such
-                groupings.  Look at the Kubernetes API Operations
-                documentation to find out what group contains the retrieval
-                API for the type under test.
-
             :param v1.Namespace namespace: An existing namespace into which
                 the probe object can be created.
 
             :return: A ``Deferred`` that fires when the behavior has been
                 verified.
             """
-            kind = cls.kind.lower()
             obj = strategy.example()
+            group = _infer_api_group(obj.apiVersion)
             # Move it to the namespace for this test.
             obj = obj.transform([u"metadata", u"namespace"], namespace.metadata.name)
             d = self.client.create(obj)
             def created_object(created):
                 return self.client.get(_named(
+                    self.model,
                     cls,
                     namespace=obj.metadata.namespace, name=obj.metadata.name,
                 ))
@@ -1166,6 +1149,7 @@ def kubernetes_client_tests(get_kubernetes):
                 bogus_namespace = different_name(obj.metadata.namespace)
                 return self.client.get(
                     _named(
+                        self.model,
                         cls,
                         namespace=bogus_namespace,
                         name=obj.metadata.name,
@@ -1175,27 +1159,26 @@ def kubernetes_client_tests(get_kubernetes):
             def check_error(reason):
                 self.assertThat(reason, IsInstance(Failure))
                 reason.trap(KubernetesError)
-                if group is None:
-                    fmt = u"{kind} \"{name}\" not found"
-                else:
-                    fmt = u"{kind}.{group} \"{name}\" not found"
-                details = dict(
-                    kind=u"{}s".format(kind),
-                    name=obj.metadata.name,
-                    group=group,
-                )
                 self.assertThat(
                     reason.value,
                     MatchesStructure(
                         code=Equals(NOT_FOUND),
-                        status=Equals(v1.Status(
-                            metadata={},
-                            status=u"Failure",
-                            message=fmt.format(**details),
-                            reason=u"NotFound",
-                            details=details,
-                            code=NOT_FOUND,
-                        )),
+                        status=MatchesStructure(
+                            metadata=Equals(self.model.v1.ListMeta()),
+                            status=Equals(u"Failure"),
+                            # Error text is wonky and changes from version to
+                            # version.  It's not a reliable source of
+                            # information so don't bother making any
+                            # particular assertions about its contents.
+                            message=Always(),
+                            reason=Equals(u"NotFound"),
+                            details=MatchesStructure.byEquality(
+                                kind=obj.kind.lower() + u"s",
+                                name=obj.metadata.name,
+                                group=group,
+                            ),
+                            code=Equals(NOT_FOUND),
+                        ),
                     ),
                 )
             d.addBoth(check_error)
@@ -1226,3 +1209,22 @@ def items_are_sorted():
             u"%s is not sorted by namespace, name",
         ),
     )
+
+
+
+_CORE_PREFIXES = [
+    # 1.6, 1.7
+    u"io.k8s.kubernetes.pkg.api.",
+    u"io.k8s.apimachinery.pkg.apis.meta.",
+
+    # 1.5
+    u"v1",
+]
+
+
+
+def _infer_api_group(apiVersion):
+    for prefix in _CORE_PREFIXES:
+        if apiVersion.startswith(prefix):
+            return None
+    return u"extensions"

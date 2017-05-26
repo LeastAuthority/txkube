@@ -32,6 +32,11 @@ class KubernetesError(Exception):
         self.code = code
         self.status = status
 
+    def __cmp__(self, other):
+        if isinstance(other, self.__class__):
+            return cmp((self.code, self.status), (other.code, other.status))
+        return NotImplemented
+
     @classmethod
     def not_found(cls, details):
         # Circular imports :(  See below.
@@ -103,16 +108,42 @@ class KubernetesError(Exception):
 
         :return Deferred(KubernetesError): The error with details attached.
         """
-        d = readBody(response)
         # txkube -> _exception -> _model -> txkube :(
         #
         # Stick the import here to break the cycle.
         #
         # This is usually what happens with the expose-it-through-__init__
         # style, I guess.
-        from ._model import iobject_from_raw
-        d.addCallback(lambda body: cls(response.code, iobject_from_raw(loads(body))))
+        #
+        # Can probably deprecate this method, anyhow, and make people use
+        # from_model_and_response instead.
+        from ._model import v1_5_model
+        return cls.from_model_and_response(v1_5_model, response)
+
+
+    @classmethod
+    def from_model_and_response(cls, model, response):
+        """
+        Create a ``KubernetesError`` for the given error response from a
+        Kubernetes server.
+
+        :param model: The Kubernetes data model to use to convert the server
+            response into a Python object.
+
+        :param twisted.web.iweb.IResponse response: The response to inspect
+            for the error details.
+
+        :return Deferred(KubernetesError): The error with details attached.
+        """
+        d = readBody(response)
+        d.addCallback(
+            lambda body: cls(
+                response.code,
+                model.iobject_from_raw(loads(body)),
+            ),
+        )
         return d
+
 
 
     def __repr__(self):
