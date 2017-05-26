@@ -13,7 +13,6 @@ objects and loaded from such objects.
 
 from json import load
 from datetime import datetime
-from itertools import chain
 
 from dateutil.parser import parse as parse_iso8601
 
@@ -59,6 +58,7 @@ class Swagger(PClass):
     swagger = field(mandatory=True, initial=None, factory=freeze)
 
     _pclasses = field(mandatory=True, type=dict)
+    _behaviors = field(mandatory=True, type=dict)
 
     def __hash__(self):
         return hash((
@@ -89,7 +89,7 @@ class Swagger(PClass):
         :param dict document: An object like the one that might be created by
             parsing a Swagger JSON specification string.
         """
-        return cls(_pclasses={}, **document)
+        return cls(_behaviors={}, _pclasses={}, **document)
 
 
     def to_document(self):
@@ -105,6 +105,14 @@ class Swagger(PClass):
             security=thaw(self.security),
             swagger=thaw(self.swagger),
         )
+
+
+    def add_behavior(self, name, cls):
+        if name in self._pclasses:
+            raise AlreadyCreatedClass(name)
+        if name not in self.definitions:
+            raise NoSuchDefinition(name)
+        self._behaviors.setdefault(name, []).append(cls)
 
 
     def pclass_for_definition(self, name, constant_fields=pmap()):
@@ -124,9 +132,9 @@ class Swagger(PClass):
             kind = self._identify_kind(definition)
             if kind is None:
                 raise NotClassLike(name, definition)
-            generator =  getattr(self, "_model_for_{}".format(kind))
+            generator = getattr(self, "_model_for_{}".format(kind))
             model = generator(name, definition, constant_fields)
-            cls = model.pclass()
+            cls = model.pclass(tuple(self._behaviors.get(name, ())))
             self._pclasses[name] = cls
         return cls
 
@@ -671,23 +679,25 @@ class _ClassModel(PClass):
 
         :return: A new model for the given definition.
         """
+        variable_attributes = list(
+            attr
+            for attr
+            in cls._attributes_for_definition(pclass_for_definition, definition)
+            if constant_fields is None or attr.name not in constant_fields
+        )
+        constant_attributes = list(
+            _ConstantModel(name=name, value=value)
+            for (name, value)
+            in constant_fields.items()
+        )
         return cls(
             name=name,
             doc=definition.get(u"description", name),
-            attributes=chain((
-                attr
-                for attr
-                in cls._attributes_for_definition(pclass_for_definition, definition)
-                if constant_fields is None or attr.name not in constant_fields
-            ), (
-                _ConstantModel(name=name, value=value)
-                for (name, value)
-                in constant_fields.items()
-            )),
+            attributes=variable_attributes + constant_attributes,
         )
 
 
-    def pclass(self):
+    def pclass(self, bases=()):
         """
         Create a ``pyrsistent.PClass`` subclass representing this class.
         """
@@ -698,7 +708,7 @@ class _ClassModel(PClass):
         }
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
-        return type(nativeString(self.name), (PClass,), content)
+        return type(nativeString(self.name), bases + (PClass,), content)
 
 
 omit = object()
@@ -809,6 +819,16 @@ class VersionedPClasses(object):
         self.version_field = version_field
 
 
+    def add_behavior(self, kind, cls):
+        for version in sorted(self.versions):
+            try:
+                self.spec.add_behavior(u".".join((version, kind)), cls)
+            except NoSuchDefinition:
+                pass
+            else:
+                break
+
+
     def __getattr__(self, name):
         for version in sorted(self.versions):
             try:
@@ -829,3 +849,13 @@ class VersionedPClasses(object):
         return self.spec.pclass_for_definition(
             definition_name, constant_fields=constant_fields,
         )
+
+
+
+class NoSuchDefinition(Exception):
+    pass
+
+
+
+class AlreadyCreatedClass(Exception):
+    pass

@@ -123,8 +123,17 @@ def openapi_to_data_model(openapi):
 
 
 def _openapi_to_v1_5_data_model(openapi):
+    base = loads(
+        FilePath(__file__).sibling("extra-1.5.json").getContent()
+    )
+    for k, v in openapi.iteritems():
+        if isinstance(v, dict):
+            base.setdefault(k, {}).update(v)
+        else:
+            base[k] = v
+
     return _KubernetesDataModel.from_swagger(
-        Swagger.from_document(openapi),
+        Swagger.from_document(base),
         u"version.Info", dict(
             major=u"1",
             minor=u"5",
@@ -170,18 +179,6 @@ _openapi_to_v1_7_data_model = _openapi_to_v1_6_data_model
 
 # Keep this up to date with whatever the newest thing we know about is...
 _openapi_to_newest_data_model =  _openapi_to_v1_7_data_model
-
-
-def behavior(namespace):
-    """
-    Create a class decorator which adds the resulting class to the given
-    namespace-y thing.
-    """
-    def decorator(cls):
-        setattr(namespace, cls.__name__, cls)
-        return cls
-    return decorator
-
 
 
 def set_if_none(desired_value):
@@ -298,9 +295,28 @@ class _List(object):
 
 
 
+def behavior(model, version):
+    """
+    Create a class decorator which adds the resulting class to the given
+    namespace-y thing.
+    """
+    def decorator(cls):
+        kind = cls.__name__
+        getattr(model, version).add_behavior(kind, cls)
+        # Do not use the types decorated thusly directly.  You must access
+        # them via the model object.
+        return None
+
+    return decorator
+
+
+
 def define_behaviors(v):
-    @behavior(v.v1)
-    class NamespaceStatus(v.v1.NamespaceStatus):
+    v1 = behavior(v, u"v1")
+    v1beta1 = behavior(v, u"v1beta1")
+
+    @v1
+    class NamespaceStatus(object):
         """
         ``NamespaceStatus`` instances model `Kubernetes namespace status
         <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
@@ -316,9 +332,9 @@ def define_behaviors(v):
 
 
 
-    @behavior(v.v1)
+    @v1
     @implementer(IObject)
-    class Namespace(v.v1.Namespace):
+    class Namespace(object):
         """
         ``Namespace`` instances model `Kubernetes namespaces
         <https://kubernetes.io/docs/user-guide/namespaces/>`_.
@@ -337,7 +353,7 @@ def define_behaviors(v):
                 # Also, should this clobber existing values or leave them alone?
                 # See https://github.com/LeastAuthority/txkube/issues/36
                 [u"metadata", u"uid"], unicode(uuid4()),
-                [u"status"], NamespaceStatus.active(),
+                [u"status"], v.v1.NamespaceStatus.active(),
             )
 
 
@@ -347,9 +363,16 @@ def define_behaviors(v):
 
 
 
-    @behavior(v.v1)
+    @v1
     @implementer(IObject)
-    class ConfigMap(v.v1.ConfigMap):
+    class NamespaceList(_List):
+        pass
+
+
+
+    @v1
+    @implementer(IObject)
+    class ConfigMap(object):
         """
         ``ConfigMap`` instances model `ConfigMap objects
         <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
@@ -365,9 +388,16 @@ def define_behaviors(v):
 
 
 
-    @behavior(v.v1)
+    @v1
     @implementer(IObject)
-    class Service(v.v1.Service):
+    class ConfigMapList(_List):
+        pass
+
+
+
+    @v1
+    @implementer(IObject)
+    class Service(object):
         """
         ``Service`` instances model `Service objects
         <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_service>`_.
@@ -383,9 +413,16 @@ def define_behaviors(v):
 
 
 
-    @behavior(v.v1beta1)
+    @v1
     @implementer(IObject)
-    class Deployment(v.v1beta1.Deployment):
+    class ServiceList(_List):
+        pass
+
+
+
+    @v1beta1
+    @implementer(IObject)
+    class Deployment(object):
         """
         ``Deployment`` instances model `Deployment objects
         <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
@@ -403,9 +440,16 @@ def define_behaviors(v):
 
 
 
-    @behavior(v.v1beta1)
+    @v1beta1
     @implementer(IObject)
-    class ReplicaSet(v.v1beta1.ReplicaSet):
+    class DeploymentList(_List):
+        pass
+
+
+
+    @v1beta1
+    @implementer(IObject)
+    class ReplicaSet(object):
         """
         ``ReplicaSet`` instances model `ReplicaSet objects
         <https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/>`_.
@@ -419,9 +463,16 @@ def define_behaviors(v):
 
 
 
-    @behavior(v.v1)
+    @v1beta1
     @implementer(IObject)
-    class Pod(v.v1.Pod):
+    class ReplicaSetList(_List):
+        pass
+
+
+
+    @v1
+    @implementer(IObject)
+    class Pod(object):
         """
         ``Pod`` instances model `Pod objects
         <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_pod>`_.
@@ -435,44 +486,9 @@ def define_behaviors(v):
 
 
 
-    @behavior(v.v1)
+    @v1
     @implementer(IObject)
-    class NamespaceList(_List, v.v1.NamespaceList):
-        pass
-
-
-
-    @behavior(v.v1)
-    @implementer(IObject)
-    class ConfigMapList(_List, v.v1.ConfigMapList):
-        pass
-
-
-
-    @behavior(v.v1)
-    @implementer(IObject)
-    class ServiceList(_List, v.v1.ServiceList):
-        pass
-
-
-
-    @behavior(v.v1beta1)
-    @implementer(IObject)
-    class DeploymentList(_List, v.v1beta1.DeploymentList):
-        pass
-
-
-
-    @behavior(v.v1beta1)
-    @implementer(IObject)
-    class ReplicaSetList(_List, v.v1beta1.ReplicaSetList):
-        pass
-
-
-
-    @behavior(v.v1)
-    @implementer(IObject)
-    class PodList(_List, v.v1.PodList):
+    class PodList(_List):
         pass
 
 
