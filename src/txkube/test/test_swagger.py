@@ -25,7 +25,7 @@ from testtools.matchers import (
 )
 
 from .._swagger import (
-    NotClassLike, Swagger, _IntegerRange,
+    NotClassLike, NoSuchDefinition, Swagger, _IntegerRange,
     UsePrefix, PClasses, VersionedPClasses,
 )
 
@@ -199,7 +199,16 @@ class SwaggerTests(TestCase):
                         },
                     },
                 },
-            }
+            },
+            u"object-with-property-with-default": {
+                u"description": u"has property with a default value",
+                u"properties": {
+                    u"d": {
+                        u"type": u"string",
+                        u"default": u"success",
+                    },
+                },
+            },
         },
     }
 
@@ -430,13 +439,28 @@ class SwaggerTests(TestCase):
         )
 
 
-    def test_constant_property_replacement(self):
+    def test_property_with_default(self):
+        Type = self.spec.pclass_for_definition(
+            u"object-with-property-with-default"
+        )
+        self.expectThat(Type().d, Equals(u"success"))
+        self.expectThat(Type(d=u"x").d, Equals(u"x"))
+
+
+    def test_transform_definition(self):
         """
-        A property an object can be replaced by a constant value using thge
-        ``constant_fields`` parameter.
+        A definition can be altered arbitrarily by supplying a value for
+        ``transform_definition``.
         """
-        Type = self.spec.pclass_for_definition(u"object-with-array", constant_fields={u"o": u"foo"})
-        self.assertThat(Type().o, Equals(u"foo"))
+        spec = self.spec.set(
+            u"transform_definition",
+            lambda n, d: d.transform(
+                [u"properties", u"invented"],
+                {u"type": u"boolean"},
+            ),
+        )
+        Type = spec.pclass_for_definition(u"boolean")
+        self.assertThat(Type(invented=False).invented, Equals(False))
 
 
 
@@ -628,7 +652,7 @@ class PClassesTests(TestCase):
         }))
         self.assertThat(
             lambda: pclasses[u"Foo"],
-            raises(KeyError(u"Foo")),
+            raises(NoSuchDefinition(u"Foo")),
         )
 
 
@@ -666,11 +690,11 @@ class VersionedPClassesTests(TestCase):
                     u"properties": {
                         u"v": {
                             u"description": u"",
-                            u"type": u"boolean"
+                            u"type": u"string"
                         },
                         u"u": {
                             u"description": u"",
-                            u"type": u"boolean"
+                            u"type": u"string"
                         },
                     },
                 },
@@ -687,6 +711,7 @@ class VersionedPClassesTests(TestCase):
                 },
             },
         })
+        self.spec = VersionedPClasses.transform_definitions(self.spec)
 
 
     def test_attribute_access(self):
@@ -708,9 +733,9 @@ class VersionedPClassesTests(TestCase):
         their name exposed at the attribute specified to
         ``VersionedPClasses``.
         """
-        a = VersionedPClasses(self.spec, u"a", name_field=u"name")
+        a = VersionedPClasses(self.spec, u"a")
         self.assertThat(
-            a.foo().name,
+            a.foo().kind,
             MatchesAll(IsInstance(unicode), Equals(u"foo")),
         )
 
@@ -721,8 +746,11 @@ class VersionedPClassesTests(TestCase):
         their version exposed at the attribute specified to
         ``VersionedPClasses``.
         """
-        a = VersionedPClasses(self.spec, u"a", version_field=u"version")
-        self.assertThat(a.foo().version, Equals(u"a"))
+        a = VersionedPClasses(self.spec, u"a")
+        self.assertThat(
+            a.foo().apiVersion,
+            MatchesAll(IsInstance(unicode), Equals(u"a")),
+        )
 
 
     def test_name_version_collision(self):
@@ -730,13 +758,16 @@ class VersionedPClassesTests(TestCase):
         The attributes defined by ``name_field`` and ``version_field`` override
         attributes with matching names defined by the Swagger specification.
         """
-        a = VersionedPClasses(
-            self.spec, u"a", name_field=u"v", version_field=u"u",
+        spec = VersionedPClasses.transform_definitions(
+            self.spec,
+            kind_field=u"u",
+            version_field=u"v",
         )
+        a = VersionedPClasses(spec, u"a")
         # Aaahh.  Direct vs indirect first access can make a difference. :(
         a.foolist
-        self.expectThat(a.foo().u, Equals(u"a"))
-        self.expectThat(a.foo().v, Equals(u"foo"))
+        self.expectThat(a.foo().v, Equals(u"a"))
+        self.expectThat(a.foo().u, Equals(u"foo"))
 
 
     def test_missing(self):
@@ -745,7 +776,7 @@ class VersionedPClassesTests(TestCase):
         corresponding Swagger definition results in ``AttributeError`` being
         raised.
         """
-        a = VersionedPClasses(self.spec, u"a", version_field=u"version")
+        a = VersionedPClasses(self.spec, u"a")
         self.assertThat(lambda: a.bar, raises(AttributeError("bar")))
 
 
@@ -755,12 +786,7 @@ class VersionedPClassesTests(TestCase):
         ``VersionedPClasses`` attribute access using the class decorator
         ``add_behavior_for_pclass``.
         """
-        a = VersionedPClasses(
-            self.spec,
-            u"a",
-            version_field=u"version",
-            name_field=u"name",
-        )
+        a = VersionedPClasses(self.spec, u"a")
         def add_behavior():
             @a.add_behavior_for_pclass
             class foo(object):
@@ -771,13 +797,13 @@ class VersionedPClassesTests(TestCase):
                     return u"baz"
         add_behavior()
 
-        an_a = a.foo(v=True)
-        self.expectThat(an_a.version, Equals(u"a"))
-        self.expectThat(an_a.name, Equals(u"foo"))
+        an_a = a.foo(v=u"foo")
+        self.expectThat(an_a.apiVersion, Equals(u"a"))
+        self.expectThat(an_a.kind, Equals(u"foo"))
         self.expectThat(an_a.bar(), Equals(u"baz"))
 
         self.expectThat(
-            lambda: a.foo(v=False),
+            lambda: a.foo(v=u""),
             raises_exception(InvariantException),
         )
 
