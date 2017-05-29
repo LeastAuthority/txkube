@@ -668,6 +668,21 @@ class VersionedPClassesTests(TestCase):
                             u"description": u"",
                             u"type": u"boolean"
                         },
+                        u"u": {
+                            u"description": u"",
+                            u"type": u"boolean"
+                        },
+                    },
+                },
+                u"a.foolist": {
+                    u"type": u"object",
+                    u"properties": {
+                        u"items": {
+                            u"type": u"array",
+                            u"items": {
+                                u"$ref": u"#/definitions/a.foo",
+                            },
+                        },
                     },
                 },
             },
@@ -708,6 +723,20 @@ class VersionedPClassesTests(TestCase):
         """
         a = VersionedPClasses(self.spec, u"a", version_field=u"version")
         self.assertThat(a.foo().version, Equals(u"a"))
+
+
+    def test_name_version_collision(self):
+        """
+        The attributes defined by ``name_field`` and ``version_field`` override
+        attributes with matching names defined by the Swagger specification.
+        """
+        a = VersionedPClasses(
+            self.spec, u"a", name_field=u"v", version_field=u"u",
+        )
+        # Aaahh.  Direct vs indirect first access can make a difference. :(
+        a.foolist
+        self.expectThat(a.foo().u, Equals(u"a"))
+        self.expectThat(a.foo().v, Equals(u"foo"))
 
 
     def test_missing(self):
