@@ -798,3 +798,15 @@ class VersionedPClassesTests(TestCase):
 
         # It's not allowed now that we've retrieved the foo class.
         self.expectThat(add_behavior, raises_exception(ValueError))
+
+
+    def test_irrelevant_constructor_values(self):
+        """
+        Values may be passed to the Python class constructor for the kind and
+        apiVersion and they are discarded.
+        """
+        a = VersionedPClasses(self.spec, u"a")
+        self.expectThat(
+            a.foo(apiVersion=u"a", kind=u"foo", x=u"x").x,
+            Equals(u"x"),
+        )

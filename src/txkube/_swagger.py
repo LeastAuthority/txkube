@@ -717,7 +717,9 @@ class _ClassModel(PClass):
         :param tuple bases: Additional base classes to give the resulting
             class.  These will appear to the left of ``PClass``.
         """
-        def new_without_crap(cls, apiVersion=None, kind=None, **kwargs):
+        def discard_constant_fields(cls, **kwargs):
+            kwargs.pop("kind", None)
+            kwargs.pop("apiVersion", None)
             return super(huh, cls).__new__(cls, **kwargs)
         content = {
             attr.name: attr.pclass_field_for_attribute()
@@ -726,7 +728,7 @@ class _ClassModel(PClass):
         }
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
-        content["__new__"] = new_without_crap
+        content["__new__"] = discard_constant_fields
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
