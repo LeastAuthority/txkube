@@ -688,11 +688,15 @@ class VersionedPClassesTests(TestCase):
                 u"a.foo": {
                     u"type": u"object",
                     u"properties": {
-                        u"v": {
+                        u"kind": {
                             u"description": u"",
                             u"type": u"string"
                         },
-                        u"u": {
+                        u"apiVersion": {
+                            u"description": u"",
+                            u"type": u"string"
+                        },
+                        u"x": {
                             u"description": u"",
                             u"type": u"string"
                         },
@@ -727,47 +731,32 @@ class VersionedPClassesTests(TestCase):
         )
 
 
-    def test_name(self):
+    def test_kind(self):
         """
-        The classes retrieved via ``VersionedPClasses`` attribute access have
-        their name exposed at the attribute specified to
-        ``VersionedPClasses``.
+        An attribute of the class retrieved from ``VersionedPClasses`` named by
+        the value given in the call to ``transform_definitions`` exposes the
+        **kind** the type corresponds to.
         """
         a = VersionedPClasses(self.spec, u"a")
         self.assertThat(
-            a.foo().kind,
+            a.foo.kind,
             MatchesAll(IsInstance(unicode), Equals(u"foo")),
         )
 
 
     def test_version(self):
         """
-        The classes retrieved via ``VersionedPClasses`` attribute access have
-        their version exposed at the attribute specified to
-        ``VersionedPClasses``.
+        An attribute of the class retrieved from ``VersionedPClasses`` named by
+        the value given in the call to ``transform_definitions`` exposes the
+        **apiVersion** the type corresponds to.
         """
         a = VersionedPClasses(self.spec, u"a")
-        self.assertThat(
-            a.foo().apiVersion,
-            MatchesAll(IsInstance(unicode), Equals(u"a")),
-        )
-
-
-    def test_name_version_collision(self):
-        """
-        The attributes defined by ``name_field`` and ``version_field`` override
-        attributes with matching names defined by the Swagger specification.
-        """
-        spec = VersionedPClasses.transform_definitions(
-            self.spec,
-            kind_field=u"u",
-            version_field=u"v",
-        )
-        a = VersionedPClasses(spec, u"a")
         # Aaahh.  Direct vs indirect first access can make a difference. :(
         a.foolist
-        self.expectThat(a.foo().v, Equals(u"a"))
-        self.expectThat(a.foo().u, Equals(u"foo"))
+        self.assertThat(
+            a.foo.apiVersion,
+            MatchesAll(IsInstance(unicode), Equals(u"a")),
+        )
 
 
     def test_missing(self):
@@ -791,19 +780,19 @@ class VersionedPClassesTests(TestCase):
             @a.add_behavior_for_pclass
             class foo(object):
                 def __invariant__(self):
-                    return [(self.v, "__invariant__!")]
+                    return [(self.x, "__invariant__!")]
 
                 def bar(self):
                     return u"baz"
         add_behavior()
 
-        an_a = a.foo(v=u"foo")
+        an_a = a.foo(x=u"foo")
         self.expectThat(an_a.apiVersion, Equals(u"a"))
         self.expectThat(an_a.kind, Equals(u"foo"))
         self.expectThat(an_a.bar(), Equals(u"baz"))
 
         self.expectThat(
-            lambda: a.foo(v=u""),
+            lambda: a.foo(x=u""),
             raises_exception(InvariantException),
         )
 

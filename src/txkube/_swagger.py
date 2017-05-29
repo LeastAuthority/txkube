@@ -234,6 +234,18 @@ class ITypeModel(Interface):
 
 
 @implementer(ITypeModel)
+class _ConstantModel(PClass):
+    python_types = field(mandatory=True)
+
+    factory = None
+
+
+    def pclass_field_for_type(self, required, default):
+        return default
+
+
+
+@implementer(ITypeModel)
 class _BasicTypeModel(PClass):
     """
     A ``_BasicTypeModel`` represents a type composed (roughly) of a "single"
@@ -585,6 +597,10 @@ class _ClassModel(PClass):
         (u"string", u"int-or-string"): _BasicTypeModel(
             python_types=(unicode, int, long),
         ),
+
+        # This is not part of Swagger.  It's something we can inject into
+        # specifications to set a constant value on the resulting types.
+        (u"x-txkube-constant", u"string"): _ConstantModel(python_types=(unicode,)),
     }
 
     name = field(type=unicode)
@@ -701,6 +717,8 @@ class _ClassModel(PClass):
         :param tuple bases: Additional base classes to give the resulting
             class.  These will appear to the left of ``PClass``.
         """
+        def new_without_crap(cls, apiVersion=None, kind=None, **kwargs):
+            return super(huh, cls).__new__(cls, **kwargs)
         content = {
             attr.name: attr.pclass_field_for_attribute()
             for attr
@@ -708,7 +726,9 @@ class _ClassModel(PClass):
         }
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
-        return type(nativeString(self.name), bases + (PClass,), content)
+        content["__new__"] = new_without_crap
+        huh = type(nativeString(self.name), bases + (PClass,), content)
+        return huh
 
 
 
@@ -835,24 +855,30 @@ class VersionedPClasses(object):
 
 
     @classmethod
-    def transform_definitions(cls, spec, kind_field=u"kind", version_field=u"apiVersion"):
+    def transform_definitions(cls, spec, kind=u"kind", version=u"apiVersion"):
 
-        def add_default(default_value):
-            def transform(property_definition):
-                return freeze({
-                    u"type": u"string",
-                    u"default": default_value,
-                }).update(property_definition)
-            return transform
+        def x_txkube_constant(value):
+            if isinstance(value, unicode):
+                return {
+                    u"type": u"x-txkube-constant",
+                    u"format": u"string",
+                    u"default": value,
+                }
+            raise TypeError(
+                "Value ({!r}) of unsupported type {}".format(value, type(value))
+            )
 
         def transform_definition(name, definition):
-            parts = name.rsplit(u".", 2)
-            api_version = parts[-2]
-            kind = parts[-1]
-            return definition.transform(
-                [u"properties", kind_field], add_default(kind),
-                [u"properties", version_field], add_default(api_version),
-            )
+            props = definition.get(u"properties", ())
+            if u"kind" in props and u"apiVersion" in props:
+                parts = name.rsplit(u".", 2)
+                version_value = parts[-2]
+                kind_value = parts[-1]
+                return definition.transform(
+                    [u"properties", kind], x_txkube_constant(kind_value),
+                    [u"properties", version], x_txkube_constant(version_value),
+                )
+            return definition
 
         return spec.set(
             "transform_definition",
