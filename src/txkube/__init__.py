@@ -55,25 +55,27 @@ def _deprecations():
     _0_2_0 = Version("txkube", 0, 2, 0)
     deprecatedModuleAttribute(
         _0_2_0,
-        "See v1_{5,6,7}_model.v1 instead.",
+        "See v1_5_model.v1 and IKubernetesClient.model.v1 instead.",
         "txkube",
         "v1",
     )
     deprecatedModuleAttribute(
         _0_2_0,
-        "See v1_{5,6,7}_model.v1beta1 instead.",
+        "See v1_5_model.v1beta1 and IKubernetesClient.model.v1beta1 instead.",
         "txkube",
         "v1beta1",
     )
     deprecatedModuleAttribute(
         _0_2_0,
-        "See v1_{5,6,7}_model.iobject_to_raw instead.",
+        "See v1_5_model.iobject_to_raw and "
+        "IKubernetesClient.model.iobject_to_raw instead.",
         "txkube",
         "iobject_to_raw",
     )
     deprecatedModuleAttribute(
         _0_2_0,
-        "See v1_{5,6,7}_model.iobject_from_raw instead.",
+        "See v1_5_model.iobject_from_raw and "
+        "IKubernetesClient.model.iobject_from_raw instead.",
         "txkube",
         "iobject_from_raw",
     )
