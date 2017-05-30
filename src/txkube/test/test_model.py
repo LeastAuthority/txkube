@@ -18,7 +18,7 @@ from pyrsistent import (
 )
 
 from testtools.matchers import (
-    Equals, MatchesStructure, Not, Is, Contains, ContainsAll, Raises, raises,
+    Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
     IsInstance,
 )
 from testtools.twistedsupport import succeeded
