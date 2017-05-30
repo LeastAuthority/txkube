@@ -416,10 +416,10 @@ class KubernetesErrorTests(TestCase):
         """
         model = v1_5_model
 
-        a1 = KubernetesError(200, model.v1.Status(status=u"Failure"))
-        a2 = KubernetesError(200, model.v1.Status(status=u"Failure"))
-        b = KubernetesError(201, model.v1.Status(status=u"Failure"))
-        c = KubernetesError(200, model.v1.Status(status=u"Error"))
+        a1 = KubernetesError(200, model.v1.Status(status=u"A"))
+        a2 = KubernetesError(200, model.v1.Status(status=u"A"))
+        b = KubernetesError(201, model.v1.Status(status=u"A"))
+        c = KubernetesError(200, model.v1.Status(status=u"B"))
 
         # a1 == a2
         self.expectThat(a1, Equals(a2))
