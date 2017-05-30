@@ -954,7 +954,7 @@ class VersionedPClasses(object):
         kind = cls.__name__
         for version in sorted(self.versions):
             try:
-                self.spec.add_behavior(self.full_name(version, kind), cls)
+                self.spec.add_behavior_for_pclass(self.full_name(version, kind), cls)
             except NoSuchDefinition:
                 pass
             else:
