@@ -26,7 +26,9 @@ setuptools.setup(
     install_requires=[
         "zope.interface",
         "attrs",
-        "pyrsistent",
+        # 0.12.2 has the fix for finding __invariant__ anywhere in the class
+        # hierarchy.
+        "pyrsistent>=0.12.2",
         "incremental",
         # See https://github.com/twisted/treq/issues/167
         # And https://twistedmatrix.com/trac/ticket/9032

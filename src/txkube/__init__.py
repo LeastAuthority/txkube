@@ -19,10 +19,6 @@ __all__ = [
     "authenticate_with_certificate_chain",
 ]
 
-from ._pyrsistent_106 import detect, patch
-detect() and patch()
-del detect, patch
-
 from incremental import Version
 
 from ._metadata import version_tuple as _version_tuple
