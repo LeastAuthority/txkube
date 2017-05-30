@@ -291,8 +291,8 @@ class _List(object):
 
 
 
-def define_behaviors(v):
-    @v1.add_behavior_for_pclass
+def define_behaviors(model):
+    @model.v1.add_behavior_for_pclass
     class NamespaceStatus(object):
         """
         ``NamespaceStatus`` instances model `Kubernetes namespace status
@@ -309,7 +309,7 @@ def define_behaviors(v):
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class Namespace(object):
         """
@@ -321,7 +321,7 @@ def define_behaviors(v):
             """
             Get the default namespace.
             """
-            return cls(metadata=v.v1.ObjectMeta(name=u"default"))
+            return cls(metadata=model.v1.ObjectMeta(name=u"default"))
 
 
         def fill_defaults(self):
@@ -330,7 +330,7 @@ def define_behaviors(v):
                 # Also, should this clobber existing values or leave them alone?
                 # See https://github.com/LeastAuthority/txkube/issues/36
                 [u"metadata", u"uid"], unicode(uuid4()),
-                [u"status"], v.v1.NamespaceStatus.active(),
+                [u"status"], model.v1.NamespaceStatus.active(),
             )
 
 
@@ -340,14 +340,14 @@ def define_behaviors(v):
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class NamespaceList(_List):
         pass
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class ConfigMap(object):
         """
@@ -365,14 +365,14 @@ def define_behaviors(v):
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class ConfigMapList(_List):
             pass
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class Service(object):
         """
@@ -390,14 +390,14 @@ def define_behaviors(v):
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class ServiceList(_List):
         pass
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1beta1.add_behavior_for_pclass
     @implementer(IObject)
     class Deployment(object):
         """
@@ -417,14 +417,14 @@ def define_behaviors(v):
 
 
 
-    @v1beta1.add_behavior_for_pclass
+    @model.v1beta1.add_behavior_for_pclass
     @implementer(IObject)
     class DeploymentList(_List):
         pass
 
 
 
-    @v1beta1.add_behavior_for_pclass
+    @model.v1beta1.add_behavior_for_pclass
     @implementer(IObject)
     class ReplicaSet(object):
         """
@@ -440,14 +440,14 @@ def define_behaviors(v):
 
 
 
-    @v1beta1.add_behavior_for_pclass
+    @model.v1beta1.add_behavior_for_pclass
     @implementer(IObject)
     class ReplicaSetList(_List):
         pass
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class Pod(object):
         """
@@ -463,7 +463,7 @@ def define_behaviors(v):
 
 
 
-    @v1.add_behavior_for_pclass
+    @model.v1.add_behavior_for_pclass
     @implementer(IObject)
     class PodList(_List):
         pass

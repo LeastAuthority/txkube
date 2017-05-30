@@ -25,7 +25,8 @@ from testtools.matchers import (
 )
 
 from .._swagger import (
-    NotClassLike, NoSuchDefinition, Swagger, _IntegerRange,
+    NotClassLike, NoSuchDefinition, AlreadyCreatedClass,
+    Swagger, _IntegerRange,
     UsePrefix, PClasses, VersionedPClasses,
 )
 
@@ -791,7 +792,7 @@ class VersionedPClassesTests(TestCase):
         ``add_behavior_for_pclass``.
         """
         a = VersionedPClasses(self.spec, u"a")
-        def add_behavior():
+        def add_behavior(a):
             @a.add_behavior_for_pclass
             class foo(object):
                 def __invariant__(self):
@@ -799,7 +800,7 @@ class VersionedPClassesTests(TestCase):
 
                 def bar(self):
                     return u"baz"
-        add_behavior()
+        add_behavior(a)
 
         an_a = a.foo(x=u"foo")
         self.expectThat(an_a.apiVersion, Equals(u"a"))
@@ -812,7 +813,17 @@ class VersionedPClassesTests(TestCase):
         )
 
         # It's not allowed now that we've retrieved the foo class.
-        self.expectThat(add_behavior, raises_exception(ValueError))
+        self.expectThat(
+            lambda: add_behavior(a),
+            raises_exception(AlreadyCreatedClass),
+        )
+
+        # It's not allowed for a class that doesn't match a known definition.
+        self.expectThat(
+            # There is no b.foo so this will try to use an unknown definition.
+            lambda: add_behavior(VersionedPClasses(self.spec, u"b")),
+            raises_exception(NoSuchDefinition),
+        )
 
 
     def test_irrelevant_constructor_values(self):
