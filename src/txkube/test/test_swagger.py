@@ -740,7 +740,7 @@ class VersionedPClassesTests(TestCase):
         ``PClass`` subclass for a Swagger definition matching the
         ``VersionedPClasses`` version and the name of the attribute.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.assertThat(
             a.foo,
             Is(self.spec.pclass_for_definition(u"a.foo")),
@@ -753,7 +753,7 @@ class VersionedPClassesTests(TestCase):
         the value given in the call to ``transform_definitions`` exposes the
         **kind** the type corresponds to.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.assertThat(
             a.foo.kind,
             MatchesAll(IsInstance(unicode), Equals(u"foo")),
@@ -766,7 +766,7 @@ class VersionedPClassesTests(TestCase):
         the value given in the call to ``transform_definitions`` exposes the
         **apiVersion** the type corresponds to.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         # Aaahh.  Direct vs indirect first access can make a difference. :(
         a.foolist
         self.assertThat(
@@ -781,7 +781,7 @@ class VersionedPClassesTests(TestCase):
         corresponding Swagger definition results in ``AttributeError`` being
         raised.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.assertThat(lambda: a.bar, raises(AttributeError("bar")))
 
 
@@ -791,7 +791,7 @@ class VersionedPClassesTests(TestCase):
         ``VersionedPClasses`` attribute access using the class decorator
         ``add_behavior_for_pclass``.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         def add_behavior(a):
             @a.add_behavior_for_pclass
             class foo(object):
@@ -821,7 +821,7 @@ class VersionedPClassesTests(TestCase):
         # It's not allowed for a class that doesn't match a known definition.
         self.expectThat(
             # There is no b.foo so this will try to use an unknown definition.
-            lambda: add_behavior(VersionedPClasses(self.spec, u"b")),
+            lambda: add_behavior(VersionedPClasses(self.spec, {u"b"})),
             raises_exception(NoSuchDefinition),
         )
 
@@ -831,7 +831,7 @@ class VersionedPClassesTests(TestCase):
         Values may be passed to the Python class constructor for the kind and
         apiVersion and they are discarded.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.expectThat(
             a.foo(apiVersion=u"a", kind=u"foo", x=u"x").x,
             Equals(u"x"),
@@ -843,7 +843,7 @@ class VersionedPClassesTests(TestCase):
         Definitions which do not correspond to Kubernetes Objects do not have
         **kind** discarded.
         """
-        k8s = VersionedPClasses(self.spec, u"k8s")
+        k8s = VersionedPClasses(self.spec, {u"k8s"})
         self.assertThat(
             k8s.StatusDetails(kind=u"foo").kind,
             Equals(u"foo"),
