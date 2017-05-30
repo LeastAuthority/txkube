@@ -148,8 +148,15 @@ def _api_group_for_type(cls):
     _groups = {
         (u"v1beta1", u"Deployment"): u"extensions",
         (u"v1beta1", u"DeploymentList"): u"extensions",
+        (u"v1beta1", u"ReplicaSet"): u"extensions",
+        (u"v1beta1", u"ReplicaSetList"): u"extensions",
     }
-    return _groups.get((cls.apiVersion, cls.__name__), None)
+    key = (
+        cls.apiVersion,
+        cls.__name__.rsplit(u".")[-1],
+    )
+    group = _groups.get(key, None)
+    return group
 
 
 

@@ -5,6 +5,7 @@
 Integration test generator for ``txkube.IKubernetesClient``.
 """
 
+from re import search
 from operator import attrgetter, setitem
 from functools import partial, wraps
 from itertools import repeat
@@ -1212,19 +1213,21 @@ def items_are_sorted():
 
 
 
-_CORE_PREFIXES = [
+_CORE_PATTERNS = [
     # 1.6, 1.7
-    u"io.k8s.kubernetes.pkg.api.",
-    u"io.k8s.apimachinery.pkg.apis.meta.",
+    u"^io.k8s.kubernetes.pkg.api.",
+    u"^io.k8s.apimachinery.pkg.apis.meta.",
 
     # 1.5
-    u"v1.",
+    u"^v1$",
 ]
 
 
 
 def _infer_api_group(apiVersion):
-    for prefix in _CORE_PREFIXES:
-        if apiVersion.startswith(prefix):
+    for pattern in _CORE_PATTERNS:
+        if search(pattern, apiVersion) is not None:
+            print("Inferred core for", apiVersion)
             return None
+    print("Inferred extensions for", apiVersion)
     return u"extensions"
