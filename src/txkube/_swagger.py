@@ -875,15 +875,12 @@ class VersionedPClasses(object):
     def transform_definitions(cls, spec, kind=u"kind", version=u"apiVersion"):
 
         def x_txkube_constant(value):
-            if isinstance(value, unicode):
-                return {
-                    u"type": u"x-txkube-constant",
-                    u"format": u"string",
-                    u"default": value,
-                }
-            raise TypeError(
-                "Value ({!r}) of unsupported type {}".format(value, type(value))
-            )
+            return {
+                u"type": u"x-txkube-constant",
+                # TODO: Support other types?  Maybe.
+                u"format": u"string",
+                u"default": value,
+            }
 
         def transform_definition(name, definition):
             if cls.transformable(name, definition):
