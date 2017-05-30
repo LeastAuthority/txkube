@@ -762,6 +762,15 @@ class _ClassModel(PClass):
                 raise
 
 
+        def compare_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return cmp(
+                    sorted(self.serialize().items()),
+                    sorted(other.serialize().items()),
+                )
+            return NotImplemented
+
+
         content = {
             attr.name: attr.pclass_field_for_attribute()
             for attr
@@ -770,6 +779,7 @@ class _ClassModel(PClass):
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
         content["__new__"] = discard_constant_fields
+        content["__cmp__"] = compare_pclass
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
