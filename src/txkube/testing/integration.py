@@ -1227,7 +1227,5 @@ _CORE_PATTERNS = [
 def _infer_api_group(apiVersion):
     for pattern in _CORE_PATTERNS:
         if search(pattern, apiVersion) is not None:
-            print("Inferred core for", apiVersion)
             return None
-    print("Inferred extensions for", apiVersion)
     return u"extensions"
