@@ -13,7 +13,6 @@ objects and loaded from such objects.
 
 from json import load
 from datetime import datetime
-from itertools import chain
 
 from dateutil.parser import parse as parse_iso8601
 
@@ -21,7 +20,7 @@ from zope.interface import Attribute, Interface, implementer
 
 from pyrsistent import (
     CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
-    pmap_field, freeze, pmap,
+    pmap_field, freeze,
 )
 
 from twisted.python.compat import nativeString
@@ -37,12 +36,24 @@ class NotClassLike(Exception):
 
 
 
+class NoSuchDefinition(Exception):
+    """
+    A definition was requested which does not exist in the specification.
+    """
+
+
+
 class Swagger(PClass):
     """
     A ``Swagger`` contains a single Swagger specification.
 
     Public attributes of this class correspond to the top-level properties in
     a `Swagger specification <http://swagger.io/>`_.
+
+    :ivar transform_definition: A two-argument callable.  This is called with
+        each definition (name and value) before a Python type is constructed
+        from it.  The returned definition will be used to construct the Python
+        type.  By default, no transformation is performed.
 
     :ivar dict _pclasses: A cache of the `PClass`\ es that have been
         constructed for definitions from this specification already.  This
@@ -58,6 +69,13 @@ class Swagger(PClass):
     security = field()
     swagger = field()
 
+    # lambda lambda red pajamda
+    # https://github.com/tobgu/pyrsistent/issues/109
+    transform_definition = field(
+        mandatory=True,
+        initial=lambda: lambda name, definition: definition)
+
+    _behaviors = field(mandatory=True, type=dict)
     _pclasses = field(mandatory=True, type=dict)
 
     @classmethod
@@ -79,10 +97,33 @@ class Swagger(PClass):
         :param dict document: An object like the one that might be created by
             parsing a Swagger JSON specification string.
         """
-        return cls(_pclasses={}, **document)
+        return cls(_behaviors={}, _pclasses={}, **document)
 
 
-    def pclass_for_definition(self, name, constant_fields=pmap()):
+    def add_behavior_for_pclass(self, definition, cls):
+        """
+        Define an additional base class for the Python class created for a
+        particular definition.
+
+        :param unicode definition: The definition the Python class for which
+            the base class will be included.
+
+        :param type cls: The additional base class.
+
+        :raise ValueError: If a Python class for the given definition has
+            already been created.  Behavior cannot be retroactively added to a
+            Python class.  All behaviors must be registered before the first
+            call to ``pclass_for_definition`` for a particular definition.
+
+        :return: ``None``
+        """
+        if definition in self._pclasses:
+            raise ValueError("Class for {} already created.".format(definition))
+
+        self._behaviors.setdefault(definition, []).append(cls)
+
+
+    def pclass_for_definition(self, name):
         """
         Get a ``pyrsistent.PClass`` subclass representing the Swagger definition
         in this specification which corresponds to the given name.
@@ -95,13 +136,19 @@ class Swagger(PClass):
         try:
             cls = self._pclasses[name]
         except KeyError:
-            definition = self.definitions[name]
+            try:
+                original_definition = self.definitions[name]
+            except KeyError:
+                raise NoSuchDefinition(name)
+
+            definition = self.transform_definition(name, original_definition)
             kind = self._identify_kind(definition)
             if kind is None:
                 raise NotClassLike(name, definition)
             generator =  getattr(self, "_model_for_{}".format(kind))
-            model = generator(name, definition, constant_fields)
-            cls = model.pclass()
+            model = generator(name, definition)
+            bases = tuple(self._behaviors.get(name, []))
+            cls = model.pclass(bases)
             self._pclasses[name] = cls
         return cls
 
@@ -126,7 +173,7 @@ class Swagger(PClass):
         return None
 
 
-    def _model_for_CLASS(self, name, definition, constant_fields):
+    def _model_for_CLASS(self, name, definition):
         """
         Model a Swagger definition that is like a Python class.
 
@@ -136,14 +183,11 @@ class Swagger(PClass):
         :param pyrsistent.PMap definition: A Swagger definition to categorize.
             This will be a value like the one found at
             ``spec["definitions"][name]``.
-
-        :param dict constant_fields: Additional fields to set as constants on
-            the resulting class.  These will override properties from the
-            Swagger definition if they collide.
         """
         return _ClassModel.from_swagger(
-            self.pclass_for_definition, name, definition,
-            constant_fields,
+            self.pclass_for_definition,
+            name,
+            definition,
         )
 
 
@@ -172,16 +216,32 @@ class ITypeModel(Interface):
     python_types = Attribute("tuple of python types compatible with this type")
     factory = Attribute("An optional callable for converting values to this type.")
 
-    def pclass_field_for_type(required):
+    def pclass_field_for_type(required, default):
         """
         Create a pyrsistent field for this model object for use with a PClass.
 
         :param bool required: Whether the field should be mandatory or
             optional.
 
+        :param default: A value which the field will take on if not supplied
+            with another one at initialization time.  May be ``NO_DEFAULT`` to
+            omit this behavior.
+
         :return: A pyrsistent field descriptor for an attribute which is
             usable with values of this type.
         """
+
+
+
+@implementer(ITypeModel)
+class _ConstantModel(PClass):
+    python_types = field(mandatory=True)
+
+    factory = None
+
+
+    def pclass_field_for_type(self, required, default):
+        return default
 
 
 
@@ -276,25 +336,27 @@ class _BasicTypeModel(PClass):
         return serialize
 
 
-    def pclass_field_for_type(self, required):
+    def pclass_field_for_type(self, required, default):
         """
         Construct a pyrsistent field reflecting this model.
 
         The field uses the model's invariant and factory.  If ``required`` is
-        ``False``, an initial value of ``None`` is also supplied.
+        ``False``, an initial value of ``default`` or ``None`` is also supplied.
 
         :return: The field descriptor.
         """
-        extra = {}
         python_types = self.python_types
+        extra = {}
+
+        if default is not NO_DEFAULT:
+            extra[u"initial"] = default
+        elif not required:
+            python_types += (type(None),)
+            extra[u"initial"] = None
 
         invariant = self._pyrsistent_invariant(required)
         if invariant is not None:
             extra[u"invariant"] = invariant
-
-        if not required:
-            python_types += (type(None),)
-            extra[u"initial"] = None
 
         factory = self._pyrsistent_factory(required)
         if factory is not None:
@@ -351,10 +413,11 @@ class _ArrayTypeModel(PClass):
         # Cheat a bit and make pyrsistent synthesize a type for us...
         # Amusingly, it's a regular set internally so also freeze it so it's
         # okay to put it back in to field again.
-        return freeze(self.pclass_field_for_type(True).type)
+        return freeze(self.pclass_field_for_type(True, NO_DEFAULT).type)
 
 
-    def pclass_field_for_type(self, required):
+    def pclass_field_for_type(self, required, default):
+        # XXX default unimplemented
         # XXX ignores the range's pyrsistent_invariant
         return pvector_field(self.element_type.python_types, optional=not required)
 
@@ -378,7 +441,8 @@ class _MappingTypeModel(PClass):
     """
     value_type = itypemodel_field()
 
-    def pclass_field_for_type(self, required):
+    def pclass_field_for_type(self, required, default):
+        # XXX default unimplemented
         # XXX ignores the range's pyrsistent_invariant
         return pmap_field(
             key_type=unicode,
@@ -411,37 +475,16 @@ class _AttributeModel(PClass):
     description = field(type=unicode)
     type_model = itypemodel_field()
     required = field(type=bool)
+    default = field()
 
     def pclass_field_for_attribute(self):
         """
         :return: A pyrsistent field reflecting this attribute and its type model.
         """
-        return self.type_model.pclass_field_for_type(required=self.required)
-
-
-
-class _ConstantModel(PClass):
-    """
-    A ``_ConstantModel`` models a constant valued attribute.
-
-    This does not correspond to any part of a Swagger specification.  Instead,
-    it's part of how a Swagger definition is usefully exposed to Python.  It
-    can be used to override certain fields from a Swagger definition (for
-    example, when there is a known constant value which the Swagger
-    specification can't formally represent).
-
-    :ivar unicode name: The name of the attribute.
-    :ivar value: The value of the attribute.
-    """
-    name = field(type=unicode)
-    value = field()
-
-    def pclass_field_for_attribute(self):
-        """
-        :return: Exactly this model's value, creating a constant-valued attribute
-        on a class it is used with.
-        """
-        return self.value
+        return self.type_model.pclass_field_for_type(
+            required=self.required,
+            default=self.default,
+        )
 
 
 
@@ -514,6 +557,10 @@ def _isoformat(format, v):
 
 
 
+NO_DEFAULT = object()
+
+
+
 class _ClassModel(PClass):
     """
     A ``_ClassModel`` represents a type with a number of named, heterogeneous
@@ -550,6 +597,10 @@ class _ClassModel(PClass):
         (u"string", u"int-or-string"): _BasicTypeModel(
             python_types=(unicode, int, long),
         ),
+
+        # This is not part of Swagger.  It's something we can inject into
+        # specifications to set a constant value on the resulting types.
+        (u"x-txkube-constant", u"string"): _ConstantModel(python_types=(unicode,)),
     }
 
     name = field(type=unicode)
@@ -616,7 +667,12 @@ class _ClassModel(PClass):
         cls, pclass_for_definition, name, required, definition
     ):
         type_model = cls._type_model_for_spec(pclass_for_definition, definition)
-        return _AttributeModel(name=name, required=required, type_model=type_model)
+        return _AttributeModel(
+            name=name,
+            required=required,
+            default=definition.get(u"default", NO_DEFAULT),
+            type_model=type_model,
+        )
 
 
     @classmethod
@@ -629,7 +685,7 @@ class _ClassModel(PClass):
 
 
     @classmethod
-    def from_swagger(cls, pclass_for_definition, name, definition, constant_fields):
+    def from_swagger(cls, pclass_for_definition, name, definition):
         """
         Create a new ``_ClassModel`` from a single Swagger definition.
 
@@ -642,30 +698,38 @@ class _ClassModel(PClass):
         :param definition: The Swagger definition to model.  This will be a
             value like the one found at ``spec["definitions"][name]``.
 
-        :param constant_fields: A mapping of properties overrides.
-
         :return: A new model for the given definition.
         """
         return cls(
             name=name,
             doc=definition.get(u"description", name),
-            attributes=chain((
-                attr
-                for attr
-                in cls._attributes_for_definition(pclass_for_definition, definition)
-                if constant_fields is None or attr.name not in constant_fields
-            ), (
-                _ConstantModel(name=name, value=value)
-                for (name, value)
-                in constant_fields.items()
-            )),
+            attributes=cls._attributes_for_definition(
+                pclass_for_definition,
+                definition,
+            ),
         )
 
 
-    def pclass(self):
+    def pclass(self, bases):
         """
         Create a ``pyrsistent.PClass`` subclass representing this class.
+
+        :param tuple bases: Additional base classes to give the resulting
+            class.  These will appear to the left of ``PClass``.
         """
+        def discard_constant_fields(cls, **kwargs):
+            def ctor():
+                return super(huh, cls).__new__(cls, **kwargs)
+            try:
+                return ctor()
+            except AttributeError:
+                if u"kind" in kwargs or u"apiVersion" in kwargs:
+                    kwargs.pop("kind", None)
+                    kwargs.pop("apiVersion", None)
+                    return ctor()
+                raise
+
+
         content = {
             attr.name: attr.pclass_field_for_attribute()
             for attr
@@ -673,7 +737,10 @@ class _ClassModel(PClass):
         }
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
-        return type(nativeString(self.name), (PClass,), content)
+        content["__new__"] = discard_constant_fields
+        huh = type(nativeString(self.name), bases + (PClass,), content)
+        return huh
+
 
 
 omit = object()
@@ -772,29 +839,102 @@ class VersionedPClasses(object):
     .. code-block: python
 
        spec = Swagger.from_path(...)
-       v1beta1 = VersionedPClasses(
-           spec, u"v1beta1", u"kind", u"apiVersion",
-       )
+       spec = VersionedPClasses.transform_definitions(spec)
+       v1beta1 = VersionedPClasses(spec, u"v1beta1")
        deployment = v1beta1.Deployment(...)
+
+    Additional base classes can be inserted in the resulting class using the
+    ``add_behavior_for_pclass`` decorator.  For example::
+
+    .. code-block: python
+
+       spec = ...
+       v1beta1 = ...
+
+       @v1beta1.add_behavior_for_pclass
+       class Deployment(object):
+           def foo(self, bar):
+               ...
+
+       deployment = v1beta1.Deployment(...)
+       deployment.foo(bar)
+
     """
-    def __init__(self, spec, version, name_field=None, version_field=None):
+    def __init__(self, spec, version):
         self.spec = spec
         self.version = version
-        self.name_field = name_field
-        self.version_field = version_field
+
+
+    @classmethod
+    def transformable(cls, name, definition):
+        props = definition.get(u"properties", ())
+        return u"kind" in props and u"apiVersion" in props
+
+
+    @classmethod
+    def transform_definitions(cls, spec, kind=u"kind", version=u"apiVersion"):
+
+        def x_txkube_constant(value):
+            return {
+                u"type": u"x-txkube-constant",
+                # TODO: Support other types?  Maybe.
+                u"format": u"string",
+                u"default": value,
+            }
+
+        def transform_definition(name, definition):
+            if cls.transformable(name, definition):
+                parts = name.rsplit(u".", 2)
+                version_value = parts[-2]
+                kind_value = parts[-1]
+                return definition.transform(
+                    [u"properties", kind], x_txkube_constant(kind_value),
+                    [u"properties", version], x_txkube_constant(version_value),
+                )
+            return definition
+
+        return spec.set(
+            "transform_definition",
+            transform_definition,
+        )
 
 
     def __getattr__(self, name):
-        name = name.decode("ascii")
-        constant_fields = {}
-        if self.name_field is not None:
-            constant_fields[self.name_field] = name
-        if self.version_field is not None:
-            constant_fields[self.version_field] = self.version
-        definition_name = self.version + u"." + name
         try:
-            return self.spec.pclass_for_definition(
-                definition_name, constant_fields=constant_fields,
-            )
-        except KeyError:
+            return self.spec.pclass_for_definition(self.full_name(name))
+        except NoSuchDefinition:
             raise AttributeError(name)
+
+
+    def add_behavior_for_pclass(self, cls):
+        """
+        Define an additional base class for the Python class created for a
+        particular definition.
+
+        :param type cls: The additional base class.  Its name must exactly
+            match the name of a definition with a version matching this
+            object's version.
+
+        :return: ``None``
+        """
+        name = cls.__name__
+        self.spec.add_behavior_for_pclass(self.full_name(name), cls)
+        return None
+
+
+    def full_name(self, name):
+        """
+        Construct the full name of a definition based on this object's version and
+        a partial definition name.
+
+        :example:
+        .. code-block: python
+
+          assert v1.full_name(u"foo") == u"v1.foo"
+
+
+        :param unicode name: The unversioned portion of the definition name.
+
+        :return unicode: The full definition name.
+        """
+        return u".".join((self.version, name))

@@ -17,29 +17,15 @@ from twisted.python.filepath import FilePath
 from . import UnrecognizedVersion, UnrecognizedKind, IObject
 from ._swagger import Swagger, VersionedPClasses
 
-spec = Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
-v1 = VersionedPClasses(
-    spec, u"v1", name_field=u"kind", version_field=u"apiVersion",
+spec = VersionedPClasses.transform_definitions(
+    Swagger.from_path(FilePath(__file__).sibling(u"kubernetes-1.5.json"))
 )
-v1beta1 = VersionedPClasses(
-    spec, u"v1beta1", name_field=u"kind", version_field=u"apiVersion",
-)
+v1 = VersionedPClasses(spec, u"v1")
+v1beta1 = VersionedPClasses(spec, u"v1beta1")
 
 
-def behavior(namespace):
-    """
-    Create a class decorator which adds the resulting class to the given
-    namespace-y thing.
-    """
-    def decorator(cls):
-        setattr(namespace, cls.__name__, cls)
-        return cls
-    return decorator
-
-
-
-@behavior(v1)
-class NamespaceStatus(v1.NamespaceStatus):
+@v1.add_behavior_for_pclass
+class NamespaceStatus(object):
     """
     ``NamespaceStatus`` instances model `Kubernetes namespace status
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_namespacestatus>`_.
@@ -55,9 +41,9 @@ class NamespaceStatus(v1.NamespaceStatus):
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class Namespace(v1.Namespace):
+class Namespace(object):
     """
     ``Namespace`` instances model `Kubernetes namespaces
     <https://kubernetes.io/docs/user-guide/namespaces/>`_.
@@ -76,7 +62,7 @@ class Namespace(v1.Namespace):
             # Also, should this clobber existing values or leave them alone?
             # See https://github.com/LeastAuthority/txkube/issues/36
             [u"metadata", u"uid"], unicode(uuid4()),
-            [u"status"], NamespaceStatus.active(),
+            [u"status"], v1.NamespaceStatus.active(),
         )
 
 
@@ -86,9 +72,9 @@ class Namespace(v1.Namespace):
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class ConfigMap(v1.ConfigMap):
+class ConfigMap():
     """
     ``ConfigMap`` instances model `ConfigMap objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_configmap>`_.
@@ -104,9 +90,9 @@ class ConfigMap(v1.ConfigMap):
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class Service(v1.Service):
+class Service(object):
     """
     ``Service`` instances model `Service objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_service>`_.
@@ -135,9 +121,9 @@ def set_if_none(desired_value):
 
 
 
-@behavior(v1beta1)
+@v1beta1.add_behavior_for_pclass
 @implementer(IObject)
-class Deployment(v1beta1.Deployment):
+class Deployment(object):
     """
     ``Deployment`` instances model `Deployment objects
     <https://kubernetes.io/docs/api-reference/extensions/v1beta1/definitions/#_v1beta1_deployment>`_.
@@ -155,9 +141,9 @@ class Deployment(v1beta1.Deployment):
 
 
 
-@behavior(v1beta1)
+@v1beta1.add_behavior_for_pclass
 @implementer(IObject)
-class ReplicaSet(v1beta1.ReplicaSet):
+class ReplicaSet(object):
     """
     ``ReplicaSet`` instances model `ReplicaSet objects
     <https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/>`_.
@@ -171,9 +157,9 @@ class ReplicaSet(v1beta1.ReplicaSet):
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class Pod(v1.Pod):
+class Pod(object):
     """
     ``Pod`` instances model `Pod objects
     <https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_pod>`_.
@@ -287,44 +273,44 @@ class _List(object):
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class NamespaceList(_List, v1.NamespaceList):
+class NamespaceList(_List):
     pass
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class ConfigMapList(_List, v1.ConfigMapList):
+class ConfigMapList(_List):
     pass
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class ServiceList(_List, v1.ServiceList):
+class ServiceList(_List):
     pass
 
 
 
-@behavior(v1beta1)
+@v1beta1.add_behavior_for_pclass
 @implementer(IObject)
-class DeploymentList(_List, v1beta1.DeploymentList):
+class DeploymentList(_List):
     pass
 
 
 
-@behavior(v1beta1)
+@v1beta1.add_behavior_for_pclass
 @implementer(IObject)
-class ReplicaSetList(_List, v1beta1.ReplicaSetList):
+class ReplicaSetList(_List):
     pass
 
 
 
-@behavior(v1)
+@v1.add_behavior_for_pclass
 @implementer(IObject)
-class PodList(_List, v1.PodList):
+class PodList(_List):
     pass
 
 
