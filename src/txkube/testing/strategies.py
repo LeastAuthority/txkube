@@ -290,6 +290,11 @@ def podtemplatespecs(model=default_model):
     )
 
 
+def _without_activeDeadlineSeconds(template):
+    # When part of a Deployment or ReplicaSet, activeDeadlineSeconds may not
+    # be given a value.  https://github.com/kubernetes/kubernetes/issues/38684
+    return template.transform(["spec", "activeDeadlineSeconds"], None)
+
 
 def replicasetspecs(model=default_model):
     """
@@ -303,7 +308,7 @@ def replicasetspecs(model=default_model):
             template=template,
             **kw
         ),
-        template=podtemplatespecs(model),
+        template=podtemplatespecs(model).map(_without_activeDeadlineSeconds),
         minReadySeconds=integers(min_value=0, max_value=2 ** 31 - 1),
         # Strictly speaking, the max value is more like 2 ** 31 -1.  However,
         # if we actually sent such a thing to Kubernetes we could probably
@@ -334,7 +339,7 @@ def deploymentspecs(model=default_model):
             # way to accomplish that but not the only way.
             selector={u"matchLabels": template.metadata.labels},
         ),
-        template=podtemplatespecs(model),
+        template=podtemplatespecs(model).map(_without_activeDeadlineSeconds),
     )
 
 
