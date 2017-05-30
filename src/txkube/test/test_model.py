@@ -18,7 +18,16 @@ from pyrsistent import (
 )
 
 from testtools.matchers import (
-    Equals, MatchesStructure, Not, Is, Contains, ContainsAll, raises,
+    NotEquals,
+    Equals,
+    LessThan,
+    GreaterThan,
+    MatchesStructure,
+    Not,
+    Is,
+    Contains,
+    ContainsAll,
+    raises,
     IsInstance,
 )
 from testtools.twistedsupport import succeeded
@@ -399,6 +408,64 @@ class KubernetesErrorTests(TestCase):
             ds,
             succeeded(EqualElements()),
         )
+
+
+    def test_comparison(self):
+        """
+        The binary comparison operations work on ``KubernetesError`` as expected.
+        """
+        model = v1_5_model
+
+        a1 = KubernetesError(200, model.v1.Status(status=u"Failure"))
+        a2 = KubernetesError(200, model.v1.Status(status=u"Failure"))
+        b = KubernetesError(201, model.v1.Status(status=u"Failure"))
+        c = KubernetesError(200, model.v1.Status(status=u"Error"))
+
+        # a1 == a2
+        self.expectThat(a1, Equals(a2))
+        # not (a1 != a2)
+        self.expectThat(a1, Not(NotEquals(a2)))
+        # not (a1 > a2)
+        self.expectThat(a1, Not(GreaterThan(a2)))
+        # not (a1 < a2)
+        self.expectThat(a1, Not(LessThan(a2)))
+
+        # not (a1 == b)
+        self.expectThat(a1, Not(Equals(b)))
+        # a1 != b
+        self.expectThat(a1, NotEquals(b))
+        # a1 < b
+        self.expectThat(a1, LessThan(b))
+        # not (a1 > b)
+        self.expectThat(a1, Not(GreaterThan(b)))
+
+        # not (a1 == c)
+        self.expectThat(a1, Not(Equals(b)))
+        # a1 != c
+        self.expectThat(a1, NotEquals(b))
+        # a1 < c
+        self.expectThat(a1, LessThan(c))
+        # not (a1 > c)
+        self.expectThat(a1, Not(GreaterThan(c)))
+
+        @attr.s
+        class Comparator(object):
+            result = attr.ib()
+
+            def __cmp__(self, other):
+                return self.result
+
+        largest = Comparator(1)
+        equalest = Comparator(0)
+        smallest = Comparator(-1)
+
+        # a1 < largest
+        self.expectThat(a1, LessThan(largest))
+        # a1 == equalest
+        self.expectThat(a1, Equals(equalest))
+        # a1 > smallest
+        self.expectThat(a1, GreaterThan(smallest))
+
 
 
 class Extra15DataModelTests(TestCase):
