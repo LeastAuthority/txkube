@@ -18,7 +18,7 @@ from pyrsistent import mutant
 from twisted.python.filepath import FilePath
 
 from . import UnrecognizedVersion, UnrecognizedKind, IObject
-from ._swagger import Swagger, VersionedPClasses
+from ._swagger import NoSuchDefinition, Swagger, VersionedPClasses
 
 @attr.s(frozen=True)
 class _KubernetesDataModel(object):
@@ -292,7 +292,15 @@ class _List(object):
 
 
 def define_behaviors(model):
-    @model.v1.add_behavior_for_pclass
+    def add_allowing_missing(v):
+        def adder(cls):
+            try:
+                return v.add_behavior_for_pclass(cls)
+            except NoSuchDefinition:
+                return None
+        return adder
+
+    @add_allowing_missing(model.v1)
     class NamespaceStatus(object):
         """
         ``NamespaceStatus`` instances model `Kubernetes namespace status
@@ -309,7 +317,7 @@ def define_behaviors(model):
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class Namespace(object):
         """
@@ -340,14 +348,14 @@ def define_behaviors(model):
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class NamespaceList(_List):
         pass
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class ConfigMap(object):
         """
@@ -365,14 +373,14 @@ def define_behaviors(model):
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class ConfigMapList(_List):
             pass
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class Service(object):
         """
@@ -390,14 +398,14 @@ def define_behaviors(model):
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class ServiceList(_List):
         pass
 
 
 
-    @model.v1beta1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1beta1)
     @implementer(IObject)
     class Deployment(object):
         """
@@ -417,14 +425,14 @@ def define_behaviors(model):
 
 
 
-    @model.v1beta1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1beta1)
     @implementer(IObject)
     class DeploymentList(_List):
         pass
 
 
 
-    @model.v1beta1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1beta1)
     @implementer(IObject)
     class ReplicaSet(object):
         """
@@ -440,14 +448,14 @@ def define_behaviors(model):
 
 
 
-    @model.v1beta1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1beta1)
     @implementer(IObject)
     class ReplicaSetList(_List):
         pass
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class Pod(object):
         """
@@ -463,7 +471,7 @@ def define_behaviors(model):
 
 
 
-    @model.v1.add_behavior_for_pclass
+    @add_allowing_missing(model.v1)
     @implementer(IObject)
     class PodList(_List):
         pass
