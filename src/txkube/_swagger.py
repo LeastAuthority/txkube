@@ -718,9 +718,18 @@ class _ClassModel(PClass):
             class.  These will appear to the left of ``PClass``.
         """
         def discard_constant_fields(cls, **kwargs):
-            kwargs.pop("kind", None)
-            kwargs.pop("apiVersion", None)
-            return super(huh, cls).__new__(cls, **kwargs)
+            def ctor():
+                return super(huh, cls).__new__(cls, **kwargs)
+            try:
+                return ctor()
+            except AttributeError:
+                if u"kind" in kwargs or u"apiVersion" in kwargs:
+                    kwargs.pop("kind", None)
+                    kwargs.pop("apiVersion", None)
+                    return ctor()
+                raise
+
+
         content = {
             attr.name: attr.pclass_field_for_attribute()
             for attr
@@ -857,6 +866,12 @@ class VersionedPClasses(object):
 
 
     @classmethod
+    def transformable(cls, name, definition):
+        props = definition.get(u"properties", ())
+        return u"kind" in props and u"apiVersion" in props
+
+
+    @classmethod
     def transform_definitions(cls, spec, kind=u"kind", version=u"apiVersion"):
 
         def x_txkube_constant(value):
@@ -871,8 +886,7 @@ class VersionedPClasses(object):
             )
 
         def transform_definition(name, definition):
-            props = definition.get(u"properties", ())
-            if u"kind" in props and u"apiVersion" in props:
+            if cls.transformable(name, definition):
                 parts = name.rsplit(u".", 2)
                 version_value = parts[-2]
                 kind_value = parts[-1]

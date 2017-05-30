@@ -713,6 +713,14 @@ class VersionedPClassesTests(TestCase):
                         },
                     },
                 },
+                u"k8s.StatusDetails": {
+                    u"type": u"object",
+                    u"properties": {
+                        u"kind": {
+                            u"type": u"string",
+                        },
+                    },
+                },
             },
         })
         self.spec = VersionedPClasses.transform_definitions(self.spec)
@@ -809,4 +817,16 @@ class VersionedPClassesTests(TestCase):
         self.expectThat(
             a.foo(apiVersion=u"a", kind=u"foo", x=u"x").x,
             Equals(u"x"),
+        )
+
+
+    def test_relevant_constructor_values(self):
+        """
+        Definitions which do not correspond to Kubernetes Objects do not have
+        **kind** discarded.
+        """
+        k8s = VersionedPClasses(self.spec, u"k8s")
+        self.assertThat(
+            k8s.StatusDetails(kind=u"foo").kind,
+            Equals(u"foo"),
         )
