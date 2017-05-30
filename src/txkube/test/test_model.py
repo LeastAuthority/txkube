@@ -312,7 +312,7 @@ class NamespaceListTests(TestCase):
         assume(len(collection.items) > 0)
         self.expectThat(
             lambda: collection.add(choose(collection.items)),
-            Raises(Exception),
+            raises_exception(InvariantException),
         )
 
 
