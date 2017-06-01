@@ -25,7 +25,8 @@ from testtools.matchers import (
 )
 
 from .._swagger import (
-    NotClassLike, NoSuchDefinition, Swagger, _IntegerRange,
+    NotClassLike, NoSuchDefinition, AlreadyCreatedClass,
+    Swagger, _IntegerRange,
     UsePrefix, PClasses, VersionedPClasses,
 )
 
@@ -215,6 +216,13 @@ class SwaggerTests(TestCase):
     def setUp(self):
         super(SwaggerTests, self).setUp()
         self.spec = Swagger.from_document(self.spec_document)
+
+
+    def test_hashing(self):
+        self.assertThat(
+            hash(self.spec),
+            IsInstance(int),
+        )
 
 
     def test_simple_type(self):
@@ -732,7 +740,7 @@ class VersionedPClassesTests(TestCase):
         ``PClass`` subclass for a Swagger definition matching the
         ``VersionedPClasses`` version and the name of the attribute.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.assertThat(
             a.foo,
             Is(self.spec.pclass_for_definition(u"a.foo")),
@@ -745,7 +753,7 @@ class VersionedPClassesTests(TestCase):
         the value given in the call to ``transform_definitions`` exposes the
         **kind** the type corresponds to.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.assertThat(
             a.foo.kind,
             MatchesAll(IsInstance(unicode), Equals(u"foo")),
@@ -758,7 +766,7 @@ class VersionedPClassesTests(TestCase):
         the value given in the call to ``transform_definitions`` exposes the
         **apiVersion** the type corresponds to.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         # Aaahh.  Direct vs indirect first access can make a difference. :(
         a.foolist
         self.assertThat(
@@ -773,7 +781,7 @@ class VersionedPClassesTests(TestCase):
         corresponding Swagger definition results in ``AttributeError`` being
         raised.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.assertThat(lambda: a.bar, raises(AttributeError("bar")))
 
 
@@ -783,8 +791,8 @@ class VersionedPClassesTests(TestCase):
         ``VersionedPClasses`` attribute access using the class decorator
         ``add_behavior_for_pclass``.
         """
-        a = VersionedPClasses(self.spec, u"a")
-        def add_behavior():
+        a = VersionedPClasses(self.spec, {u"a"})
+        def add_behavior(a):
             @a.add_behavior_for_pclass
             class foo(object):
                 def __invariant__(self):
@@ -792,7 +800,7 @@ class VersionedPClassesTests(TestCase):
 
                 def bar(self):
                     return u"baz"
-        add_behavior()
+        add_behavior(a)
 
         an_a = a.foo(x=u"foo")
         self.expectThat(an_a.apiVersion, Equals(u"a"))
@@ -805,7 +813,17 @@ class VersionedPClassesTests(TestCase):
         )
 
         # It's not allowed now that we've retrieved the foo class.
-        self.expectThat(add_behavior, raises_exception(ValueError))
+        self.expectThat(
+            lambda: add_behavior(a),
+            raises_exception(AlreadyCreatedClass),
+        )
+
+        # It's not allowed for a class that doesn't match a known definition.
+        self.expectThat(
+            # There is no b.foo so this will try to use an unknown definition.
+            lambda: add_behavior(VersionedPClasses(self.spec, {u"b"})),
+            raises_exception(NoSuchDefinition),
+        )
 
 
     def test_irrelevant_constructor_values(self):
@@ -813,7 +831,7 @@ class VersionedPClassesTests(TestCase):
         Values may be passed to the Python class constructor for the kind and
         apiVersion and they are discarded.
         """
-        a = VersionedPClasses(self.spec, u"a")
+        a = VersionedPClasses(self.spec, {u"a"})
         self.expectThat(
             a.foo(apiVersion=u"a", kind=u"foo", x=u"x").x,
             Equals(u"x"),
@@ -825,7 +843,7 @@ class VersionedPClassesTests(TestCase):
         Definitions which do not correspond to Kubernetes Objects do not have
         **kind** discarded.
         """
-        k8s = VersionedPClasses(self.spec, u"k8s")
+        k8s = VersionedPClasses(self.spec, {u"k8s"})
         self.assertThat(
             k8s.StatusDetails(kind=u"foo").kind,
             Equals(u"foo"),
