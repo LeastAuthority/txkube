@@ -115,14 +115,68 @@ class AuthenticateWithServiceAccountTests(TestCase):
         return server.data
 
 
-    def test_bearer_token_authorization(self):
+    def test_http_bearer_token_authorization(self):
         """
         The ``IAgent`` returned adds an *Authorization* header to each request it
-        issues.  The header includes the bearer token from the service account file.
+        issues.  The header includes the bearer token from the service account
+        file.  This works over HTTP.
         """
         token = bytes(uuid4())
         request_bytes = self._authorized_request(token=token, headers=None)
 
+        # Sure would be nice to have an HTTP parser.
+        self.assertThat(
+            request_bytes,
+            Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
+        )
+
+
+    def test_https_bearer_token_authorization(self):
+        """
+        The ``IAgent`` returned adds an *Authorization* header to each request it
+        issues.  The header includes the bearer token from the service account
+        file.  This works over HTTPS.
+        """
+        # This test duplicates a lot of logic from _authorized_request because
+        # ConnectionCompleter doesn't work with TLS connections by itself.
+        server = AccumulatingProtocol()
+        factory = Factory.forProtocol(lambda: server)
+        factory.protocolConnectionMade = None
+
+        reactor = MemoryReactor()
+        reactor.listenTCP(443, factory)
+
+        token = bytes(uuid4())
+
+        t = FilePath(self.useFixture(TempDir()).join(b""))
+        serviceaccount = t.child(b"serviceaccount")
+        serviceaccount.makedirs()
+
+        serviceaccount.child(b"ca.crt").setContent(_CA_CERT_PEM)
+        serviceaccount.child(b"token").setContent(token)
+
+        self.patch(
+            os, "environ", {
+                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
+                b"KUBERNETES_SERVICE_PORT": b"443",
+            },
+        )
+
+        agent = authenticate_with_serviceaccount(
+            reactor, path=serviceaccount.path,
+        )
+        headers = Headers()
+        agent.request(b"GET", b"https://example.invalid.", headers)
+
+        [connection] = reactor.sslClients
+        (host, port, factory) = connection[:3]
+        # Put it somewhere ConnectionCompleter can deal with.
+        reactor.tcpClients.append((host, port, factory, None, None))
+
+        pump = ConnectionCompleter(reactor).succeedOnce()
+        pump.pump()
+
+        request_bytes = server.data
         # Sure would be nice to have an HTTP parser.
         self.assertThat(
             request_bytes,

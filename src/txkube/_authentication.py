@@ -220,7 +220,11 @@ class ClientCertificatePolicyForHTTPS(PClass):
             clientCertificate=client_cert,
             trustRoot=trust_root,
             extraCertificateOptions=dict(
-                extraCertChain=tuple(cert.original for cert in extra_cert_chain),
+                # optionsForClientTLS gets mad if extraCertChain is () and
+                # client_cert is None even though `()` clearly represents no
+                # extra certificate chain.  It wants them to both be None.
+                # Make it so.
+                extraCertChain=tuple(cert.original for cert in extra_cert_chain) or None,
             ),
         )
 
