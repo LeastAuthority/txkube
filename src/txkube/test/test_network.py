@@ -23,7 +23,7 @@ from eliot.testing import capture_logging
 
 from OpenSSL.crypto import FILETYPE_PEM
 
-from twisted.test.proto_helpers import MemoryReactor
+from twisted.test.proto_helpers import MemoryReactorClock as MemoryReactor
 from twisted.trial.unittest import TestCase as TwistedTestCase
 
 from twisted.python.filepath import FilePath
@@ -371,12 +371,17 @@ class Redirectable(proxyForInterface(IReactorSSL)):
     """
     original = attr.ib()
 
+    def seconds(self):
+        return self.original.seconds()
+
+    def callLater(self, *args, **kwargs):
+        return self.original.callLater(*args, **kwargs)
+
     def set_redirect(self, host, port):
         """
         Specify the alternate address to which connections will be directed.
         """
         self.host, self.port = host, port
-
 
     def connectSSL(self, host, port, *a, **kw):
         """
@@ -384,3 +389,10 @@ class Redirectable(proxyForInterface(IReactorSSL)):
         address.
         """
         return self.original.connectSSL(self.host, self.port, *a, **kw)
+
+    def connectTCP(self, host, port, *a, **kw):
+        """
+        Establish a TLS connection to the alternate address instead of the given
+        address.
+        """
+        return self.original.connectTCP(self.host, self.port, *a, **kw)
