@@ -390,8 +390,7 @@ class MemoTests(TestCase):
         result = Deferred()
         def f1():
             return result
-        def f2():
-            raise NotImplementedError("Should not be called")
+        f2 = None
 
         m = _Memo()
         d1 = m.get(f1)
@@ -411,8 +410,7 @@ class MemoTests(TestCase):
         result = succeed(result_obj)
         def f1():
             return result
-        def f2():
-            raise NotImplementedError("Should not be called")
+        f2 = None
 
         m = _Memo()
         d1 = m.get(f1)
