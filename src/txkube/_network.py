@@ -21,7 +21,7 @@ from twisted.python.failure import Failure
 from twisted.python.url import URL
 from twisted.python.filepath import FilePath
 
-from twisted.internet.defer import succeed
+from twisted.internet.defer import Deferred, succeed
 
 from twisted.web.iweb import IBodyProducer, IAgent
 from twisted.web.http import OK, CREATED
@@ -377,10 +377,37 @@ def collection_location(obj):
 @attr.s
 class _Memo(object):
     value = attr.ib(default=None)
+    state = attr.ib(default="EMPTY")
+    waiting = attr.ib(default=attr.Factory(list))
 
-    def cache(self, value):
-        self.value = value
-        return value
+    def get(self, f):
+        return getattr(self, "_get_" + self.state)(f)
+
+
+    def _get_EMPTY(self, f):
+        self.state = "RUNNING"
+        d = f()
+        d.addBoth(self._cache)
+        return self.get(f)
+
+
+    def _get_RUNNING(self, f):
+        d = Deferred()
+        self.waiting.append(d)
+        return d
+
+
+    def _get_VALUE(self, f):
+        return succeed(self.value)
+
+
+    def _cache(self, result):
+        self.state = "VALUE"
+        self.value = result
+        waiters = self.waiting
+        self.waiting = None
+        for d in waiters:
+            d.callback(result)
 
 
 
@@ -412,14 +439,11 @@ class _NetworkKubernetes(object):
 
 
     def _get_model(self, client):
-        if self._model.value is None:
-            # XXX Not exactly concurrent correct...  So tedious.
+        def f():
             d = client.openapi()
             d.addCallback(openapi_to_data_model)
-            d.addCallback(self._model.cache)
-        else:
-            d = succeed(self._model.value)
-        return d
+            return d
+        return self._model.get(f)
 
 
     def _model_to_client(self, model):
