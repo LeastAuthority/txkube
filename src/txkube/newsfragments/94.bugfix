@@ -1,1 +1,0 @@
-Kubernetes model objects loaded indirectly now have the same behavior as those loaded directly.

@@ -1,1 +1,0 @@
-A new API, ``IKubernetesClient.versioned_client``, creates clients which adopt the Kubernetes object specification from the server they interact with.  This makes it possible to interact with different versions of Kubernetes (with different object specifications).
