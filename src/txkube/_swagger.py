@@ -20,7 +20,7 @@ from zope.interface import Attribute, Interface, implementer
 
 from pyrsistent import (
     CheckedValueTypeError, PClass, PVector, pvector, field, pvector_field,
-    pmap_field, freeze,
+    pmap_field, thaw, freeze,
 )
 
 from twisted.python.compat import nativeString
@@ -43,6 +43,11 @@ class NoSuchDefinition(Exception):
 
 
 
+class AlreadyCreatedClass(Exception):
+    pass
+
+
+
 class Swagger(PClass):
     """
     A ``Swagger`` contains a single Swagger specification.
@@ -62,12 +67,12 @@ class Swagger(PClass):
         same attributes and behavior).  This plays better with Python's type
         system than the alternative.
     """
-    info = field()
-    paths = field()
-    definitions = field(factory=freeze)
-    securityDefinitions = field()
-    security = field()
-    swagger = field()
+    info = field(mandatory=True, initial=None, factory=freeze)
+    paths = field(mandatory=True, initial=None, factory=freeze)
+    definitions = field(mandatory=True, initial=None, factory=freeze)
+    securityDefinitions = field(mandatory=True, initial=None, factory=freeze)
+    security = field(mandatory=True, initial=None, factory=freeze)
+    swagger = field(mandatory=True, initial=None, factory=freeze)
 
     # lambda lambda red pajamda
     # https://github.com/tobgu/pyrsistent/issues/109
@@ -77,6 +82,16 @@ class Swagger(PClass):
 
     _behaviors = field(mandatory=True, type=dict)
     _pclasses = field(mandatory=True, type=dict)
+
+    def __hash__(self):
+        return hash((
+            self.info,
+            self.paths,
+            self.definitions,
+            self.securityDefinitions,
+            self.security,
+            self.swagger,
+        ))
 
     @classmethod
     def from_path(cls, spec_path):
@@ -118,9 +133,25 @@ class Swagger(PClass):
         :return: ``None``
         """
         if definition in self._pclasses:
-            raise ValueError("Class for {} already created.".format(definition))
-
+            raise AlreadyCreatedClass(definition)
+        if definition not in self.definitions:
+            raise NoSuchDefinition(definition)
         self._behaviors.setdefault(definition, []).append(cls)
+
+
+    def to_document(self):
+        """
+        Serialize this specification to a JSON-compatible object representing a
+        Swagger specification.
+        """
+        return dict(
+            info=thaw(self.info),
+            paths=thaw(self.paths),
+            definitions=thaw(self.definitions),
+            securityDefinitions=thaw(self.securityDefinitions),
+            security=thaw(self.security),
+            swagger=thaw(self.swagger),
+        )
 
 
     def pclass_for_definition(self, name):
@@ -145,7 +176,7 @@ class Swagger(PClass):
             kind = self._identify_kind(definition)
             if kind is None:
                 raise NotClassLike(name, definition)
-            generator =  getattr(self, "_model_for_{}".format(kind))
+            generator = getattr(self, "_model_for_{}".format(kind))
             model = generator(name, definition)
             bases = tuple(self._behaviors.get(name, []))
             cls = model.pclass(bases)
@@ -204,6 +235,7 @@ class IRangeModel(Interface):
             If it is ``False``, the second element gives a human-readable
             description of how the value fell out of the range.
         """
+
 
 
 class ITypeModel(Interface):
@@ -730,6 +762,15 @@ class _ClassModel(PClass):
                 raise
 
 
+        def compare_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return cmp(
+                    sorted(self.serialize().items()),
+                    sorted(other.serialize().items()),
+                )
+            return NotImplemented
+
+
         content = {
             attr.name: attr.pclass_field_for_attribute()
             for attr
@@ -738,6 +779,7 @@ class _ClassModel(PClass):
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
         content["__new__"] = discard_constant_fields
+        content["__cmp__"] = compare_pclass
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
@@ -838,8 +880,8 @@ class VersionedPClasses(object):
 
     .. code-block: python
 
-       spec = Swagger.from_path(...)
-       spec = VersionedPClasses.transform_definitions(spec)
+       swagger = Swagger.from_path(...)
+       spec = VersionedPClasses.transform_definitions(swagger)
        v1beta1 = VersionedPClasses(spec, u"v1beta1")
        deployment = v1beta1.Deployment(...)
 
@@ -860,9 +902,9 @@ class VersionedPClasses(object):
        deployment.foo(bar)
 
     """
-    def __init__(self, spec, version):
+    def __init__(self, spec, versions):
         self.spec = spec
-        self.version = version
+        self.versions = versions
 
 
     @classmethod
@@ -900,10 +942,12 @@ class VersionedPClasses(object):
 
 
     def __getattr__(self, name):
-        try:
-            return self.spec.pclass_for_definition(self.full_name(name))
-        except NoSuchDefinition:
-            raise AttributeError(name)
+        for version in sorted(self.versions):
+            try:
+                return self.spec.pclass_for_definition(self.full_name(version, name))
+            except NoSuchDefinition:
+                pass
+        raise AttributeError(name)
 
 
     def add_behavior_for_pclass(self, cls):
@@ -917,12 +961,18 @@ class VersionedPClasses(object):
 
         :return: ``None``
         """
-        name = cls.__name__
-        self.spec.add_behavior_for_pclass(self.full_name(name), cls)
-        return None
+        kind = cls.__name__
+        for version in sorted(self.versions):
+            try:
+                self.spec.add_behavior_for_pclass(self.full_name(version, kind), cls)
+            except NoSuchDefinition:
+                pass
+            else:
+                return None
+        raise NoSuchDefinition(kind)
 
 
-    def full_name(self, name):
+    def full_name(self, version, name):
         """
         Construct the full name of a definition based on this object's version and
         a partial definition name.
@@ -937,4 +987,4 @@ class VersionedPClasses(object):
 
         :return unicode: The full definition name.
         """
-        return u".".join((self.version, name))
+        return u".".join((version, name))

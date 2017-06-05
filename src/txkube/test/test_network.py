@@ -18,6 +18,7 @@ import attr
 from yaml import safe_dump
 
 from testtools.matchers import AnyMatch, ContainsDict, Equals
+from testtools.twistedsupport import succeeded
 
 from eliot.testing import capture_logging
 
@@ -29,6 +30,7 @@ from twisted.trial.unittest import TestCase as TwistedTestCase
 from twisted.python.filepath import FilePath
 from twisted.python.url import URL
 from twisted.python.components import proxyForInterface
+from twisted.internet.defer import Deferred, succeed
 from twisted.internet.ssl import (
     CertificateOptions, DN, KeyPair, trustRootFromCertificates,
 )
@@ -46,7 +48,7 @@ from .. import (
     IObject, v1, network_kubernetes, network_kubernetes_from_context,
 )
 
-from .._network import collection_location
+from .._network import _Memo, collection_location
 
 
 def get_kubernetes(case):
@@ -357,6 +359,64 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             ],
         }))
         return config
+
+
+
+class MemoTests(TestCase):
+    """
+    Tests for ``_Memo``.
+    """
+    def test_get_empty(self):
+        """
+        In the empty state, ``get`` calls the given function and returns a
+        ``Deferred`` that fires with that function's result.
+        """
+        result = object()
+        def f():
+            return succeed(result)
+
+        m = _Memo()
+        d = m.get(f)
+        self.assertThat(d, succeeded(Equals(result)))
+
+
+    def test_get_running(self):
+        """
+        In the running state, ``get`` does not call the given function and returns
+        a ``Deferred`` that fires with the result of the function passed to
+        the earlier ``get`` call.
+        """
+        result_obj = object()
+        result = Deferred()
+        def f1():
+            return result
+        f2 = None
+
+        m = _Memo()
+        d1 = m.get(f1)
+        d2 = m.get(f2)
+        result.callback(result_obj)
+        self.assertThat(d1, succeeded(Equals(result_obj)))
+        self.assertThat(d2, succeeded(Equals(result_obj)))
+
+
+    def test_get_value(self):
+        """
+        In the value state, ``get`` does not call the given function and returns a
+        ``Deferred`` that fires with the result of the function passed to the
+        earlier ``get`` call.
+        """
+        result_obj = object()
+        result = succeed(result_obj)
+        def f1():
+            return result
+        f2 = None
+
+        m = _Memo()
+        d1 = m.get(f1)
+        d2 = m.get(f2)
+        self.assertThat(d1, succeeded(Equals(result_obj)))
+        self.assertThat(d2, succeeded(Equals(result_obj)))
 
 
 

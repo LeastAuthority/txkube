@@ -12,7 +12,7 @@ from hypothesis.strategies import (
     dictionaries, tuples, integers, booleans,
 )
 
-from .. import v1, v1beta1
+from .. import v1_5_model as default_model
 
 # Without some attempt to cap the size of collection strategies (lists,
 # dictionaries), the slowness health check fails intermittently.  Here are
@@ -123,12 +123,12 @@ def labels():
     )
 
 
-def object_metadatas():
+def object_metadatas(model=default_model):
     """
     Build ``v1.ObjectMeta`` without a namespace.
     """
     return builds(
-        v1.ObjectMeta.create,
+        model.v1.ObjectMeta.create,
         fixed_dictionaries({
             u"name": object_name(),
             u"uid": none(),
@@ -140,7 +140,7 @@ def object_metadatas():
     )
 
 
-def namespaced_object_metadatas():
+def namespaced_object_metadatas(model=default_model):
     """
     Build ``v1.ObjectMeta`` with a namespace.
     """
@@ -148,33 +148,33 @@ def namespaced_object_metadatas():
         lambda obj_metadata, namespace: obj_metadata.set(
             u"namespace", namespace,
         ),
-        obj_metadata=object_metadatas(),
+        obj_metadata=object_metadatas(model),
         namespace=object_name(),
     )
 
 
-def namespace_statuses():
+def namespace_statuses(model=default_model):
     """
     Build ``Namespace.status``.
     """
     return builds(
-        v1.NamespaceStatus,
+        model.v1.NamespaceStatus,
         phase=sampled_from({u"Active", u"Terminating"}),
     )
 
 
-def creatable_namespaces():
+def creatable_namespaces(model=default_model):
     """
     Build ``Namespace``\ s which can be created on a Kubernetes cluster.
     """
     return builds(
-        v1.Namespace,
-        metadata=object_metadatas(),
+        model.v1.Namespace,
+        metadata=object_metadatas(model),
         status=none(),
     )
 
 
-def retrievable_namespaces():
+def retrievable_namespaces(model=default_model):
     """
     Build ``Namespace``\ s which might be retrieved from a Kubernetes cluster.
 
@@ -183,8 +183,8 @@ def retrievable_namespaces():
     """
     return builds(
         lambda ns, status: ns.set(status=status),
-        creatable_namespaces(),
-        status=namespace_statuses(),
+        creatable_namespaces(model),
+        status=namespace_statuses(model),
     )
 
 
@@ -223,35 +223,35 @@ def configmap_datas():
     )
 
 
-def configmaps():
+def configmaps(model=default_model):
     """
     Build ``v1.ConfigMap``.
     """
     return builds(
-        v1.ConfigMap,
-        metadata=namespaced_object_metadatas(),
+        model.v1.ConfigMap,
+        metadata=namespaced_object_metadatas(model),
         data=configmap_datas(),
     )
 
 
-def containers():
+def containers(model=default_model):
     """
     Build ``v1.Container``.
     """
     return builds(
-        v1.Container,
+        model.v1.Container,
         name=dns_labels(),
         # XXX Spec does not say image is required but it is
         image=image_names(),
     )
 
 
-def podspecs():
+def podspecs(model=default_model):
     """
     Build ``v1.PodSpec``.
     """
     return builds(
-        v1.PodSpec,
+        model.v1.PodSpec,
         activeDeadlineSeconds=one_of(
             none(),
             # The Swagger specification claims this is an int64.  The prose
@@ -267,7 +267,7 @@ def podspecs():
         hostname=dns_labels(),
         # And plenty more ...
         containers=lists(
-            containers(),
+            containers(model),
             min_size=1,
             average_size=_QUICK_MAX_SIZE,
             max_size=_QUICK_MAX_SIZE,
@@ -276,34 +276,39 @@ def podspecs():
     )
 
 
-def podtemplatespecs():
+def podtemplatespecs(model=default_model):
     """
     Build ``v1.PodTemplateSpec``.
     """
     return builds(
-        v1.PodTemplateSpec,
+        model.v1.PodTemplateSpec,
         # v1.ObjectMeta for a PodTemplateSpec must include some labels.
-        metadata=object_metadatas().filter(
+        metadata=object_metadatas(model).filter(
             lambda meta: meta.labels and len(meta.labels) > 0,
         ),
-        spec=podspecs(),
+        spec=podspecs(model),
     )
 
 
+def _without_activeDeadlineSeconds(template):
+    # When part of a Deployment or ReplicaSet, activeDeadlineSeconds may not
+    # be given a value.  https://github.com/kubernetes/kubernetes/issues/38684
+    return template.transform(["spec", "activeDeadlineSeconds"], None)
 
-def replicasetspecs():
+
+def replicasetspecs(model=default_model):
     """
     Build ``v1beta1.ReplicaSetSpec"".
     """
     return builds(
-        lambda template, **kw: v1beta1.ReplicaSetSpec(
+        lambda template, **kw: model.v1beta1.ReplicaSetSpec(
             # Make sure the selector will match Pods from the pod template
             # spec.
             selector={u"matchLabels": template.metadata.labels},
             template=template,
             **kw
         ),
-        template=podtemplatespecs(),
+        template=podtemplatespecs(model).map(_without_activeDeadlineSeconds),
         minReadySeconds=integers(min_value=0, max_value=2 ** 31 - 1),
         # Strictly speaking, the max value is more like 2 ** 31 -1.  However,
         # if we actually sent such a thing to Kubernetes we could probably
@@ -312,48 +317,48 @@ def replicasetspecs():
     )
 
 
-def replicasets():
+def replicasets(model=default_model):
     """
     Build ``v1beta1.ReplicaSet``.
     """
     return builds(
-        v1beta1.ReplicaSet,
-        metadata=object_metadatas(),
-        spec=replicasetspecs(),
+        model.v1beta1.ReplicaSet,
+        metadata=object_metadatas(model),
+        spec=replicasetspecs(model),
     )
 
 
-def deploymentspecs():
+def deploymentspecs(model=default_model):
     """
     Build ``v1beta1.DeploymentSpec``.
     """
     return builds(
-        lambda template: v1beta1.DeploymentSpec(
+        lambda template: model.v1beta1.DeploymentSpec(
             template=template,
             # The selector has to match the PodTemplateSpec.  This is an easy
             # way to accomplish that but not the only way.
             selector={u"matchLabels": template.metadata.labels},
         ),
-        template=podtemplatespecs(),
+        template=podtemplatespecs(model).map(_without_activeDeadlineSeconds),
     )
 
 
-def deployments():
+def deployments(model=default_model):
     """
     Build ``v1beta1.Deployment``.
     """
     return builds(
-        lambda metadata, spec: v1beta1.Deployment(
+        lambda metadata, spec: model.v1beta1.Deployment(
             # The submitted Deployment.metadata.labels don't have to match the
             # Deployment.spec.template.metadata.labels but the server will
             # copy them up if they're missing at the top.
             metadata=metadata.set("labels", spec.template.metadata.labels),
             spec=spec,
         ),
-        metadata=namespaced_object_metadatas(),
+        metadata=namespaced_object_metadatas(model),
         # XXX Spec is only required if you want to be able to create the
         # Deployment.
-        spec=deploymentspecs(),
+        spec=deploymentspecs(model),
     )
 
 
@@ -364,38 +369,38 @@ def podstatuses():
     return none()
 
 
-def pods():
+def pods(model=default_model):
     """
     Builds ``v1.Pod``.
     """
     return builds(
-        v1.Pod,
-        metadata=namespaced_object_metadatas(),
-        spec=podspecs(),
+        model.v1.Pod,
+        metadata=namespaced_object_metadatas(model),
+        spec=podspecs(model),
         status=podstatuses(),
     )
 
 
-def service_ports():
+def service_ports(model=default_model):
     """
     Build ``v1.ServicePort``.
     """
     return builds(
-        v1.ServicePort,
+        model.v1.ServicePort,
         port=integers(min_value=1, max_value=65535),
         # The specification doesn't document name as required, but it is.
         name=dns_labels().filter(lambda name: len(name) <= 24),
     )
 
 
-def service_specs():
+def service_specs(model=default_model):
     """
     Build ``v1.ServiceSpec``.
     """
     return builds(
-        v1.ServiceSpec,
+        model.v1.ServiceSpec,
         ports=lists(
-            service_ports(),
+            service_ports(model),
             min_size=1,
             max_size=_QUICK_MAX_SIZE,
             average_size=_QUICK_AVERAGE_SIZE,
@@ -404,15 +409,15 @@ def service_specs():
     )
 
 
-def services():
+def services(model=default_model):
     """
     Build ``v1.Service``.
     """
     return builds(
-        v1.Service,
-        metadata=namespaced_object_metadatas(),
+        model.v1.Service,
+        metadata=namespaced_object_metadatas(model),
         # Though the specification doesn't tell us, the spec is required.
-        spec=service_specs(),
+        spec=service_specs(model),
     )
 
 
@@ -439,59 +444,83 @@ def _collections(cls, strategy, unique_by):
     )
 
 
-def deploymentlists():
+def deploymentlists(model=default_model):
     """
     Build ``v1beta1.DeploymentList``.
     """
-    return _collections(v1beta1.DeploymentList, deployments(), _unique_names_with_namespaces)
+    return _collections(
+        model.v1beta1.DeploymentList,
+        deployments(model),
+        _unique_names_with_namespaces,
+    )
 
 
-def podlists():
+def podlists(model=default_model):
     """
     Build ``v1.PodList``.
     """
-    return _collections(v1.PodList, pods(), _unique_names_with_namespaces)
+    return _collections(
+        model.v1.PodList,
+        pods(model),
+        _unique_names_with_namespaces,
+    )
 
 
-def replicasetlists():
+def replicasetlists(model=default_model):
     """
     Build ``v1beta1.ReplicaSetList``.
     """
-    return _collections(v1beta1.ReplicaSetList, replicasets(), _unique_names_with_namespaces)
+    return _collections(
+        model.v1beta1.ReplicaSetList,
+        replicasets(model),
+        _unique_names_with_namespaces,
+    )
 
 
-def configmaplists():
+def configmaplists(model=default_model):
     """
     Build ``v1.ConfigMapList``.
     """
-    return _collections(v1.ConfigMapList, configmaps(), _unique_names_with_namespaces)
+    return _collections(
+        model.v1.ConfigMapList,
+        configmaps(model),
+        _unique_names_with_namespaces,
+    )
 
 
-def namespacelists(namespaces=creatable_namespaces()):
+def namespacelists(namespaces=creatable_namespaces(), model=default_model):
     """
     Build ``v1.NamespaceList``.
     """
-    return _collections(v1.NamespaceList, namespaces, _unique_names)
+    return _collections(
+        model.v1.NamespaceList,
+        namespaces,
+        _unique_names,
+    )
 
 
-def servicelists():
+def servicelists(model=default_model):
     """
     Build ``v1.ServiceList``.
     """
-    return _collections(v1.ServiceList, services(), _unique_names_with_namespaces)
+    return _collections(
+        model.v1.ServiceList,
+        services(model),
+        _unique_names_with_namespaces,
+    )
 
 
-def objectcollections(namespaces=creatable_namespaces()):
+def objectcollections(namespaces=creatable_namespaces(), model=default_model):
     """
     Build ``v1.ObjectCollection``.
     """
     return one_of(
-        configmaplists(),
-        namespacelists(namespaces),
-        deploymentlists(),
-        podlists(),
-        replicasetlists(),
-        servicelists(),
+        configmaplists(model),
+        namespacelists(namespaces, model),
+        deploymentlists(model),
+        podlists(model),
+        replicasetlists(model),
+        servicelists(model),
     )
 
 
@@ -511,17 +540,17 @@ def _unique_names_with_namespaces(item):
     return (item.metadata.name, item.metadata.namespace)
 
 
-def iobjects():
+def iobjects(model=default_model):
     """
     Build any one of the ``IObject`` implementations.
     """
     return one_of(
-        creatable_namespaces(),
-        retrievable_namespaces(),
-        configmaps(),
-        deployments(),
-        pods(),
-        replicasets(),
-        services(),
-        objectcollections(),
+        creatable_namespaces(model),
+        retrievable_namespaces(model),
+        configmaps(model),
+        deployments(model),
+        pods(model),
+        replicasets(model),
+        services(model),
+        objectcollections(model=model),
     )

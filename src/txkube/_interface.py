@@ -51,6 +51,18 @@ class IKubernetes(Interface):
         "deployment's API."
     )
 
+    def versioned_client():
+        """
+        Create a client which will interact with the Kubernetes deployment
+        represented by this object.
+
+        Customize that client for the version of Kubernetes it will interact
+        with.
+
+        :return Deferred(IKubernetesClient): The client.
+        """
+
+    # Pending deprecation.
     def client():
         """
         Create a client which will interact with the Kubernetes deployment
@@ -66,6 +78,21 @@ class IKubernetesClient(Interface):
     An ``IKubernetesClient`` provider allows access to the API of a particular
     Kubernetes deployment.
     """
+    model = Attribute(
+        "The Kubernetes data model for use with this client.  This must "
+        "agree with the data model used by the server with which this "
+        "client will interact."
+    )
+
+    def version():
+        """
+        Retrieve server version information.
+
+        :return Deferred(version.Info): The version information reported by
+            the server about itself.
+        """
+
+
     def list(kind):
         """
         Retrieve objects of the given kind.
