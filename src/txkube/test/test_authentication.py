@@ -25,6 +25,7 @@ from cryptography.x509 import (
     DNSName,
     Name,
     NameAttribute,
+    random_serial_number,
 )
 from cryptography.hazmat.backends import default_backend
 
@@ -352,7 +353,7 @@ class ChainTests(TestCase):
                     critical=True,
                 )
             return builder.public_key(pubkey,
-            ).serial_number(1,
+            ).serial_number(random_serial_number(),
             ).not_valid_before(datetime.utcnow(),
             ).not_valid_after(datetime.utcnow() + timedelta(seconds=1),
             ).sign(privkey, SHA256(), default_backend(),
