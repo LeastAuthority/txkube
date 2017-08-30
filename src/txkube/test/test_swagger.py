@@ -38,7 +38,8 @@ def swagger_primitive_types():
     """
     Hypothesis strategy to build Swagger *primitive* type definitions.
     """
-    def _swaggered((t, f)):
+    def _swaggered(type_format):
+        (t, f) = type_format
         result = {u"type": t}
         if f is not None:
             result[u"format"] = f
