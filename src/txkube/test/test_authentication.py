@@ -194,7 +194,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         issues.  The header includes the bearer token from the service account
         file.
         """
-        token = bytes(uuid4())
+        token = str(uuid4()).encode("ascii")
         request_bytes = self._authorized_request(token=token, headers=None)
 
         # Sure would be nice to have an HTTP parser.
