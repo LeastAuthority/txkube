@@ -223,7 +223,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         Other headers passed to the ``IAgent.request`` implementation are also
         sent in the request.
         """
-        token = bytes(uuid4())
+        token = str(uuid4()).encode("ascii")
         headers = Headers({u"foo": [u"bar"]})
         request_bytes = self._authorized_request(token=token, headers=headers)
         self.expectThat(
