@@ -15,7 +15,7 @@ from zope.interface import implementer
 
 from pyrsistent import mutant
 
-from twisted.python.compat import iteritems
+from twisted.python.compat import iteritems, unicode
 from twisted.python.filepath import FilePath
 
 from . import UnrecognizedVersion, UnrecognizedKind, IObject
