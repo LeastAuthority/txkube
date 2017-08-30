@@ -15,6 +15,13 @@ branches:
   only:
     - "master"
 
+matrix:
+  include:
+    - python: 2.7
+    - python: 3.6
+  allow_failures:
+    - python: 3.6
+
 cache:
   directories:
     # Cache the pip download cache across runs to avoid having to
