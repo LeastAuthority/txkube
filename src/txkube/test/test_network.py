@@ -42,6 +42,7 @@ from cryptography.hazmat.backends import default_backend
 from twisted.test.proto_helpers import MemoryReactorClock
 from twisted.trial.unittest import TestCase as TwistedTestCase
 
+from twisted.python.compat import unicode
 from twisted.python.filepath import FilePath
 from twisted.python.url import URL
 from twisted.python.components import proxyForInterface
@@ -463,8 +464,8 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
 
         :return FilePath: The path to the written configuration file.
         """
-        config = FilePath(self.mktemp())
-        config.setContent(safe_dump({
+        config_file = FilePath(self.mktemp())
+        config = safe_dump({
             "apiVersion": "v1",
             "kind": "Config",
             "contexts": [
@@ -494,8 +495,11 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
                     },
                 },
             ],
-        }))
-        return config
+        })
+        if isinstance(config, unicode):
+            config = config.encode("ascii")
+        config_file.setContent(config)
+        return config_file
 
 
     def test_kubeconfig_environment(self):

@@ -158,7 +158,10 @@ def network_kubernetes_from_context(
     cluster = config.clusters[context[u"cluster"]]
     user = config.users[context[u"user"]]
 
-    base_url = URL.fromText(cluster[u"server"].decode("ascii"))
+    if isinstance(cluster[u"server"], bytes):
+        base_url = URL.fromText(cluster[u"server"].decode("ascii"))
+    else:
+        base_url = URL.fromText(cluster[u"server"])
     [ca_cert] = parse(cluster[u"certificate-authority"].bytes())
 
     client_chain = parse(user[u"client-certificate"].bytes())

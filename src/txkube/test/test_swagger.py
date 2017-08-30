@@ -353,15 +353,18 @@ class SwaggerTests(TestCase):
             raises_exception(CheckedValueTypeError),
         )
         now = datetime.utcnow()
+        now_isoformat = now.isoformat()
+        if isinstance(now_isoformat, bytes):
+            now_isoformat = now_isoformat.decode("ascii")
         self.expectThat(Type(s=now).s, Equals(now))
-        self.expectThat(Type(s=now.isoformat().decode("ascii")).s, Equals(now))
+        self.expectThat(Type(s=now_isoformat).s, Equals(now))
 
         # string / date-time fields serialize back to an ISO8601 format
         # string.
         serialized = Type(s=now).serialize()
         self.expectThat(
             serialized,
-            Equals({u"s": now.isoformat().decode("ascii")}),
+            Equals({u"s": now_isoformat}),
         )
         # Thanks for making bytes and unicode compare equal, Python.
         self.expectThat(serialized[u"s"], IsInstance(unicode))
