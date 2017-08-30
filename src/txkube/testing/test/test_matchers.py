@@ -53,8 +53,8 @@ class MappingEqualsTests(TestCase):
             mismatch.describe(),
             Equals(
                 u"type mismatch:\n"
-                u"reference = <type 'int'> (0)\n"
-                u"actual    = <type 'dict'> ({0: 1})\n"
+                u"reference = " + repr(int) + u" (0)\n"
+                u"actual    = " + repr(dict) + u" ({0: 1})\n"
             ),
         )
 
