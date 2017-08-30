@@ -585,7 +585,10 @@ def _parse_iso8601(text):
 
 
 def _isoformat(format, v):
-    return v.isoformat().decode("ascii")
+    v_isoformat = v.isoformat()
+    if isinstance(v_isoformat, bytes):
+        v_isoformat = v_isoformat.decode("ascii")
+    return v_isoformat
 
 
 
