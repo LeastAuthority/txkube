@@ -44,6 +44,7 @@ setuptools.setup(
         "dev": [
             "testtools",
             "hypothesis",
+            "iso8601==0.1.11",
             "eliot-tree>=17.0.0",
         ],
     },
