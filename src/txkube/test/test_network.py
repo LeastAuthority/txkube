@@ -34,7 +34,7 @@ from twisted.internet.defer import Deferred, succeed
 from twisted.internet.ssl import (
     CertificateOptions, DN, KeyPair, trustRootFromCertificates,
 )
-from twisted.internet.interfaces import IReactorSSL
+from twisted.internet.interfaces import IReactorSSL, IReactorTCP, IReactorTime
 from twisted.internet.endpoints import SSL4ServerEndpoint
 from twisted.web.client import Agent
 from twisted.web.server import Site
@@ -421,7 +421,9 @@ class MemoTests(TestCase):
 
 
 @attr.s
-class Redirectable(proxyForInterface(IReactorSSL)):
+class Redirectable(proxyForInterface(IReactorSSL),
+                   proxyForInterface(IReactorTCP),
+                   proxyForInterface(IReactorTime)):
     """
     An ``IReactorSSL`` which ignores the requested destination and always
     connects to an alternate address instead.
@@ -444,3 +446,11 @@ class Redirectable(proxyForInterface(IReactorSSL)):
         address.
         """
         return self.original.connectSSL(self.host, self.port, *a, **kw)
+
+
+    def connectTCP(self, host, port, *a, **kw):
+        """
+        Establish a TCP connection to the alternate address instead of the given
+        address.
+        """
+        return self.original.connectTCP(self.host, self.port, *a, **kw)
