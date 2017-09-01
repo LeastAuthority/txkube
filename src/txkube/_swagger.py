@@ -765,14 +765,25 @@ class _ClassModel(PClass):
                 raise
 
 
-        def compare_pclass(self, other):
+        def lt_pclass(self, other):
             if isinstance(other, self.__class__):
-                return cmp(
-                    sorted(self.serialize().items()),
-                    sorted(other.serialize().items()),
-                )
+                return sorted(self.serialize().items()) < sorted(other.serialize().items())
             return NotImplemented
 
+        def gt_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) > sorted(other.serialize().items())
+            return NotImplemented
+
+        def eq_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) == sorted(other.serialize().items())
+            return NotImplemented
+
+        def ne_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) != sorted(other.serialize().items())
+            return NotImplemented
 
         content = {
             attr.name: attr.pclass_field_for_attribute()
@@ -782,7 +793,10 @@ class _ClassModel(PClass):
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
         content["__new__"] = discard_constant_fields
-        content["__cmp__"] = compare_pclass
+        content["__lt__"] = lt_pclass
+        content["__gt__"] = gt_pclass
+        content["__eq__"] = eq_pclass
+        content["__ne__"] = ne_pclass
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
