@@ -44,7 +44,7 @@ setuptools.setup(
         "dev": [
             "testtools",
             "hypothesis",
-            "eliot-tree>=17.0.0",
+            "eliot-tree>=17.1.0",
         ],
     },
 )
