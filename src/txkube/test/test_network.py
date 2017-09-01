@@ -24,7 +24,7 @@ from eliot.testing import capture_logging
 
 from OpenSSL.crypto import FILETYPE_PEM
 
-from twisted.test.proto_helpers import MemoryReactor
+from twisted.test.proto_helpers import MemoryReactorClock
 from twisted.trial.unittest import TestCase as TwistedTestCase
 
 from twisted.python.filepath import FilePath
@@ -202,7 +202,7 @@ class ExtraNetworkClientTests(TestCase):
         """
         client = network_kubernetes(
             base_url=URL.fromText(u"http://127.0.0.1/"),
-            agent=Agent(MemoryReactor()),
+            agent=Agent(MemoryReactorClock()),
         ).client()
         client.list(v1.Pod)
 
