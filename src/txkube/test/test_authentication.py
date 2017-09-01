@@ -32,7 +32,7 @@ from twisted.python.filepath import FilePath
 from twisted.internet.protocol import Factory
 from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
-from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactor
+from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactorClock
 
 from ..testing import TestCase
 
@@ -83,7 +83,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         factory = Factory.forProtocol(lambda: server)
         factory.protocolConnectionMade = None
 
-        reactor = MemoryReactor()
+        reactor = MemoryReactorClock()
         reactor.listenTCP(80, factory)
 
         t = FilePath(self.useFixture(TempDir()).join(b""))
@@ -143,7 +143,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         factory = Factory.forProtocol(lambda: server)
         factory.protocolConnectionMade = None
 
-        reactor = MemoryReactor()
+        reactor = MemoryReactorClock()
         reactor.listenTCP(443, factory)
 
         token = bytes(uuid4())
@@ -223,7 +223,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
 
         self.assertThat(
             lambda: authenticate_with_serviceaccount(
-                MemoryReactor(), path=serviceaccount.path,
+                MemoryReactorClock(), path=serviceaccount.path,
             ),
             raises(ValueError("No certificate authority certificate found.")),
         )
@@ -254,7 +254,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
 
         self.assertThat(
             lambda: authenticate_with_serviceaccount(
-                MemoryReactor(), path=serviceaccount.path,
+                MemoryReactorClock(), path=serviceaccount.path,
             ),
             raises(ValueError(
                 "Invalid certificate authority certificate found.",
