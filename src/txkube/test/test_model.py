@@ -450,21 +450,11 @@ class KubernetesErrorTests(TestCase):
         # not (a1 > c)
         self.expectThat(a1, Not(GreaterThan(c)))
 
-        @attr.s
-        class Comparator(object):
-            result = attr.ib()
-
-            def __cmp__(self, other):
-                return self.result
-
-        largest = Comparator(1)
-        equalest = Comparator(0)
-        smallest = Comparator(-1)
+        largest = KubernetesError(999, model.v1.Status(status=u"Z"))
+        smallest = KubernetesError(1, model.v1.Status(status=u"A"))
 
         # a1 < largest
         self.expectThat(a1, LessThan(largest))
-        # a1 == equalest
-        self.expectThat(a1, Equals(equalest))
         # a1 > smallest
         self.expectThat(a1, GreaterThan(smallest))
 

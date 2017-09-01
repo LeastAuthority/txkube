@@ -13,6 +13,7 @@ objects and loaded from such objects.
 
 from json import load
 from datetime import datetime
+from functools import total_ordering
 
 from dateutil.parser import parse as parse_iso8601
 
@@ -765,12 +766,15 @@ class _ClassModel(PClass):
                 raise
 
 
-        def compare_pclass(self, other):
+        def lt_pclass(self, other):
             if isinstance(other, self.__class__):
-                return cmp(
-                    sorted(self.serialize().items()),
-                    sorted(other.serialize().items()),
-                )
+                return sorted(self.serialize().items()) < sorted(other.serialize().items())
+            return NotImplemented
+
+
+        def eq_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) == sorted(other.serialize().items())
             return NotImplemented
 
 
@@ -782,7 +786,9 @@ class _ClassModel(PClass):
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
         content["__new__"] = discard_constant_fields
-        content["__cmp__"] = compare_pclass
+        content["__lt__"] = lt_pclass
+        content["__eq__"] = eq_pclass
+        content = total_ordering(content)
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
