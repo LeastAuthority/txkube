@@ -1,6 +1,8 @@
 # Copyright Least Authority Enterprises.
 # See LICENSE for details.
 
+from __future__ import print_function
+
 import os
 from itertools import count, islice
 from uuid import uuid4
@@ -11,6 +13,8 @@ import pem
 from pyrsistent import InvariantException
 
 from fixtures import TempDir
+
+from zope.interface import implementer
 
 from testtools.matchers import AfterPreprocessing, Equals, Contains, IsInstance, raises
 
@@ -30,9 +34,10 @@ from cryptography.hazmat.backends import default_backend
 
 from twisted.python.filepath import FilePath
 from twisted.internet.protocol import Factory
+from twisted.internet.defer import succeed
 from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
-from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactor
+from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactorClock as MemoryReactor
 
 from ..testing import TestCase
 
@@ -67,6 +72,37 @@ NhGc6Ehmo21/uBPUR/6LWlxz/K7ZGzIZOKuXNBSqltLroxwUCEm2u+WR74M26x1W
 b8ravHNjkOR/ez4iyz0H7V84dJzjA1BOoa+Y7mHyhD8S
 -----END CERTIFICATE-----
 """
+
+try:
+    from twisted.internet.address import IPv4Address
+    from twisted.internet.interfaces import IReactorPluggableNameResolver
+
+    class Resolution(object):
+        name = None
+
+    class _FakeResolver(object):
+        def resolveHostName(self, resolutionReceiver, hostName, *args,  **kwargs):
+            portNumber = kwargs.pop('portNumber')
+            r = Resolution()
+            r.name = hostName
+
+            resolutionReceiver.resolutionBegan(r)
+            resolutionReceiver.addressResolved(IPv4Address('TCP', '1.2.3.4', portNumber))
+            resolutionReceiver.resolutionComplete()
+            return r
+
+    @implementer(IReactorPluggableNameResolver)
+    class _ResolvingMemoryReactor(MemoryReactor):
+        nameResolver = _FakeResolver()
+
+    MemoryReactor = _ResolvingMemoryReactor
+    expectedTCPConnectResult = '1.2.3.4'
+
+except Exception as e:
+    expectedTCPConnectResult = b'example.invalid'
+    pass
+
+
 
 class AuthenticateWithServiceAccountTests(TestCase):
     """
@@ -103,11 +139,12 @@ class AuthenticateWithServiceAccountTests(TestCase):
         agent = authenticate_with_serviceaccount(
             reactor, path=serviceaccount.path,
         )
-        agent.request(b"GET", b"http://example.invalid.", headers)
+        r = agent.request(b"GET", b"http://example.invalid.", headers)
+        reactor.advance(1)
 
         [(host, port, factory, _, _)] = reactor.tcpClients
 
-        self.expectThat((host, port), Equals((b"example.invalid.", 80)))
+        self.expectThat((host, port), Equals((expectedTCPConnectResult, 80)))
 
         pump = ConnectionCompleter(reactor).succeedOnce()
         pump.pump()
@@ -167,6 +204,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         )
         headers = Headers()
         agent.request(b"GET", b"https://example.invalid.", headers)
+        reactor.advance(1)
 
         [connection] = reactor.sslClients
         (host, port, factory) = connection[:3]
