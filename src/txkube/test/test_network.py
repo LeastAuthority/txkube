@@ -428,7 +428,7 @@ class Redirectable(proxyForInterface(IReactorSSL),
                    proxyForInterface(IReactorTime),
                    proxyForInterface(IReactorPluggableNameResolver)):
     """
-    An ``IReactorSSL`` which ignores the requested destination and always
+    A reactor which ignores the requested destination and always
     connects to an alternate address instead.
 
     :ivar host: The host portion of the alternate address.
