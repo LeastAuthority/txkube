@@ -1,0 +1,7 @@
+*.egg-info/
+.eggs/
+*.py[co]
+_trial_temp*/
+.coverage
+.hypothesis
+.automat_visualize
