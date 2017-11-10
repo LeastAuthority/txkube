@@ -8,12 +8,16 @@ from datetime import datetime, timedelta
 
 import pem
 
+import attr
+
 from pyrsistent import InvariantException
 
 from fixtures import TempDir
 
-from testtools.matchers import AfterPreprocessing, Equals, Contains, IsInstance, raises
-
+from testtools import ExpectedException
+from testtools.matchers import (
+    AfterPreprocessing, Equals, Contains, IsInstance, raises
+)
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.hashes import SHA256
@@ -28,13 +32,18 @@ from cryptography.x509 import (
 )
 from cryptography.hazmat.backends import default_backend
 
+from zope.interface import implementer
+
 from twisted.python.filepath import FilePath
+from twisted.internet.address import IPv4Address
+from twisted.internet.error import DNSLookupError
+from twisted.internet.interfaces import IHostResolution, IReactorPluggableNameResolver
 from twisted.internet.protocol import Factory
 from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
 from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactorClock
 
-from ..testing import TestCase
+from ..testing import TestCase, assertNoResult
 
 from .._authentication import Certificates, Chain, pairwise
 from .. import authenticate_with_serviceaccount
@@ -68,11 +77,50 @@ b8ravHNjkOR/ez4iyz0H7V84dJzjA1BOoa+Y7mHyhD8S
 -----END CERTIFICATE-----
 """
 
+# Let hostname u"example.invalid" map to an
+# IPv4 address in the TEST-NET range.
+HOST_MAP = {
+    u"example.invalid.": "192.0.2.2"
+}
+
+def create_reactor():
+    """
+    Twisted 17.1.0 and higher requires a reactor which implements
+    ``IReactorPluggableNameResolver``.
+    """
+
+    @implementer(IHostResolution)
+    @attr.s
+    class Resolution(object):
+        name = attr.ib()
+
+    class _FakeResolver(object):
+
+        def resolveHostName(self, resolutionReceiver, hostName, *args,  **kwargs):
+            portNumber = kwargs.pop('portNumber')
+            r = Resolution(name=hostName)
+
+            resolutionReceiver.resolutionBegan(r)
+            if hostName in HOST_MAP:
+                resolutionReceiver.addressResolved(
+                    IPv4Address('TCP', HOST_MAP[hostName], portNumber))
+            resolutionReceiver.resolutionComplete()
+            return r
+
+    @implementer(IReactorPluggableNameResolver)
+    class _ResolvingMemoryClockReactor(MemoryReactorClock):
+        nameResolver = _FakeResolver()
+
+    return _ResolvingMemoryClockReactor()
+
+
+
 class AuthenticateWithServiceAccountTests(TestCase):
     """
     Tests for ``authenticate_with_serviceaccount``.
     """
-    def _authorized_request(self, token, headers):
+    def _authorized_request(self, token, headers,
+                            kubernetes_host=b"example.invalid."):
         """
         Get an agent using ``authenticate_with_serviceaccount`` and issue a
         request with it.
@@ -83,7 +131,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         factory = Factory.forProtocol(lambda: server)
         factory.protocolConnectionMade = None
 
-        reactor = MemoryReactorClock()
+        reactor = create_reactor()
         reactor.listenTCP(80, factory)
 
         t = FilePath(self.useFixture(TempDir()).join(b""))
@@ -95,7 +143,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
 
         self.patch(
             os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
+                b"KUBERNETES_SERVICE_HOST": kubernetes_host,
                 b"KUBERNETES_SERVICE_PORT": b"443",
             },
         )
@@ -103,11 +151,13 @@ class AuthenticateWithServiceAccountTests(TestCase):
         agent = authenticate_with_serviceaccount(
             reactor, path=serviceaccount.path,
         )
-        agent.request(b"GET", b"http://example.invalid.", headers)
 
+        d = agent.request(b"GET", b"http://" + kubernetes_host, headers)
+        assertNoResult(self, d)
         [(host, port, factory, _, _)] = reactor.tcpClients
 
-        self.expectThat((host, port), Equals((b"example.invalid.", 80)))
+        addr = HOST_MAP.get(kubernetes_host.decode("ascii"), None)
+        self.expectThat((host, port), Equals((addr, 80)))
 
         pump = ConnectionCompleter(reactor).succeedOnce()
         pump.pump()
@@ -143,7 +193,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         factory = Factory.forProtocol(lambda: server)
         factory.protocolConnectionMade = None
 
-        reactor = MemoryReactorClock()
+        reactor = create_reactor()
         reactor.listenTCP(443, factory)
 
         token = bytes(uuid4())
@@ -182,6 +232,20 @@ class AuthenticateWithServiceAccountTests(TestCase):
             request_bytes,
             Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
         )
+
+
+    def test_hostname_does_not_resolve(self):
+        """
+        Specifying a hostname which cannot be resolved to an
+        IP address will result in an ``DNSLookupError``.
+        """
+        with ExpectedException(DNSLookupError, "DNS lookup failed: no results "
+                               "for hostname lookup: doesnotresolve."):
+            self._authorized_request(
+                token="test",
+                headers=Headers({}),
+                kubernetes_host=b"doesnotresolve"
+            )
 
 
     def test_other_headers_preserved(self):
@@ -223,7 +287,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
 
         self.assertThat(
             lambda: authenticate_with_serviceaccount(
-                MemoryReactorClock(), path=serviceaccount.path,
+                create_reactor(), path=serviceaccount.path,
             ),
             raises(ValueError("No certificate authority certificate found.")),
         )
@@ -254,7 +318,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
 
         self.assertThat(
             lambda: authenticate_with_serviceaccount(
-                MemoryReactorClock(), path=serviceaccount.path,
+                create_reactor(), path=serviceaccount.path,
             ),
             raises(ValueError(
                 "Invalid certificate authority certificate found.",

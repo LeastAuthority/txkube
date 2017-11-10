@@ -10,6 +10,8 @@ from fixtures import CompoundFixture
 from testtools import TestCase as TesttoolsTestCase
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 
+from twisted.python.failure import Failure
+
 from ._eliot import CaptureEliotLogs
 
 
@@ -62,3 +64,17 @@ class TestCase(TesttoolsTestCase):
             # it, Hypothesis can't see which of its example runs caused
             # problems.
             self.fail("expectation failed")
+
+
+
+def assertNoResult(case, d):
+    """
+    Assert that ``d`` does not have a result at this point.
+    """
+    result = []
+    d.addBoth(result.append)
+    if result:
+        if isinstance(result[0], Failure):
+            result[0].raiseException()
+        else:
+            case.fail("Got {} but expected no result".format(result[0]))
