@@ -35,7 +35,6 @@ from cryptography.hazmat.backends import default_backend
 from zope.interface import implementer
 
 from twisted.python.filepath import FilePath
-from twisted.internet import defer
 from twisted.internet.address import IPv4Address
 from twisted.internet.error import DNSLookupError
 from twisted.internet.interfaces import IHostResolution, IReactorPluggableNameResolver
@@ -44,7 +43,7 @@ from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
 from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactorClock
 
-from ..testing import TestCase
+from ..testing import TestCase, assertNoResult
 
 from .._authentication import Certificates, Chain, pairwise
 from .. import authenticate_with_serviceaccount
@@ -120,7 +119,6 @@ class AuthenticateWithServiceAccountTests(TestCase):
     """
     Tests for ``authenticate_with_serviceaccount``.
     """
-    @defer.inlineCallbacks
     def _authorized_request(self, token, headers,
                             kubernetes_host=b"example.invalid."):
         """
@@ -154,7 +152,8 @@ class AuthenticateWithServiceAccountTests(TestCase):
             reactor, path=serviceaccount.path,
         )
 
-        yield agent.request(b"GET", b"http://" + kubernetes_host, headers)
+        d = agent.request(b"GET", b"http://" + kubernetes_host, headers)
+        assertNoResult(self, d)
         [(host, port, factory, _, _)] = reactor.tcpClients
 
         addr = HOST_MAP.get(kubernetes_host.decode("ascii"), None)
@@ -163,10 +162,9 @@ class AuthenticateWithServiceAccountTests(TestCase):
         pump = ConnectionCompleter(reactor).succeedOnce()
         pump.pump()
 
-        defer.returnValue(server.data)
+        return server.data
 
 
-    @defer.inlineCallbacks
     def test_http_bearer_token_authorization(self):
         """
         The ``IAgent`` returned adds an *Authorization* header to each request it
@@ -174,7 +172,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         file.  This works over HTTP.
         """
         token = bytes(uuid4())
-        request_bytes = yield self._authorized_request(token=token, headers=None)
+        request_bytes = self._authorized_request(token=token, headers=None)
 
         # Sure would be nice to have an HTTP parser.
         self.assertThat(
@@ -236,7 +234,6 @@ class AuthenticateWithServiceAccountTests(TestCase):
         )
 
 
-    @defer.inlineCallbacks
     def test_hostname_does_not_resolve(self):
         """
         Specifying a hostname which cannot be resolved to an
@@ -244,14 +241,13 @@ class AuthenticateWithServiceAccountTests(TestCase):
         """
         with ExpectedException(DNSLookupError, "DNS lookup failed: no results "
                                "for hostname lookup: doesnotresolve."):
-            yield self._authorized_request(
+            self._authorized_request(
                 token="test",
                 headers=Headers({}),
                 kubernetes_host=b"doesnotresolve"
             )
 
 
-    @defer.inlineCallbacks
     def test_other_headers_preserved(self):
         """
         Other headers passed to the ``IAgent.request`` implementation are also
@@ -259,7 +255,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         """
         token = bytes(uuid4())
         headers = Headers({u"foo": [u"bar"]})
-        request_bytes = yield self._authorized_request(token=token, headers=headers)
+        request_bytes = self._authorized_request(token=token, headers=headers)
         self.expectThat(
             request_bytes,
             Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
