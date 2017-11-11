@@ -218,11 +218,6 @@ class AuthenticateWithServiceAccountTests(TestCase):
         headers = Headers()
         agent.request(b"GET", b"https://example.invalid.", headers)
 
-        [connection] = reactor.sslClients
-        (host, port, factory) = connection[:3]
-        # Put it somewhere ConnectionCompleter can deal with.
-        reactor.tcpClients.append((host, port, factory, None, None))
-
         pump = ConnectionCompleter(reactor).succeedOnce()
         pump.pump()
 
