@@ -120,7 +120,9 @@ class AuthenticateWithServiceAccountTests(TestCase):
     Tests for ``authenticate_with_serviceaccount``.
     """
     def _authorized_request(self, token, headers,
-                            kubernetes_host=b"example.invalid."):
+                            kubernetes_host=b"example.invalid.",
+                            port=80,
+                            proto=b'http'):
         """
         Get an agent using ``authenticate_with_serviceaccount`` and issue a
         request with it.
@@ -132,7 +134,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         factory.protocolConnectionMade = None
 
         reactor = create_reactor()
-        reactor.listenTCP(80, factory)
+        reactor.listenTCP(port, factory)
 
         t = FilePath(self.useFixture(TempDir()).join(b""))
         serviceaccount = t.child(b"serviceaccount")
@@ -152,12 +154,12 @@ class AuthenticateWithServiceAccountTests(TestCase):
             reactor, path=serviceaccount.path,
         )
 
-        d = agent.request(b"GET", b"http://" + kubernetes_host, headers)
+        d = agent.request(b"GET", proto + b"://" + kubernetes_host, headers)
         assertNoResult(self, d)
         [(host, port, factory, _, _)] = reactor.tcpClients
 
         addr = HOST_MAP.get(kubernetes_host.decode("ascii"), None)
-        self.expectThat((host, port), Equals((addr, 80)))
+        self.expectThat((host, port), Equals((addr, port)))
 
         pump = ConnectionCompleter(reactor).succeedOnce()
         pump.pump()
@@ -187,41 +189,10 @@ class AuthenticateWithServiceAccountTests(TestCase):
         issues.  The header includes the bearer token from the service account
         file.  This works over HTTPS.
         """
-        # This test duplicates a lot of logic from _authorized_request because
-        # ConnectionCompleter doesn't work with TLS connections by itself.
-        server = AccumulatingProtocol()
-        factory = Factory.forProtocol(lambda: server)
-        factory.protocolConnectionMade = None
-
-        reactor = create_reactor()
-        reactor.listenTCP(443, factory)
-
         token = bytes(uuid4())
+        request_bytes = self._authorized_request(token, Headers(),
+            kubernetes_host=b"example.invalid.", port=443, proto=b'https')
 
-        t = FilePath(self.useFixture(TempDir()).join(b""))
-        serviceaccount = t.child(b"serviceaccount")
-        serviceaccount.makedirs()
-
-        serviceaccount.child(b"ca.crt").setContent(_CA_CERT_PEM)
-        serviceaccount.child(b"token").setContent(token)
-
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
-                b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
-
-        agent = authenticate_with_serviceaccount(
-            reactor, path=serviceaccount.path,
-        )
-        headers = Headers()
-        agent.request(b"GET", b"https://example.invalid.", headers)
-
-        pump = ConnectionCompleter(reactor).succeedOnce()
-        pump.pump()
-
-        request_bytes = server.data
         # Sure would be nice to have an HTTP parser.
         self.assertThat(
             request_bytes,
