@@ -215,7 +215,7 @@ class _NetworkClient(object):
     def _request(self, method, url, headers=None, bodyProducer=None):
         action = start_action(
             action_type=u"network-client:request",
-            method=method,
+            method=method.decode("ascii"),
             url=url.asText(),
         )
         with action.context():
