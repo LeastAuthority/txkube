@@ -11,6 +11,8 @@ from pyrsistent import PClass, field
 
 from testtools.matchers import Is, Equals
 
+from twisted.python.compat import _PY3
+
 from .. import TestCase
 from ..matchers import MappingEquals, AttrsEquals, PClassEquals
 
@@ -129,19 +131,23 @@ class AttrsEqualsTests(TestCase):
 
         # Different types altogether.
         mismatch = AttrsEquals(self.attrs(0)).match(1)
+        if _PY3:
+            method = u"AttrsEqualsTests.attrs"
+        else:
+            method = u"attrs"
         self.expectThat(
             mismatch.describe(),
             Equals(
                 u"type mismatch:\n"
-                u"reference = <class 'txkube.testing.test.test_matchers.attrs'> (attrs(foo=0))\n"
-                u"actual    = <type 'int'> (1)\n"
+                u"reference = " + repr(self.attrs) + u" (" + method + u"(foo=0))\n"
+                u"actual    = " + repr(int) + u" (1)\n"
             ),
         )
 
         # The matcher has a nice string representation.
         self.expectThat(
             str(AttrsEquals(self.attrs(u"bar"))),
-            Equals("AttrsEquals(attrs(foo=u'bar'))"),
+            Equals("AttrsEquals(" + str(method) + "(foo=" + repr(u'bar') + "))"),
         )
 
 
@@ -185,12 +191,17 @@ class PClassEqualsTests(TestCase):
 
         # Different types altogether.
         mismatch = PClassEquals(0).match(self.pclass(foo=1))
+        if _PY3:
+            clazz = u"<class 'txkube.testing.test.test_matchers.PClassEqualsTests.pclass'>"
+        else:
+            clazz = u"<class 'txkube.testing.test.test_matchers.pclass'>"
+
         self.expectThat(
             mismatch.describe(),
             Equals(
                 u"type mismatch:\n"
-                u"reference = <type 'int'> (0)\n"
-                u"actual    = <class 'txkube.testing.test.test_matchers.pclass'> (pclass(foo=1))\n"
+                u"reference = " + repr(int) + u" (0)\n"
+                u"actual    = " + clazz + u" (pclass(foo=1))\n"
             ),
         )
 
@@ -221,5 +232,5 @@ class PClassEqualsTests(TestCase):
         # The matcher has a nice string representation.
         self.expectThat(
             str(PClassEquals(self.pclass(foo=u"bar"))),
-            Equals("PClassEquals(pclass(foo=u'bar'))"),
+            Equals("PClassEquals(pclass(foo=" + repr(u'bar') + u"))"),
         )
