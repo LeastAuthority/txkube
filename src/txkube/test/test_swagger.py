@@ -572,14 +572,15 @@ class Kubernetes15SwaggerTests(TestCase):
         # Arbitrarily select a simple definition that includes an array from
         # the spec.  It also demonstrates that "required" itself is optional.
         name = u"v1.Capabilities"
+        capability = b"hello"
         Capabilities = spec.pclass_for_definition(name)
 
         self.expectThat(
-            lambda: Capabilities(add=b"hello"),
+            lambda: Capabilities(add=capability),
             raises_exception(
                 CheckedValueTypeError,
                 expected_types=(unicode,),
-                actual_type=bytes,
+                actual_type=type(capability[0]),
             ),
         )
 
