@@ -170,7 +170,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         addr = HOST_MAP.get(kubernetes_host.decode("ascii"), None)
         self.expectThat((host, port), Equals((addr, port)))
 
-        pump = ConnectionCompleter(reactor).succeedOnce()
+        pump = ConnectionCompleter(reactor).succeedOnce(debug=True)
         pump.pump()
 
         return server.data
