@@ -39,9 +39,11 @@ from twisted.internet.address import IPv4Address
 from twisted.internet.error import DNSLookupError
 from twisted.internet.interfaces import IHostResolution, IReactorPluggableNameResolver
 from twisted.internet.protocol import Factory
+from twisted.protocols.tls import TLSMemoryBIOFactory
 from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
 from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactorClock
+from twisted.test.test_sslverify import certificatesForAuthorityAndServer
 
 from ..testing import TestCase, assertNoResult
 
@@ -122,7 +124,8 @@ class AuthenticateWithServiceAccountTests(TestCase):
     def _authorized_request(self, token, headers,
                             kubernetes_host=b"example.invalid.",
                             port=80,
-                            proto=b'http'):
+                            proto=b'http',
+                            serverWrapper=lambda server: server):
         """
         Get an agent using ``authenticate_with_serviceaccount`` and issue a
         request with it.
@@ -130,8 +133,14 @@ class AuthenticateWithServiceAccountTests(TestCase):
         :return bytes: The bytes of the request the agent issues.
         """
         server = AccumulatingProtocol()
-        factory = Factory.forProtocol(lambda: server)
-        factory.protocolConnectionMade = None
+
+        @Factory.forProtocol
+        def accumulator():
+            accumulator.currentProtocol = server
+            return server
+        accumulator.currentProtocol = None
+        accumulator.protocolConnectionMade = None
+        factory = serverWrapper(accumulator)
 
         reactor = create_reactor()
         reactor.listenTCP(port, factory)
@@ -167,6 +176,19 @@ class AuthenticateWithServiceAccountTests(TestCase):
         return server.data
 
 
+    def _authorized_request_https(self, token, headers,
+                            kubernetes_host=b"example.invalid.",
+                            port=443,
+                            proto=b'https'):
+        authority, server = certificatesForAuthorityAndServer(kubernetes_host.decode('ascii'))
+
+        def tlsify(serverFactory):
+            return TLSMemoryBIOFactory(server.options(), False, serverFactory)
+
+        return self._authorized_request(token, headers,
+            kubernetes_host=kubernetes_host, port=port, proto=proto, serverWrapper=tlsify)
+
+
     def test_http_bearer_token_authorization(self):
         """
         The ``IAgent`` returned adds an *Authorization* header to each request it
@@ -190,8 +212,8 @@ class AuthenticateWithServiceAccountTests(TestCase):
         file.  This works over HTTPS.
         """
         token = bytes(uuid4())
-        request_bytes = self._authorized_request(token, Headers(),
-            kubernetes_host=b"example.invalid.", port=443, proto=b'https')
+        request_bytes = self._authorized_request_https(token, Headers(),
+            kubernetes_host=b"example.invalid.")
 
         # Sure would be nice to have an HTTP parser.
         self.assertThat(
