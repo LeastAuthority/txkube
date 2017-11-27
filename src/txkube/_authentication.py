@@ -230,6 +230,46 @@ class ClientCertificatePolicyForHTTPS(PClass):
 
 
 
+def https_policy_from_config(config):
+    """
+    Create an ``IPolicyForHTTPS`` which can authenticate a Kubernetes API
+    server.
+
+    :param KubeConfig config: A Kubernetes configuration containing an active
+        context identifying a cluster.  The resulting ``IPolicyForHTTPS`` with
+        authenticate the API server for that cluster.
+
+    :return IPolicyForHTTPS: A TLS context which requires server certificates
+        signed by the certificate authority certificate associated with the
+        active context's cluster.
+    """
+    base_url = URL.fromText(config.cluster["server"].decode("ascii"))
+
+    ca_certs = pem.parse(config.cluster["certificate-authority"].bytes())
+    if not ca_certs:
+        raise ValueError("No certificate authority certificate found.")
+    ca_cert = ca_certs[0]
+
+    try:
+        # Validate the certificate so we have early failures for garbage data.
+        ssl.Certificate.load(ca_cert.as_bytes(), FILETYPE_PEM)
+    except OpenSSLError as e:
+        raise ValueError(
+            "Invalid certificate authority certificate found.",
+            str(e),
+        )
+
+    netloc = NetLocation(host=base_url.host, port=base_url.port)
+    policy = ClientCertificatePolicyForHTTPS(
+        credentials={},
+        trust_roots={
+            netloc: ca_cert,
+        },
+    )
+    return policy
+
+
+
 def authenticate_with_certificate_chain(reactor, base_url, client_chain, client_key, ca_cert):
     """
     Create an ``IAgent`` which can issue authenticated requests to a
@@ -330,32 +370,8 @@ def authenticate_with_serviceaccount(reactor, **kw):
         interact with it.
     """
     config = KubeConfig.from_service_account(**kw)
-
+    policy = https_policy_from_config(config)
     token = config.user["token"]
-    base_url = URL.fromText(config.cluster["server"].decode("ascii"))
-
-    ca_certs = pem.parse(config.cluster["certificate-authority"].bytes())
-    if not ca_certs:
-        raise ValueError("No certificate authority certificate found.")
-    ca_cert = ca_certs[0]
-
-    try:
-        # Validate the certificate so we have early failures for garbage data.
-        ssl.Certificate.load(ca_cert.as_bytes(), FILETYPE_PEM)
-    except OpenSSLError as e:
-        raise ValueError(
-            "Invalid certificate authority certificate found.",
-            str(e),
-        )
-
-    netloc = NetLocation(host=base_url.host, port=base_url.port)
-    policy = ClientCertificatePolicyForHTTPS(
-        credentials={},
-        trust_roots={
-            netloc: ca_cert,
-        },
-    )
-
     agent = HeaderInjectingAgent(
         _to_inject=Headers({u"authorization": [u"Bearer {}".format(token)]}),
         _agent=Agent(reactor, contextFactory=policy),
