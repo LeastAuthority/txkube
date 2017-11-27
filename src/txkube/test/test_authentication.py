@@ -14,7 +14,11 @@ import attr
 
 from pyrsistent import InvariantException
 
+from hypothesis import given
+
 from fixtures import TempDir
+
+from zope.interface.verify import verifyObject
 
 from testtools import ExpectedException
 from testtools.matchers import (
@@ -39,13 +43,22 @@ from zope.interface import implementer
 from twisted.python.filepath import FilePath
 from twisted.internet.address import IPv4Address
 from twisted.internet.error import DNSLookupError
-from twisted.internet.interfaces import IHostResolution, IReactorPluggableNameResolver
+from twisted.internet.interfaces import (
+    IHostResolution,
+    IReactorPluggableNameResolver,
+    IOpenSSLClientConnectionCreator,
+)
 from twisted.internet.protocol import Factory
+from twisted.web.iweb import IPolicyForHTTPS
 from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
 from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactorClock
 
 from ..testing import TestCase, assertNoResult
+from ..testing.strategies import (
+    dns_subdomains,
+    port_numbers,
+)
 
 from .._authentication import (
     ClientCertificatePolicyForHTTPS,
@@ -253,7 +266,7 @@ class HTTPSPolicyFromConfigTests(TestCase):
         config = KubeConfig.from_service_account(path=serviceaccount.path)
 
         policy = https_policy_from_config(config)
-        self.assertThat(
+        self.expectThat(
             policy,
             Equals(
                 ClientCertificatePolicyForHTTPS(
@@ -323,6 +336,41 @@ class HTTPSPolicyFromConfigTests(TestCase):
                 "[('PEM routines', 'PEM_read_bio', 'bad base64 decode')]",
             )),
         )
+
+
+
+class ClientCertificatePolicyForHTTPSTests(TestCase):
+    """
+    Tests for ``ClientCertificatePolicyForHTTPS``.
+    """
+    def test_interface(self):
+        """
+        ``ClientCertificatePolicyForHTTPS`` instances provide ``IPolicyForHTTPS``.
+        """
+        policy = ClientCertificatePolicyForHTTPS(
+            credentials={},
+            trust_roots={},
+        )
+        verifyObject(IPolicyForHTTPS, policy)
+
+
+    @given(dns_subdomains(), dns_subdomains(), port_numbers(), port_numbers())
+    def test_creatorForNetLoc_interface(self, host_known, host_used, port_known, port_used):
+        """
+        ``ClientCertificatePolicyForHTTPS.creatorForNetloc`` returns an object
+        that provides ``IOpenSSLClientConnectionCreator``.
+        """
+        netloc = NetLocation(host=host_known, port=port_known)
+        cert = pem.parse(_CA_CERT_PEM)[0]
+
+        policy = ClientCertificatePolicyForHTTPS(
+            credentials={},
+            trust_roots={
+                netloc: cert,
+            },
+        )
+        creator = policy.creatorForNetloc(host_used, port_used)
+        verifyObject(IOpenSSLClientConnectionCreator, creator)
 
 
 

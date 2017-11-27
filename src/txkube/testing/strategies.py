@@ -381,13 +381,20 @@ def pods(model=default_model):
     )
 
 
+def port_numbers(min_value=1, max_value=65535):
+    """
+    Builds integers in the range of TCP/UDP port numbers.
+    """
+    return integers(min_value, max_value)
+
+
 def service_ports(model=default_model):
     """
     Build ``v1.ServicePort``.
     """
     return builds(
         model.v1.ServicePort,
-        port=integers(min_value=1, max_value=65535),
+        port=port_numbers(),
         # The specification doesn't document name as required, but it is.
         name=dns_labels().filter(lambda name: len(name) <= 24),
     )
