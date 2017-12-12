@@ -9,21 +9,13 @@ from hypothesis.strategies import (
 from unittest import TestCase
 
 
-def port_numbers(min_value=1, max_value=65535):
-    """
-    Builds integers in the range of TCP/UDP port numbers.
-    """
-    return integers(min_value, max_value)
-
-
 class ClientCertificatePolicyForHTTPSTests(TestCase):
     """
     Tests for ``ClientCertificatePolicyForHTTPS``.
     """
-    @given(port_numbers(), port_numbers(), port_numbers(), port_numbers())
-    def test_creatorForNetLoc_interface(self, host_known, host_used, port_known, port_used):
+    @given(integers())
+    def test_foo(self, foo):
         """
-        ``ClientCertificatePolicyForHTTPS.creatorForNetloc`` returns an object
-        that provides ``IOpenSSLClientConnectionCreator``.
+        foo
         """
         1 + 1 == 2
