@@ -809,6 +809,7 @@ class _ClassModel(PClass):
         content["__ge__"] = ge_pclass
         content["__eq__"] = eq_pclass
         content["__ne__"] = ne_pclass
+        content["__hash__"] = PClass.__hash__
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
