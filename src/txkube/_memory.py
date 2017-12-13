@@ -5,7 +5,7 @@
 An in-memory implementation of the Kubernetes client interface.
 """
 
-from json import dumps, loads
+from json import loads
 
 import attr
 
@@ -29,6 +29,8 @@ from . import (
     IKubernetes, KubernetesError, network_kubernetes,
     v1_5_model,
 )
+
+from ._compat import dumps_bytes
 
 
 def memory_kubernetes():
@@ -394,7 +396,8 @@ def response(request, status, obj):
     request.responseHeaders.setRawHeaders(
         u"content-type", [u"application/json"],
     )
-    return dumps(obj)
+    body = dumps_bytes(obj)
+    return body
 
 
 
