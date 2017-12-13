@@ -16,6 +16,7 @@ from attr import validators
 
 from pem import parse
 
+from twisted.python.compat import unicode
 from twisted.python.reflect import namedAny
 from twisted.python.failure import Failure
 from twisted.python.url import URL
@@ -157,21 +158,28 @@ class _NetworkClient(object):
     def _delete(self, url, options):
         bodyProducer = None
         if options is not None:
-            bodyProducer = _BytesProducer(
-                dumps(self.model.iobject_to_raw(options)),
-            )
+            body = dumps(self.model.iobject_to_raw(options))
+            if isinstance(body, unicode):
+                body = body.encode("ascii")
+            bodyProducer = _BytesProducer(body)
         return self._request(b"DELETE", url, bodyProducer=bodyProducer)
 
 
     def _post(self, url, obj):
+        body = dumps(obj)
+        if isinstance(body, unicode):
+            body = body.encode("ascii")
         return self._request(
-            b"POST", url, bodyProducer=_BytesProducer(dumps(obj)),
+            b"POST", url, bodyProducer=_BytesProducer(body),
         )
 
 
     def _put(self, url, obj):
+        body = dumps(obj)
+        if isinstance(body, unicode):
+            body = body.encode("ascii")
         return self._request(
-            b"PUT", url, bodyProducer=_BytesProducer(dumps(obj)),
+            b"PUT", url, bodyProducer=_BytesProducer(body),
         )
 
 

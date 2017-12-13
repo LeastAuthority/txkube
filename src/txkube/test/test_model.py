@@ -35,6 +35,7 @@ from testtools.twistedsupport import succeeded
 from hypothesis import HealthCheck, settings, given, assume
 from hypothesis.strategies import sampled_from, choices
 
+from twisted.python.compat import unicode
 from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
 from twisted.web.iweb import IResponse
@@ -389,6 +390,8 @@ class KubernetesErrorTests(TestCase):
         """
         def response():
             body = dumps(v1_5_model.iobject_to_raw(v1_5_model.v1.Status()))
+            if isinstance(body, unicode):
+                body = body.encode("ascii")
             return MemoryResponse(
                 version=(b"HTTP", 1, 1),
                 code=200,

@@ -13,6 +13,7 @@ from pyrsistent import InvariantException, PClass, field, pset
 
 from zope.interface import Interface, implementer
 
+from twisted.python.compat import unicode
 from twisted.python.url import URL
 
 from twisted.web.http import CREATED, NOT_FOUND, OK
@@ -394,7 +395,10 @@ def response(request, status, obj):
     request.responseHeaders.setRawHeaders(
         u"content-type", [u"application/json"],
     )
-    return dumps(obj)
+    body = dumps(obj)
+    if isinstance(body, unicode):
+        body = body.encode("ascii")
+    return body
 
 
 
