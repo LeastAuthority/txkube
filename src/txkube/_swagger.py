@@ -770,9 +770,19 @@ class _ClassModel(PClass):
                 return sorted(self.serialize().items()) < sorted(other.serialize().items())
             return NotImplemented
 
+        def le_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) <= sorted(other.serialize().items())
+            return NotImplemented
+
         def gt_pclass(self, other):
             if isinstance(other, self.__class__):
                 return sorted(self.serialize().items()) > sorted(other.serialize().items())
+            return NotImplemented
+
+        def ge_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) >= sorted(other.serialize().items())
             return NotImplemented
 
         def eq_pclass(self, other):
@@ -794,7 +804,9 @@ class _ClassModel(PClass):
         content["serialize"] = _serialize_with_omit
         content["__new__"] = discard_constant_fields
         content["__lt__"] = lt_pclass
+        content["__le__"] = le_pclass
         content["__gt__"] = gt_pclass
+        content["__ge__"] = ge_pclass
         content["__eq__"] = eq_pclass
         content["__ne__"] = ne_pclass
         huh = type(nativeString(self.name), bases + (PClass,), content)
