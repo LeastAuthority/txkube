@@ -253,7 +253,7 @@ class HTTPSPolicyFromConfigTests(TestCase):
         *KUBERNETES_...* environment variables to identify the address of the
         server.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).join(u""))
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -268,7 +268,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
             },
         )
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(
+            path=serviceaccount.asTextMode().path)
 
         policy = https_policy_from_config(config)
         self.expectThat(
@@ -303,7 +304,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
             },
         )
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(
+            path=serviceaccount.asTextMode().path)
         self.assertThat(
             lambda: https_policy_from_config(config),
             raises(ValueError("No certificate authority certificate found.")),
@@ -333,7 +335,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
             },
         )
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(
+            path=serviceaccount.asTextMode().path)
         self.assertThat(
             lambda: https_policy_from_config(config),
             raises(ValueError(
