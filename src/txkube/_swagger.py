@@ -780,6 +780,7 @@ class _ClassModel(PClass):
         content["serialize"] = _serialize_with_omit
         content["__new__"] = discard_constant_fields
         content["__cmp__"] = compare_pclass
+        content["__hash__"] = PClass.__hash__
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
