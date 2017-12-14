@@ -24,7 +24,7 @@ from eliot.testing import capture_logging
 
 from OpenSSL.crypto import FILETYPE_PEM
 
-from twisted.test.proto_helpers import MemoryReactor
+from twisted.test.proto_helpers import MemoryReactorClock
 from twisted.trial.unittest import TestCase as TwistedTestCase
 
 from twisted.python.filepath import FilePath
@@ -34,7 +34,9 @@ from twisted.internet.defer import Deferred, succeed
 from twisted.internet.ssl import (
     CertificateOptions, DN, KeyPair, trustRootFromCertificates,
 )
-from twisted.internet.interfaces import IReactorSSL
+from twisted.internet.interfaces import (
+    IReactorSSL, IReactorTCP, IReactorTime, IReactorPluggableNameResolver,
+)
 from twisted.internet.endpoints import SSL4ServerEndpoint
 from twisted.web.client import Agent
 from twisted.web.server import Site
@@ -200,7 +202,7 @@ class ExtraNetworkClientTests(TestCase):
         """
         client = network_kubernetes(
             base_url=URL.fromText(u"http://127.0.0.1/"),
-            agent=Agent(MemoryReactor()),
+            agent=Agent(MemoryReactorClock()),
         ).client()
         client.list(v1.Pod)
 
@@ -421,9 +423,12 @@ class MemoTests(TestCase):
 
 
 @attr.s
-class Redirectable(proxyForInterface(IReactorSSL)):
+class Redirectable(proxyForInterface(IReactorSSL),
+                   proxyForInterface(IReactorTCP),
+                   proxyForInterface(IReactorTime),
+                   proxyForInterface(IReactorPluggableNameResolver)):
     """
-    An ``IReactorSSL`` which ignores the requested destination and always
+    A reactor which ignores the requested destination and always
     connects to an alternate address instead.
 
     :ivar host: The host portion of the alternate address.
@@ -444,3 +449,11 @@ class Redirectable(proxyForInterface(IReactorSSL)):
         address.
         """
         return self.original.connectSSL(self.host, self.port, *a, **kw)
+
+
+    def connectTCP(self, host, port, *a, **kw):
+        """
+        Establish a TCP connection to the alternate address instead of the given
+        address.
+        """
+        return self.original.connectTCP(self.host, self.port, *a, **kw)

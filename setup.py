@@ -32,7 +32,7 @@ setuptools.setup(
         "incremental",
         # See https://github.com/twisted/treq/issues/167
         # And https://twistedmatrix.com/trac/ticket/9032
-        "twisted[tls]!=17.1.0",
+        "twisted[tls]>=17.9.0",
         "pem",
         "eliot",
         "python-dateutil",
@@ -44,7 +44,7 @@ setuptools.setup(
         "dev": [
             "testtools",
             "hypothesis",
-            "eliot-tree>=17.0.0",
+            "eliot-tree>=17.1.0",
         ],
     },
 )

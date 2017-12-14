@@ -5,6 +5,11 @@ __all__ = [
     "strategies",
     "integration",
     "TestCase", "AsynchronousDeferredRunTest",
+    "assertNoResult",
 ]
 
-from ._testcase import TestCase, AsynchronousDeferredRunTest
+from ._testcase import (
+    TestCase,
+    AsynchronousDeferredRunTest,
+    assertNoResult,
+)
