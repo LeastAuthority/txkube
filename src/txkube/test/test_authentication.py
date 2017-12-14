@@ -35,6 +35,7 @@ from cryptography.x509 import (
     DNSName,
     Name,
     NameAttribute,
+    random_serial_number,
 )
 from cryptography.hazmat.backends import default_backend
 
@@ -461,11 +462,11 @@ class ChainTests(TestCase):
                     BasicConstraints(True, None),
                     critical=True,
                 )
-            return builder.public_key(a_key.public_key(),
-            ).serial_number(1,
+            return builder.public_key(pubkey,
+            ).serial_number(random_serial_number(),
             ).not_valid_before(datetime.utcnow(),
             ).not_valid_after(datetime.utcnow() + timedelta(seconds=1),
-            ).sign(a_key, SHA256(), default_backend(),
+            ).sign(privkey, SHA256(), default_backend(),
             )
 
         a_cert = cert(u"a.invalid", u"a.invalid", a_key.public_key(), a_key, True)
