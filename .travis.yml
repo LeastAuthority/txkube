@@ -34,9 +34,9 @@ install:
 
 script:
   - "pyflakes src"
-  - "coverage run --rcfile=${PWD}/.coveragerc $(type -p trial) txkube"
+  - "python -Wdefault::DeprecationWarning -m coverage run --rcfile=${PWD}/.coveragerc -m twisted.trial txkube"
   # See .coveragerc for an explanation of this step.
-  - "coverage combine .coverage"
+  - "python -m coverage combine .coverage"
 
 after_success:
   - "codecov"
