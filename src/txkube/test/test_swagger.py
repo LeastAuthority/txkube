@@ -17,6 +17,7 @@ from pyrsistent import (
     PTypeError, PClass, freeze,
 )
 
+from twisted.python.compat import long, unicode
 from twisted.python.filepath import FilePath
 
 from testtools.matchers import (
@@ -38,7 +39,8 @@ def swagger_primitive_types():
     """
     Hypothesis strategy to build Swagger *primitive* type definitions.
     """
-    def _swaggered((t, f)):
+    def _swaggered(type_format):
+        (t, f) = type_format
         result = {u"type": t}
         if f is not None:
             result[u"format"] = f
@@ -351,15 +353,18 @@ class SwaggerTests(TestCase):
             raises_exception(CheckedValueTypeError),
         )
         now = datetime.utcnow()
+        now_isoformat = now.isoformat()
+        if isinstance(now_isoformat, bytes):
+            now_isoformat = now_isoformat.decode("ascii")
         self.expectThat(Type(s=now).s, Equals(now))
-        self.expectThat(Type(s=now.isoformat().decode("ascii")).s, Equals(now))
+        self.expectThat(Type(s=now_isoformat).s, Equals(now))
 
         # string / date-time fields serialize back to an ISO8601 format
         # string.
         serialized = Type(s=now).serialize()
         self.expectThat(
             serialized,
-            Equals({u"s": now.isoformat().decode("ascii")}),
+            Equals({u"s": now_isoformat}),
         )
         # Thanks for making bytes and unicode compare equal, Python.
         self.expectThat(serialized[u"s"], IsInstance(unicode))
@@ -383,7 +388,7 @@ class SwaggerTests(TestCase):
         self.expectThat(Type(s=u"foo").s, Equals(u"foo"))
         self.expectThat(Type(s=u"50").s, Equals(u"50"))
         self.expectThat(Type(s=50).s, Equals(50))
-        self.expectThat(Type(s=50L).s, Equals(50))
+        self.expectThat(Type(s=long(50)).s, Equals(50))
 
 
     def test_object(self):
@@ -567,14 +572,15 @@ class Kubernetes15SwaggerTests(TestCase):
         # Arbitrarily select a simple definition that includes an array from
         # the spec.  It also demonstrates that "required" itself is optional.
         name = u"v1.Capabilities"
+        capability = b"hello"
         Capabilities = spec.pclass_for_definition(name)
 
         self.expectThat(
-            lambda: Capabilities(add=b"hello"),
+            lambda: Capabilities(add=capability),
             raises_exception(
                 CheckedValueTypeError,
                 expected_types=(unicode,),
-                actual_type=bytes,
+                actual_type=type(capability[0]),
             ),
         )
 

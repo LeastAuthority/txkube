@@ -32,9 +32,34 @@ class KubernetesError(Exception):
         self.code = code
         self.status = status
 
-    def __cmp__(self, other):
+    def __lt__(self, other):
         if isinstance(other, self.__class__):
-            return cmp((self.code, self.status), (other.code, other.status))
+            return (self.code, self.status) < (other.code, other.status)
+        return NotImplemented
+
+    def __gt__(self, other):
+        if isinstance(other, self.__class__):
+            return (self.code, self.status) > (other.code, other.status)
+        return NotImplemented
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (self.code, self.status) == (other.code, other.status)
+        return NotImplemented
+
+    def __le__(self, other):
+        if isinstance(other, self.__class__):
+            return (self.code, self.status) >= (other.code, other.status)
+        return NotImplemented
+
+    def __ge__(self, other):
+        if isinstance(other, self.__class__):
+            return (self.code, self.status) >= (other.code, other.status)
+        return NotImplemented
+
+    def __ne__(self, other):
+        if isinstance(other, self.__class__):
+            return (self.code, self.status) != (other.code, other.status)
         return NotImplemented
 
     @classmethod

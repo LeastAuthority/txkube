@@ -5,6 +5,8 @@
 Tests for ``txkube.memory_kubernetes``.
 """
 
+from twisted.python.compat import unicode
+
 from zope.interface.verify import verifyClass
 
 from hypothesis import given

@@ -13,6 +13,7 @@ from zope.interface import implementer
 
 from pyrsistent import CheckedPVector, PClass, field, pmap_field
 
+from twisted.python.compat import long, unicode
 from twisted.python.url import URL
 from twisted.internet import ssl
 from twisted.web.iweb import IPolicyForHTTPS, IAgent
@@ -243,7 +244,10 @@ def https_policy_from_config(config):
         signed by the certificate authority certificate associated with the
         active context's cluster.
     """
-    base_url = URL.fromText(config.cluster["server"].decode("ascii"))
+    server = config.cluster["server"]
+    if isinstance(server, bytes):
+        server = server.decode("ascii")
+    base_url = URL.fromText(server)
 
     ca_certs = pem.parse(config.cluster["certificate-authority"].bytes())
     if not ca_certs:

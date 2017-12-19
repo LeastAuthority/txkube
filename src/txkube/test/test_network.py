@@ -329,8 +329,8 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
 
         :return FilePath: The path to the written configuration file.
         """
-        config = FilePath(self.mktemp())
-        config.setContent(safe_dump({
+        config_file = FilePath(self.mktemp())
+        config = safe_dump({
             "apiVersion": "v1",
             "contexts": [
                 {
@@ -359,8 +359,9 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
                     },
                 },
             ],
-        }))
-        return config
+        })
+        config_file.setContent(config.encode("ascii"))
+        return config_file
 
 
 

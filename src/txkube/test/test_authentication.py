@@ -50,6 +50,7 @@ from twisted.internet.interfaces import (
     IOpenSSLClientConnectionCreator,
 )
 from twisted.internet.protocol import Factory
+from twisted.python.compat import _PY3
 from twisted.web.iweb import IPolicyForHTTPS
 from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
@@ -157,20 +158,29 @@ class AuthenticateWithServiceAccountTests(TestCase):
         reactor = create_reactor()
         reactor.listenTCP(80, factory)
 
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).join(""))
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
         serviceaccount.child(b"ca.crt").setContent(_CA_CERT_PEM)
         serviceaccount.child(b"token").setContent(token)
 
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": kubernetes_host.decode("ascii"),
+                u"KUBERNETES_SERVICE_PORT": u"443",
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": kubernetes_host,
                 b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+            }
+        self.patch(os, "environ", environ)
 
+        if type("token") == bytes:
+            serviceaccount = serviceaccount.asBytesMode()
+        else:
+            serviceaccount = serviceaccount.asTextMode()
         agent = authenticate_with_serviceaccount(
             reactor, path=serviceaccount.path,
         )
@@ -194,13 +204,13 @@ class AuthenticateWithServiceAccountTests(TestCase):
         issues.  The header includes the bearer token from the service account
         file.
         """
-        token = bytes(uuid4())
+        token = str(uuid4()).encode("ascii")
         request_bytes = self._authorized_request(token=token, headers=None)
 
         # Sure would be nice to have an HTTP parser.
         self.assertThat(
             request_bytes,
-            Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
+            Contains(b"Authorization: Bearer " + token),
         )
 
 
@@ -212,7 +222,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         with ExpectedException(DNSLookupError, "DNS lookup failed: no results "
                                "for hostname lookup: doesnotresolve."):
             self._authorized_request(
-                token="test",
+                token=b"test",
                 headers=Headers({}),
                 kubernetes_host=b"doesnotresolve"
             )
@@ -223,12 +233,12 @@ class AuthenticateWithServiceAccountTests(TestCase):
         Other headers passed to the ``IAgent.request`` implementation are also
         sent in the request.
         """
-        token = bytes(uuid4())
+        token = str(uuid4()).encode("ascii")
         headers = Headers({u"foo": [u"bar"]})
         request_bytes = self._authorized_request(token=token, headers=headers)
         self.expectThat(
             request_bytes,
-            Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
+            Contains(b"Authorization: Bearer " + token),
         )
         self.expectThat(
             request_bytes,
@@ -249,7 +259,7 @@ class HTTPSPolicyFromConfigTests(TestCase):
         *KUBERNETES_...* environment variables to identify the address of the
         server.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).join(u""))
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -257,14 +267,20 @@ class HTTPSPolicyFromConfigTests(TestCase):
         serviceaccount.child(b"token").setContent(b"token")
 
         netloc = NetLocation(host=u"example.invalid", port=443)
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": netloc.host,
+                u"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port),
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": netloc.host.encode("ascii"),
                 b"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port).encode("ascii"),
-            },
-        )
+            }
+        self.patch(os, "environ", environ)
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(
+            path=serviceaccount.asTextMode().path)
 
         policy = https_policy_from_config(config)
         self.expectThat(
@@ -285,21 +301,28 @@ class HTTPSPolicyFromConfigTests(TestCase):
         If no CA certificate is found in the service account directory,
         ``https_policy_from_config`` raises ``ValueError``.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).join(""))
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
         serviceaccount.child(b"ca.crt").setContent(b"not a cert pem")
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+                u"KUBERNETES_SERVICE_PORT": u"443",
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
                 b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+            }
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        self.patch(os, "environ", environ)
+
+        config = KubeConfig.from_service_account(
+            path=serviceaccount.asTextMode().path)
         self.assertThat(
             lambda: https_policy_from_config(config),
             raises(ValueError("No certificate authority certificate found.")),
@@ -311,7 +334,7 @@ class HTTPSPolicyFromConfigTests(TestCase):
         If no CA certificate is found in the service account directory,
         ``https_policy_from_config`` raises ``ValueError``.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).join(""))
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -322,14 +345,20 @@ class HTTPSPolicyFromConfigTests(TestCase):
         )
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+                u"KUBERNETES_SERVICE_PORT": u"443",
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
                 b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+            }
+        self.patch(os, "environ", environ)
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(
+            path=serviceaccount.asTextMode().path)
         self.assertThat(
             lambda: https_policy_from_config(config),
             raises(ValueError(
@@ -370,7 +399,7 @@ class ClientCertificatePolicyForHTTPSTests(TestCase):
                 netloc: cert,
             },
         )
-        creator = policy.creatorForNetloc(host_used, port_used)
+        creator = policy.creatorForNetloc(host_used.encode("ascii"), port_used)
         verifyObject(IOpenSSLClientConnectionCreator, creator)
 
 
@@ -473,7 +502,7 @@ class ChainTests(TestCase):
         b_cert = cert(u"a.invalid", u"b.invalid", b_key.public_key(), a_key, True)
         c_cert = cert(u"b.invalid", u"c.invalid", c_key.public_key(), b_key, False)
 
-        a, b, c = pem.parse("\n".join(
+        a, b, c = pem.parse(b"\n".join(
             cert.public_bytes(serialization.Encoding.PEM)
             for cert
             in (a_cert, b_cert, c_cert)

@@ -23,7 +23,7 @@ from pyrsistent import (
     pmap_field, thaw, freeze,
 )
 
-from twisted.python.compat import nativeString
+from twisted.python.compat import iteritems, long, nativeString, unicode
 from twisted.python.reflect import fullyQualifiedName
 
 
@@ -585,7 +585,10 @@ def _parse_iso8601(text):
 
 
 def _isoformat(format, v):
-    return v.isoformat().decode("ascii")
+    v_isoformat = v.isoformat()
+    if isinstance(v_isoformat, bytes):
+        v_isoformat = v_isoformat.decode("ascii")
+    return v_isoformat
 
 
 
@@ -762,14 +765,35 @@ class _ClassModel(PClass):
                 raise
 
 
-        def compare_pclass(self, other):
+        def lt_pclass(self, other):
             if isinstance(other, self.__class__):
-                return cmp(
-                    sorted(self.serialize().items()),
-                    sorted(other.serialize().items()),
-                )
+                return sorted(self.serialize().items()) < sorted(other.serialize().items())
             return NotImplemented
 
+        def le_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) <= sorted(other.serialize().items())
+            return NotImplemented
+
+        def gt_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) > sorted(other.serialize().items())
+            return NotImplemented
+
+        def ge_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) >= sorted(other.serialize().items())
+            return NotImplemented
+
+        def eq_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) == sorted(other.serialize().items())
+            return NotImplemented
+
+        def ne_pclass(self, other):
+            if isinstance(other, self.__class__):
+                return sorted(self.serialize().items()) != sorted(other.serialize().items())
+            return NotImplemented
 
         content = {
             attr.name: attr.pclass_field_for_attribute()
@@ -779,7 +803,13 @@ class _ClassModel(PClass):
         content["__doc__"] = nativeString(self.doc)
         content["serialize"] = _serialize_with_omit
         content["__new__"] = discard_constant_fields
-        content["__cmp__"] = compare_pclass
+        content["__lt__"] = lt_pclass
+        content["__le__"] = le_pclass
+        content["__gt__"] = gt_pclass
+        content["__ge__"] = ge_pclass
+        content["__eq__"] = eq_pclass
+        content["__ne__"] = ne_pclass
+        content["__hash__"] = PClass.__hash__
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
 
@@ -790,7 +820,7 @@ def _serialize_with_omit(self, format=None):
     return {
         key: value
         for (key, value)
-        in PClass.serialize(self, format).iteritems()
+        in iteritems(PClass.serialize(self, format))
         if value is not omit
     }
 

@@ -179,7 +179,8 @@ class _MappingLikeMismatch(Mismatch):
 
 
 def raises_exception(cls, **attributes):
-    def get_exception((type, exception, traceback)):
+    def get_exception(exc_info):
+        (type, exception, traceback) = exc_info
         return exception
     return Raises(
         AfterPreprocessing(
