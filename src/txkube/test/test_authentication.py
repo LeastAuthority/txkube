@@ -50,6 +50,7 @@ from twisted.internet.interfaces import (
     IOpenSSLClientConnectionCreator,
 )
 from twisted.internet.protocol import Factory
+from twisted.python.compat import _PY3
 from twisted.web.iweb import IPolicyForHTTPS
 from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
@@ -164,12 +165,17 @@ class AuthenticateWithServiceAccountTests(TestCase):
         serviceaccount.child(b"ca.crt").setContent(_CA_CERT_PEM)
         serviceaccount.child(b"token").setContent(token)
 
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": kubernetes_host.decode("ascii"),
+                u"KUBERNETES_SERVICE_PORT": u"443",
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": kubernetes_host,
                 b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+            }
+        self.patch(os, "environ", environ)
 
         if type("token") == bytes:
             serviceaccount = serviceaccount.asBytesMode()
@@ -261,12 +267,17 @@ class HTTPSPolicyFromConfigTests(TestCase):
         serviceaccount.child(b"token").setContent(b"token")
 
         netloc = NetLocation(host=u"example.invalid", port=443)
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": netloc.host,
+                u"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port),
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": netloc.host.encode("ascii"),
                 b"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port).encode("ascii"),
-            },
-        )
+            }
+        self.patch(os, "environ", environ)
 
         config = KubeConfig.from_service_account(
             path=serviceaccount.asTextMode().path)
@@ -297,12 +308,18 @@ class HTTPSPolicyFromConfigTests(TestCase):
         serviceaccount.child(b"ca.crt").setContent(b"not a cert pem")
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+                u"KUBERNETES_SERVICE_PORT": u"443",
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
                 b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+            }
+
+        self.patch(os, "environ", environ)
 
         config = KubeConfig.from_service_account(
             path=serviceaccount.asTextMode().path)
@@ -328,12 +345,17 @@ class HTTPSPolicyFromConfigTests(TestCase):
         )
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
+        if _PY3:
+            environ = {
+                u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+                u"KUBERNETES_SERVICE_PORT": u"443",
+            }
+        else:
+            environ = {
                 b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
                 b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+            }
+        self.patch(os, "environ", environ)
 
         config = KubeConfig.from_service_account(
             path=serviceaccount.asTextMode().path)
