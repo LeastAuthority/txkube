@@ -58,6 +58,7 @@ from .._authentication import (
     https_policy_from_config,
 )
 from .. import authenticate_with_serviceaccount
+from ._compat import encode_environ
 
 # Just an arbitrary certificate pulled off the internet.  Details ought not
 # matter.  Retrieved using:
@@ -152,12 +153,12 @@ class AuthenticateWithServiceAccountTests(TestCase):
         serviceaccount.child(b"ca.crt").setContent(_CA_CERT_PEM)
         serviceaccount.child(b"token").setContent(token)
 
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": kubernetes_host,
-                b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+        environ = encode_environ(
+            {
+                u"KUBERNETES_SERVICE_HOST": kubernetes_host.decode("ascii"),
+                u"KUBERNETES_SERVICE_PORT": u"443"
+            })
+        self.patch(os, "environ", environ)
 
         agent = authenticate_with_serviceaccount(
             reactor, path=serviceaccount.path,
@@ -245,12 +246,11 @@ class HTTPSPolicyFromConfigTests(TestCase):
         serviceaccount.child(b"token").setContent(b"token")
 
         netloc = NetLocation(host=u"example.invalid", port=443)
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": netloc.host.encode("ascii"),
-                b"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port).encode("ascii"),
-            },
-        )
+        environ = encode_environ({
+                u"KUBERNETES_SERVICE_HOST": netloc.host,
+                u"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port),
+        })
+        self.patch(os, "environ", environ)
 
         config = KubeConfig.from_service_account(path=serviceaccount.path)
 
@@ -280,12 +280,11 @@ class HTTPSPolicyFromConfigTests(TestCase):
         serviceaccount.child(b"ca.crt").setContent(b"not a cert pem")
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
-                b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+        environ = encode_environ({
+            u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+            u"KUBERNETES_SERVICE_PORT": u"443",
+        })
+        self.patch(os, "environ", environ)
 
         config = KubeConfig.from_service_account(path=serviceaccount.path)
         self.assertThat(
@@ -310,12 +309,11 @@ class HTTPSPolicyFromConfigTests(TestCase):
         )
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
-                b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+        environ = encode_environ({
+            u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+            u"KUBERNETES_SERVICE_PORT": u"443",
+        })
+        self.patch(os, "environ", environ)
 
         config = KubeConfig.from_service_account(path=serviceaccount.path)
         self.assertThat(
