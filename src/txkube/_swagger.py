@@ -23,7 +23,7 @@ from pyrsistent import (
     pmap_field, thaw, freeze,
 )
 
-from twisted.python.compat import nativeString
+from twisted.python.compat import iteritems, long, nativeString, unicode
 from twisted.python.reflect import fullyQualifiedName
 
 
@@ -790,7 +790,7 @@ def _serialize_with_omit(self, format=None):
     return {
         key: value
         for (key, value)
-        in PClass.serialize(self, format).iteritems()
+        in iteritems(PClass.serialize(self, format))
         if value is not omit
     }
 

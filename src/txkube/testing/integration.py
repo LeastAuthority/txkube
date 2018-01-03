@@ -20,6 +20,7 @@ from testtools.matchers import (
     Contains, AfterPreprocessing, MatchesPredicate, Always,
 )
 
+from twisted.python.compat import iteritems, unicode
 from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
 from twisted.internet.task import deferLater, cooperate
@@ -248,7 +249,7 @@ def needs(**to_create):
     def build_objects():
         objs = {}
         names = set()
-        for name, strategy in to_create.iteritems():
+        for name, strategy in iteritems(to_create):
             while True:
                 obj = strategy.example()
                 if obj.metadata.name not in names:

@@ -13,6 +13,7 @@ from zope.interface import implementer
 
 from pyrsistent import CheckedPVector, PClass, field, pmap_field
 
+from twisted.python.compat import long, unicode
 from twisted.python.url import URL
 from twisted.internet import ssl
 from twisted.web.iweb import IPolicyForHTTPS, IAgent

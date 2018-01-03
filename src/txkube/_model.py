@@ -15,6 +15,7 @@ from zope.interface import implementer
 
 from pyrsistent import mutant
 
+from twisted.python.compat import iteritems, unicode
 from twisted.python.filepath import FilePath
 
 from . import UnrecognizedVersion, UnrecognizedKind, IObject
@@ -122,7 +123,7 @@ def _openapi_to_v1_5_data_model(openapi):
     base = loads(
         FilePath(__file__).sibling("extra-1.5.json").getContent()
     )
-    for k, v in openapi.iteritems():
+    for k, v in iteritems(openapi):
         if isinstance(v, dict):
             base.setdefault(k, {}).update(v)
         else:
