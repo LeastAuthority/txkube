@@ -200,7 +200,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         # Sure would be nice to have an HTTP parser.
         self.assertThat(
             request_bytes,
-            Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
+            Contains(b"Authorization: Bearer " + token),
         )
 
 
@@ -212,7 +212,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         with ExpectedException(DNSLookupError, "DNS lookup failed: no results "
                                "for hostname lookup: doesnotresolve."):
             self._authorized_request(
-                token="test",
+                token=b"test",
                 headers=Headers({}),
                 kubernetes_host=b"doesnotresolve"
             )
@@ -228,7 +228,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         request_bytes = self._authorized_request(token=token, headers=headers)
         self.expectThat(
             request_bytes,
-            Contains(u"Authorization: Bearer {}".format(token).encode("ascii")),
+            Contains(b"Authorization: Bearer " + token),
         )
         self.expectThat(
             request_bytes,
