@@ -6,6 +6,7 @@ A Kubernetes client which uses Twisted to interact with Kubernetes
 via HTTP.
 """
 
+from os import pathsep
 from os.path import expanduser
 from json import loads, dumps
 
@@ -56,8 +57,67 @@ def network_kubernetes(**kw):
     return _NetworkKubernetes(**kw)
 
 
+def _merge_configs(configs):
+    """
+    Merge one or more ``KubeConfig`` objects.
 
-def network_kubernetes_from_context(reactor, context, path=None):
+    :param list[KubeConfig] configs: The configurations to merge.
+
+    :return KubeConfig: A single configuration object with the merged
+        configuration.
+    """
+    result = {
+        u"contexts": [],
+        u"users": [],
+        u"clusters": [],
+        u"current-context": None,
+    }
+    for config in configs:
+        for k in {u"contexts", u"users", u"clusters"}:
+            try:
+                values = config.doc[k]
+            except KeyError:
+                pass
+            else:
+                result[k].extend(values)
+
+        if result[u"current-context"] is None:
+            try:
+                result[u"current-context"] = config.doc[u"current-context"]
+            except KeyError:
+                pass
+
+    return KubeConfig(result)
+
+
+def _merge_configs_from_env(kubeconfigs):
+    """
+    Merge configuration files from a ``KUBECONFIG`` environment variable.
+
+    :param bytes kubeconfigs: A value like the one given to ``KUBECONFIG`` to
+        specify multiple configuration files.
+
+    :return KubeConfig: A configuration object which has merged all of the
+        configuration from the specified configuration files.  Merging is
+        performed according to
+        https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/#merging-kubeconfig-files
+    """
+    paths = list(
+        FilePath(p)
+        for p
+        in kubeconfigs.split(pathsep)
+        if p
+    )
+    config = _merge_configs(list(
+        KubeConfig.from_file(p.path)
+        for p
+        in paths
+    ))
+    return config
+
+
+def network_kubernetes_from_context(
+        reactor, context=None, path=None, environ=None):
     """
     Create a new ``IKubernetes`` provider based on a kube config file.
 
@@ -65,17 +125,33 @@ def network_kubernetes_from_context(reactor, context, path=None):
         scheduling.
 
     :param unicode context: The name of the kube config context from which to
-        load configuration details.
+        load configuration details.  Or, ``None`` to respect the current
+        context setting from the configuration.
 
     :param FilePath path: The location of the kube config file to use.
+
+    :param dict environ: A environment direction in which to look up
+        ``KUBECONFIG``.  If ``None``, the real process environment will be
+        inspected.  This is used only if ``path`` is ``None``.
 
     :return IKubernetes: The Kubernetes service described by the named
         context.
     """
     if path is None:
-        path = FilePath(expanduser(u"~/.kube/config"))
+        if environ is None:
+            from os import environ
+        try:
+            kubeconfigs = environ[u"KUBECONFIG"]
+        except KeyError:
+            config = KubeConfig.from_file(expanduser(u"~/.kube/config"))
+        else:
+            config = _merge_configs_from_env(kubeconfigs)
+    else:
+        config = KubeConfig.from_file(path.path)
 
-    config = KubeConfig.from_file(path.path)
+    if context is None:
+        context = config.doc[u"current-context"]
+
     context = config.contexts[context]
     cluster = config.clusters[context[u"cluster"]]
     user = config.users[context[u"user"]]
