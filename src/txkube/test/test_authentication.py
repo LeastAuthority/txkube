@@ -439,7 +439,7 @@ class ChainTests(TestCase):
         b_cert = cert(u"a.invalid", u"b.invalid", b_key.public_key(), a_key, True)
         c_cert = cert(u"b.invalid", u"c.invalid", c_key.public_key(), b_key, False)
 
-        a, b, c = pem.parse("\n".join(
+        a, b, c = pem.parse(b"\n".join(
             cert.public_bytes(serialization.Encoding.PEM)
             for cert
             in (a_cert, b_cert, c_cert)
