@@ -17,6 +17,7 @@ from pyrsistent import (
     PTypeError, PClass, freeze,
 )
 
+from twisted.python.compat import long, unicode
 from twisted.python.filepath import FilePath
 
 from testtools.matchers import (
@@ -38,7 +39,8 @@ def swagger_primitive_types():
     """
     Hypothesis strategy to build Swagger *primitive* type definitions.
     """
-    def _swaggered((t, f)):
+    def _swaggered(type_format):
+        (t, f) = type_format
         result = {u"type": t}
         if f is not None:
             result[u"format"] = f
@@ -383,7 +385,7 @@ class SwaggerTests(TestCase):
         self.expectThat(Type(s=u"foo").s, Equals(u"foo"))
         self.expectThat(Type(s=u"50").s, Equals(u"50"))
         self.expectThat(Type(s=50).s, Equals(50))
-        self.expectThat(Type(s=50L).s, Equals(50))
+        self.expectThat(Type(s=long(50)).s, Equals(50))
 
 
     def test_object(self):
