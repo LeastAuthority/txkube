@@ -4,7 +4,6 @@
 import os
 from itertools import count, islice
 from uuid import uuid4
-from datetime import datetime, timedelta
 
 from pykube import KubeConfig
 
@@ -25,18 +24,7 @@ from testtools.matchers import (
     AfterPreprocessing, Equals, Contains, IsInstance, raises
 )
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives import serialization
-from cryptography.x509 import (
-    CertificateBuilder,
-    SubjectAlternativeName,
-    BasicConstraints,
-    DNSName,
-    Name,
-    NameAttribute,
-    random_serial_number,
-)
 from cryptography.hazmat.backends import default_backend
 
 from zope.interface import implementer
@@ -55,7 +43,7 @@ from twisted.web.http_headers import Headers
 from twisted.test.iosim import ConnectionCompleter
 from twisted.test.proto_helpers import AccumulatingProtocol, MemoryReactorClock
 
-from ..testing import TestCase, assertNoResult
+from ..testing import TestCase, assertNoResult, cert
 from ..testing.strategies import (
     dns_subdomains,
     port_numbers,
@@ -446,28 +434,6 @@ class ChainTests(TestCase):
             )
             for i in range(3)
         )
-
-        def cert(issuer, subject, pubkey, privkey, ca):
-            builder = CertificateBuilder(
-            ).issuer_name(
-                Name([NameAttribute(NameOID.COMMON_NAME, issuer)]),
-            ).subject_name(
-                Name([NameAttribute(NameOID.COMMON_NAME, subject)]),
-            ).add_extension(
-                SubjectAlternativeName([DNSName(subject)]),
-                critical=False,
-            )
-            if ca:
-                builder = builder.add_extension(
-                    BasicConstraints(True, None),
-                    critical=True,
-                )
-            return builder.public_key(pubkey,
-            ).serial_number(random_serial_number(),
-            ).not_valid_before(datetime.utcnow(),
-            ).not_valid_after(datetime.utcnow() + timedelta(seconds=1),
-            ).sign(privkey, SHA256(), default_backend(),
-            )
 
         a_cert = cert(u"a.invalid", u"a.invalid", a_key.public_key(), a_key, True)
         b_cert = cert(u"a.invalid", u"b.invalid", b_key.public_key(), a_key, True)

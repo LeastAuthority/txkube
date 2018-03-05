@@ -7,7 +7,16 @@ Tests for ``txkube.network_kubernetes``.
 See ``get_kubernetes`` for pre-requisites.
 """
 
-from os import environ
+from os import (
+    environ,
+    pathsep,
+)
+from os.path import (
+    expanduser,
+)
+from inspect import (
+    getcallargs,
+)
 from base64 import b64encode
 
 from zope.interface import implementer
@@ -17,12 +26,18 @@ import attr
 
 from yaml import safe_dump
 
+from fixtures import TempDir
+
 from testtools.matchers import AnyMatch, ContainsDict, Equals
 from testtools.twistedsupport import succeeded
 
 from eliot.testing import capture_logging
 
 from OpenSSL.crypto import FILETYPE_PEM
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend
 
 from twisted.test.proto_helpers import MemoryReactorClock
 from twisted.trial.unittest import TestCase as TwistedTestCase
@@ -43,14 +58,18 @@ from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
-from ..testing import TestCase
+from ..testing import TestCase, cert
 from ..testing.integration import kubernetes_client_tests
 
 from .. import (
     IObject, v1, network_kubernetes, network_kubernetes_from_context,
 )
 
-from .._network import _Memo, collection_location
+from .._network import (
+    _Memo,
+    collection_location,
+    _merge_configs_from_env,
+)
 
 
 def get_kubernetes(case):
@@ -69,6 +88,102 @@ def get_kubernetes(case):
     else:
         from twisted.internet import reactor
         return network_kubernetes_from_context(reactor, context)
+
+
+
+class MergeConfigsTests(TestCase):
+    """
+    Tests for ``_merge_configs_from_env``.
+    """
+    def setUp(self):
+        super(TestCase, self).setUp()
+        self.configs = FilePath(self.useFixture(TempDir()).path)
+
+
+    def test_first_value_wins(self):
+        """
+        The first configuration file to set a particular value "wins".  The
+        resulting merged configuration object has that value regardless of any
+        values which might be set by later configuration files.
+        """
+        a = self.configs.child(b"a")
+        b = self.configs.child(b"b")
+        a.setContent(safe_dump({
+            u"apiVersion": u"v1",
+            u"kind": u"Config",
+            u"current-context": u"foo",
+        }))
+        b.setContent(safe_dump({
+            u"apiVersion": u"v1",
+            u"kind": u"Config",
+            u"current-context": u"bar",
+        }))
+        config = _merge_configs_from_env(u"{}:{}".format(a.path, b.path))
+        self.assertEqual(
+            u"foo",
+            config.current_context,
+        )
+
+
+    def test_collections_merged(self):
+        """
+        Non-conflicting items in collections (clusters, users, contexts) are
+        merged.
+        """
+        foo_context = {
+            u"name": u"foo",
+            u"context": {u"cluster": u"foo", u"user": u"foo"},
+        }
+        bar_context = {
+            u"name": u"foo",
+            u"context": {u"cluster": u"foo", u"user": u"foo"},
+        }
+        foo_user = {
+            u"name": u"foo",
+            u"user": {u"x-magic": u"foo"},
+        }
+        bar_user = {
+            u"name": u"bar",
+            u"user": {u"x-magic": u"bar"},
+        }
+        foo_cluster = {
+            u"name": u"foo",
+            u"cluster": {u"server": u"foo"},
+        }
+        bar_cluster = {
+            u"name": u"bar",
+            u"cluster": {u"server": u"bar"},
+        }
+        a = self.configs.child(b"a")
+        b = self.configs.child(b"b")
+        a.setContent(safe_dump({
+            u"apiVersion": u"v1",
+            u"kind": u"Config",
+            u"contexts": [foo_context],
+            u"users": [foo_user],
+            u"clusters": [foo_cluster],
+        }))
+        b.setContent(safe_dump({
+            u"apiVersion": u"v1",
+            u"kind": u"Config",
+            u"contexts": [bar_context],
+            u"users": [bar_user],
+            u"clusters": [bar_cluster],
+        }))
+        config = _merge_configs_from_env(u"{}:{}".format(a.path, b.path))
+        self.expectThat(
+            config.doc[u"contexts"],
+            Equals([foo_context, bar_context]),
+        )
+        self.expectThat(
+            config.doc[u"users"],
+            Equals([foo_user, bar_user]),
+        )
+        self.expectThat(
+            config.doc[u"clusters"],
+            Equals([foo_cluster, bar_cluster]),
+        )
+
 
 
 class KubernetesClientIntegrationTests(kubernetes_client_tests(get_kubernetes)):
@@ -208,6 +323,25 @@ class ExtraNetworkClientTests(TestCase):
 
 
 
+def self_signed_certificate_paths(key_path, cert_path, name):
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=1024,
+        backend=default_backend(),
+    )
+    key_path.setContent(key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    ))
+
+    certificate = cert(name, name, key.public_key(), key, True)
+    cert_path.setContent(certificate.public_bytes(serialization.Encoding.PEM))
+
+    return key_path, cert_path
+
+
+
 class NetworkKubernetesFromContextTests(TwistedTestCase):
     """
     Direct tests for ``network_kubernetes_from_context``.
@@ -332,6 +466,7 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         config = FilePath(self.mktemp())
         config.setContent(safe_dump({
             "apiVersion": "v1",
+            "kind": "Config",
             "contexts": [
                 {
                     "name": "foo-ctx",
@@ -361,6 +496,183 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             ],
         }))
         return config
+
+
+    def test_kubeconfig_environment(self):
+        """
+        If ``KUBECONFIG`` is set in the environment,
+        ``network_kubernetes_from_context`` merges the configuration from the
+        files it refers to and returns an ``IKubernetes`` provider based on
+        that configuration.
+        """
+        key_path, cert_path = self_signed_certificate_paths(
+            FilePath(self.mktemp()),
+            FilePath(self.mktemp()),
+            u"x.invalid",
+        )
+
+        userauth = {
+            "client-certificate": cert_path.path,
+            "client-key": key_path.path,
+        }
+
+        a = FilePath(self.mktemp())
+        a.setContent(safe_dump({
+            "apiVersion": "v1",
+            "kind": "Config",
+            "contexts": [
+                {"name": "a", "context": {"cluster": "a", "user": "a"}},
+            ],
+            "clusters": [{
+                "name": "a",
+                "cluster": {
+                    "server": "https://a.example.com/",
+                    "certificate-authority": cert_path.path,
+                },
+            }],
+            "users": [
+                {"name": "a", "user": userauth},
+            ],
+        }))
+        b = FilePath(self.mktemp())
+        b.setContent(safe_dump({
+            "apiVersion": "v1",
+            "kind": "Config",
+            "contexts": [
+                {"name": "b", "context": {"cluster": "b", "user": "a"}},
+            ],
+            "clusters": [{
+                "name": "b",
+                "cluster": {
+                    "server": "https://b.example.com/",
+                    "certificate-authority": cert_path.path,
+                },
+            }],
+            "users": [
+                {"name": "b", "user": userauth},
+            ],
+        }))
+        c = FilePath(self.mktemp())
+        c.setContent(safe_dump({
+            "apiVersion": "v1",
+            "kind": "Config",
+            "current-context": "b",
+        }))
+        kubeconfig = pathsep.join((a.path, b.path, c.path))
+        kubernetes = network_kubernetes_from_context(
+            MemoryReactorClock(),
+            context=None,
+            environ={"KUBECONFIG": kubeconfig},
+        )
+        self.assertEqual(
+            "https://b.example.com/",
+            kubernetes.base_url.asText(),
+        )
+
+
+    def test_default_os_environ(self):
+        """
+        If no value is passed for the ``environ`` parameter then
+        ``network_kubernetes_from_context`` uses ``os.environ`` to look up the
+        possible value of ``KUBECONFIG``.
+        """
+        key_path, cert_path = self_signed_certificate_paths(
+            FilePath(self.mktemp()),
+            FilePath(self.mktemp()),
+            u"x.invalid",
+        )
+        userauth = {
+            "client-certificate": cert_path.path,
+            "client-key": key_path.path,
+        }
+        config = FilePath(self.mktemp())
+        config.setContent(safe_dump({
+            "apiVersion": "v1",
+            "kind": "Config",
+            "contexts": [
+                {"name": "a", "context": {"cluster": "a", "user": "a"}},
+            ],
+            "clusters": [{
+                "name": "a",
+                "cluster": {
+                    "server": "https://a.example.com/",
+                    "certificate-authority": cert_path.path,
+                },
+            }],
+            "users": [
+                {"name": "a", "user": userauth},
+            ],
+        }))
+        import os
+        self.patch(os, "environ", {u"KUBECONFIG": config.path})
+
+        kubernetes = network_kubernetes_from_context(
+            MemoryReactorClock(),
+            context=u"a",
+        )
+        self.assertEqual(
+            "https://a.example.com/",
+            kubernetes.base_url.asText(),
+        )
+
+
+    def test_missing_kubeconfig(self):
+        """
+        When ``network_kubernetes_from_context`` is given no value for
+        ``default_config_path`` it uses ``~/.kube/config`` as the value for
+        that parameter.
+        """
+        callargs = getcallargs(network_kubernetes_from_context, MemoryReactorClock())
+        self.assertEqual(
+            FilePath(expanduser("~/.kube/config")),
+            callargs["default_config_path"],
+        )
+
+
+    def test_default_config_path(self):
+        """
+        When ``network_kubernetes_from_context`` does not find ``KUBECONFIG`` in
+        the environment it uses ``default_config_path`` as the path to the
+        configuration file.
+        """
+        key_path, cert_path = self_signed_certificate_paths(
+            FilePath(self.mktemp()),
+            FilePath(self.mktemp()),
+            u"x.invalid",
+        )
+        userauth = {
+            "client-certificate": cert_path.path,
+            "client-key": key_path.path,
+        }
+        config = FilePath(self.mktemp())
+        config.setContent(safe_dump({
+            "apiVersion": "v1",
+            "kind": "Config",
+            "contexts": [
+                {"name": "a", "context": {"cluster": "a", "user": "a"}},
+            ],
+            "clusters": [{
+                "name": "a",
+                "cluster": {
+                    "server": "https://a.example.com/",
+                    "certificate-authority": cert_path.path,
+                },
+            }],
+            "users": [
+                {"name": "a", "user": userauth},
+            ],
+        }))
+
+        kubernetes = network_kubernetes_from_context(
+            MemoryReactorClock(),
+            context=u"a",
+            environ={},
+            default_config_path=config,
+        )
+        self.assertEqual(
+            "https://a.example.com/",
+            kubernetes.base_url.asText(),
+        )
 
 
 
