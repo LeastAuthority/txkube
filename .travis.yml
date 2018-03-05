@@ -29,14 +29,12 @@ cache:
     - "$HOME/.cache/pip"
 
 install:
-  - "pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
-  - "pip install .[dev]"
+  - "python -m pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
+  - "python -m pip install .[dev]"
 
 script:
-  - "pyflakes src"
+  - "python -m pyflakes src"
   - "python -Wdefault::DeprecationWarning -m coverage run --rcfile=${PWD}/.coveragerc -m twisted.trial txkube"
   # See .coveragerc for an explanation of this step.
   - "python -m coverage combine .coverage"
-
-after_success:
-  - "codecov"
+  - "python -m codecov"
