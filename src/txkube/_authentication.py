@@ -236,7 +236,7 @@ def https_policy_from_config(config):
     server.
 
     :param KubeConfig config: A Kubernetes configuration containing an active
-        context identifying a cluster.  The resulting ``IPolicyForHTTPS`` with
+        context identifying a cluster.  The resulting ``IPolicyForHTTPS`` will
         authenticate the API server for that cluster.
 
     :return IPolicyForHTTPS: A TLS context which requires server certificates
