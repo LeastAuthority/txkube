@@ -117,7 +117,9 @@ def _merge_configs_from_env(kubeconfigs):
 
 
 def network_kubernetes_from_context(
-        reactor, context=None, path=None, environ=None):
+        reactor, context=None, path=None, environ=None,
+        default_config_path=FilePath(expanduser(u"~/.kube/config")),
+):
     """
     Create a new ``IKubernetes`` provider based on a kube config file.
 
@@ -143,7 +145,7 @@ def network_kubernetes_from_context(
         try:
             kubeconfigs = environ[u"KUBECONFIG"]
         except KeyError:
-            config = KubeConfig.from_file(expanduser(u"~/.kube/config"))
+            config = KubeConfig.from_file(default_config_path.path)
         else:
             config = _merge_configs_from_env(kubeconfigs)
     else:

@@ -11,6 +11,12 @@ from os import (
     environ,
     pathsep,
 )
+from os.path import (
+    expanduser,
+)
+from inspect import (
+    getcallargs,
+)
 from base64 import b64encode
 
 from zope.interface import implementer
@@ -579,8 +585,6 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             "client-certificate": cert_path.path,
             "client-key": key_path.path,
         }
-
-
         config = FilePath(self.mktemp())
         config.setContent(safe_dump({
             "apiVersion": "v1",
@@ -605,6 +609,65 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         kubernetes = network_kubernetes_from_context(
             MemoryReactorClock(),
             context=u"a",
+        )
+        self.assertEqual(
+            "https://a.example.com/",
+            kubernetes.base_url.asText(),
+        )
+
+
+    def test_missing_kubeconfig(self):
+        """
+        When ``network_kubernetes_from_context`` is given no value for
+        ``default_config_path`` it uses ``~/.kube/config`` as the value for
+        that parameter.
+        """
+        callargs = getcallargs(network_kubernetes_from_context, MemoryReactorClock())
+        self.assertEqual(
+            FilePath(expanduser("~/.kube/config")),
+            callargs["default_config_path"],
+        )
+
+
+    def test_default_config_path(self):
+        """
+        When ``network_kubernetes_from_context`` does not find ``KUBECONFIG`` in
+        the environment it uses ``default_config_path`` as the path to the
+        configuration file.
+        """
+        key_path, cert_path = self_signed_certificate_paths(
+            FilePath(self.mktemp()),
+            FilePath(self.mktemp()),
+            u"x.invalid",
+        )
+        userauth = {
+            "client-certificate": cert_path.path,
+            "client-key": key_path.path,
+        }
+        config = FilePath(self.mktemp())
+        config.setContent(safe_dump({
+            "apiVersion": "v1",
+            "kind": "Config",
+            "contexts": [
+                {"name": "a", "context": {"cluster": "a", "user": "a"}},
+            ],
+            "clusters": [{
+                "name": "a",
+                "cluster": {
+                    "server": "https://a.example.com/",
+                    "certificate-authority": cert_path.path,
+                },
+            }],
+            "users": [
+                {"name": "a", "user": userauth},
+            ],
+        }))
+
+        kubernetes = network_kubernetes_from_context(
+            MemoryReactorClock(),
+            context=u"a",
+            environ={},
+            default_config_path=config,
         )
         self.assertEqual(
             "https://a.example.com/",
