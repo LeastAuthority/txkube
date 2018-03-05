@@ -317,6 +317,25 @@ class ExtraNetworkClientTests(TestCase):
 
 
 
+def self_signed_certificate_paths(key_path, cert_path, name):
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=1024,
+        backend=default_backend(),
+    )
+    key_path.setContent(key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    ))
+
+    certificate = cert(name, name, key.public_key(), key, True)
+    cert_path.setContent(certificate.public_bytes(serialization.Encoding.PEM))
+
+    return key_path, cert_path
+
+
+
 class NetworkKubernetesFromContextTests(TwistedTestCase):
     """
     Direct tests for ``network_kubernetes_from_context``.
@@ -472,6 +491,7 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         }))
         return config
 
+
     def test_kubeconfig_environment(self):
         """
         If ``KUBECONFIG`` is set in the environment,
@@ -479,21 +499,11 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         files it refers to and returns an ``IKubernetes`` provider based on
         that configuration.
         """
-        key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=1024,
-            backend=default_backend(),
+        key_path, cert_path = self_signed_certificate_paths(
+            FilePath(self.mktemp()),
+            FilePath(self.mktemp()),
+            u"x.invalid",
         )
-        key_path = FilePath(self.mktemp())
-        key_path.setContent(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption(),
-        ))
-
-        certificate = cert(u"x.invalid", u"x.invalid", key.public_key(), key, True)
-        cert_path = FilePath(self.mktemp())
-        cert_path.setContent(certificate.public_bytes(serialization.Encoding.PEM))
 
         userauth = {
             "client-certificate": cert_path.path,
@@ -550,6 +560,54 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         )
         self.assertEqual(
             "https://b.example.com/",
+            kubernetes.base_url.asText(),
+        )
+
+
+    def test_default_os_environ(self):
+        """
+        If no value is passed for the ``environ`` parameter then
+        ``network_kubernetes_from_context`` uses ``os.environ`` to look up the
+        possible value of ``KUBECONFIG``.
+        """
+        key_path, cert_path = self_signed_certificate_paths(
+            FilePath(self.mktemp()),
+            FilePath(self.mktemp()),
+            u"x.invalid",
+        )
+        userauth = {
+            "client-certificate": cert_path.path,
+            "client-key": key_path.path,
+        }
+
+
+        config = FilePath(self.mktemp())
+        config.setContent(safe_dump({
+            "apiVersion": "v1",
+            "kind": "Config",
+            "contexts": [
+                {"name": "a", "context": {"cluster": "a", "user": "a"}},
+            ],
+            "clusters": [{
+                "name": "a",
+                "cluster": {
+                    "server": "https://a.example.com/",
+                    "certificate-authority": cert_path.path,
+                },
+            }],
+            "users": [
+                {"name": "a", "user": userauth},
+            ],
+        }))
+        import os
+        self.patch(os, "environ", {u"KUBECONFIG": config.path})
+
+        kubernetes = network_kubernetes_from_context(
+            MemoryReactorClock(),
+            context=u"a",
+        )
+        self.assertEqual(
+            "https://a.example.com/",
             kubernetes.base_url.asText(),
         )
 
