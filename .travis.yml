@@ -38,5 +38,5 @@ script:
   # See .coveragerc for an explanation of this step.
   - "python -m coverage combine .coverage"
 
-after_success:
+after_script:
   - "codecov"
