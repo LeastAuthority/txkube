@@ -13,6 +13,7 @@ from testtools.matchers import Equals, Is, IsInstance, AfterPreprocessing
 
 from twisted.python.compat import unicode
 
+
 from ..testing.integration import kubernetes_client_tests
 from ..testing.strategies import iobjects
 from ..testing import TestCase
