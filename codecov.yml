@@ -10,3 +10,11 @@ status:
   project:
     default:
       if_ci_failed: success
+
+  patch:
+    default:
+      if_ci_failed: success
+
+  changes:
+    default:
+      if_ci_failed: success
