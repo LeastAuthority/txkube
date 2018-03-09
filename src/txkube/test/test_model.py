@@ -63,6 +63,8 @@ from .. import (
 
 from .._model import set_if_none
 
+from .._compat import dumps_bytes
+
 
 
 def models():
@@ -388,7 +390,7 @@ class KubernetesErrorTests(TestCase):
         when called with the v1.5 model.
         """
         def response():
-            body = dumps(v1_5_model.iobject_to_raw(v1_5_model.v1.Status()))
+            body = dumps_bytes(v1_5_model.iobject_to_raw(v1_5_model.v1.Status()))
             return MemoryResponse(
                 version=(b"HTTP", 1, 1),
                 code=200,

@@ -1,0 +1,20 @@
+#
+# For documentation see:
+#    https://docs.codecov.io/docs/codecov-yaml
+#    https://github.com/codecov/support/wiki/Codecov-Yaml
+#
+# We want 100% coverage for new patches to make sure we are always increasing
+# the coverage.
+#
+status:
+  project:
+    default:
+      if_ci_failed: success
+
+  patch:
+    default:
+      if_ci_failed: success
+
+  changes:
+    default:
+      if_ci_failed: success
