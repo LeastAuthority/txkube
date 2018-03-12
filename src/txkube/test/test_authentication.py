@@ -29,6 +29,7 @@ from cryptography.hazmat.backends import default_backend
 
 from zope.interface import implementer
 
+from twisted.python.compat import unicode
 from twisted.python.filepath import FilePath
 from twisted.internet.address import IPv4Address
 from twisted.internet.error import DNSLookupError
@@ -184,7 +185,9 @@ class AuthenticateWithServiceAccountTests(TestCase):
         issues.  The header includes the bearer token from the service account
         file.
         """
-        token = bytes(uuid4())
+        token = str(uuid4())
+        if isinstance(token, unicode):
+            token = token.encode("ascii")
         request_bytes = self._authorized_request(token=token, headers=None)
 
         # Sure would be nice to have an HTTP parser.
@@ -213,7 +216,9 @@ class AuthenticateWithServiceAccountTests(TestCase):
         Other headers passed to the ``IAgent.request`` implementation are also
         sent in the request.
         """
-        token = bytes(uuid4())
+        token = str(uuid4())
+        if isinstance(token, unicode):
+            token = token.encode("ascii")
         headers = Headers({u"foo": [u"bar"]})
         request_bytes = self._authorized_request(token=token, headers=headers)
         self.expectThat(
