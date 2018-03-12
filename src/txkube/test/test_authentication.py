@@ -163,7 +163,7 @@ class AuthenticateWithServiceAccountTests(TestCase):
         self.patch(os, "environ", environ)
 
         agent = authenticate_with_serviceaccount(
-            reactor, path=serviceaccount.path,
+            reactor, path=serviceaccount.asTextMode().path,
         )
 
         d = agent.request(b"GET", b"http://" + kubernetes_host, headers)
@@ -324,7 +324,7 @@ class HTTPSPolicyFromConfigTests(TestCase):
         })
         self.patch(os, "environ", environ)
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(path=serviceaccount.asTextMode().path)
         self.assertThat(
             lambda: https_policy_from_config(config),
             raises(ValueError(
