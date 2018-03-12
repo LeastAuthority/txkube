@@ -146,7 +146,8 @@ class AuthenticateWithServiceAccountTests(TestCase):
         reactor = create_reactor()
         reactor.listenTCP(80, factory)
 
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -238,7 +239,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
         *KUBERNETES_...* environment variables to identify the address of the
         server.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -273,7 +275,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
         If no CA certificate is found in the service account directory,
         ``https_policy_from_config`` raises ``ValueError``.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -298,7 +301,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
         If no CA certificate is found in the service account directory,
         ``https_policy_from_config`` raises ``ValueError``.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
