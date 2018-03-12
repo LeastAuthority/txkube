@@ -8,7 +8,7 @@ via HTTP.
 
 from os import pathsep
 from os.path import expanduser
-from json import loads, dumps
+from json import loads
 
 from zope.interface import implementer
 
@@ -38,6 +38,7 @@ from . import (
     v1_5_model, openapi_to_data_model,
     authenticate_with_certificate_chain,
 )
+from ._compat import dumps_bytes
 
 def network_kubernetes(**kw):
     """
@@ -235,21 +236,22 @@ class _NetworkClient(object):
     def _delete(self, url, options):
         bodyProducer = None
         if options is not None:
-            bodyProducer = _BytesProducer(
-                dumps(self.model.iobject_to_raw(options)),
-            )
+            body = dumps_bytes(self.model.iobject_to_raw(options))
+            bodyProducer = _BytesProducer(body)
         return self._request(b"DELETE", url, bodyProducer=bodyProducer)
 
 
     def _post(self, url, obj):
+        body = dumps_bytes(obj)
         return self._request(
-            b"POST", url, bodyProducer=_BytesProducer(dumps(obj)),
+            b"POST", url, bodyProducer=_BytesProducer(body),
         )
 
 
     def _put(self, url, obj):
+        body = dumps_bytes(obj)
         return self._request(
-            b"PUT", url, bodyProducer=_BytesProducer(dumps(obj)),
+            b"PUT", url, bodyProducer=_BytesProducer(body),
         )
 
 

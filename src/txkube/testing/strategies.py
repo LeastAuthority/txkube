@@ -48,12 +48,11 @@ def dns_labels():
     # https://kubernetes.io/docs/user-guide/identifiers/#names
     # https://www.ietf.org/rfc/rfc1035.txt
     letter = ascii_lowercase
-    numbers = digits
+    letter_digit = letter + digits
     if isinstance(letter, bytes):
+        # string.ascii_lowercase and string.digits are bytes on Python 2.
         letter = letter.decode("ascii")
-    if isinstance(numbers, bytes):
-        numbers = numbers.decode("ascii")
-    letter_digit = letter + numbers
+        letter_digit = letter_digit.decode("ascii")
     letter_digit_hyphen = letter_digit + u"-"
     variations = [
         # Could be just one character long
