@@ -254,7 +254,7 @@ class HTTPSPolicyFromConfigTests(TestCase):
         })
         self.patch(os, "environ", environ)
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(path=serviceaccount.asTextMode().path)
 
         policy = https_policy_from_config(config)
         self.expectThat(
