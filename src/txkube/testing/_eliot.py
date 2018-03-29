@@ -6,12 +6,12 @@ Integration between Eliot, eliottree, and testtools to provide easily
 readable Eliot logs for failing tests.
 """
 
-from io import BytesIO
+from io import StringIO
 
 from fixtures import Fixture
 
 from eliot import add_destinations, remove_destination
-from eliottree import Tree, render_task_nodes
+from eliottree import tasks_from_iterable, render_tasks
 
 from testtools.content import Content
 from testtools.content_type import UTF8_TEXT
@@ -26,15 +26,13 @@ def _eliottree(logs):
 
     :return bytes: The rendered string.
     """
-    tree = Tree()
-    tree.merge_tasks(logs)
-    nodes = tree.nodes()
+    tasks = tasks_from_iterable(logs)
 
-    out = BytesIO()
-    render_task_nodes(
+    out = StringIO()
+    render_tasks(
         write=out.write,
-        nodes=nodes,
-        field_limit=0,
+        tasks=tasks,
+        field_limit=0
     )
     return out.getvalue()
 
