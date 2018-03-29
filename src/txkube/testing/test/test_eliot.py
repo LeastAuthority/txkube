@@ -34,5 +34,5 @@ class EliotTreeTests(TestCase):
         # I'm using eliot-tree!  So this assertion is sort of lame.
         self.assertThat(
             _eliottree(events),
-            Contains(u"foo@1/started"),
+            Contains(u"foo/1 \u21d2 started"),
         )
