@@ -10,7 +10,7 @@ from io import BytesIO
 
 from fixtures import Fixture
 
-from eliot import add_destination, remove_destination
+from eliot import add_destinations, remove_destination
 from eliottree import Tree, render_task_nodes
 
 from testtools.content import Content
@@ -54,7 +54,7 @@ class CaptureEliotLogs(Fixture):
     # otherwise expect are private.
     def _setUp(self):
         self.logs = []
-        add_destination(self.logs.append)
+        add_destinations(self.logs.append)
         self.addCleanup(lambda: remove_destination(self.logs.append))
         self.addDetail(
             self.LOG_DETAIL_NAME,
