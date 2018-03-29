@@ -8,6 +8,6 @@
 
 ##
 
-Fixes #<issue number>
+Fixes #\<issue number>
 
 Add any additional information about the changes here.
