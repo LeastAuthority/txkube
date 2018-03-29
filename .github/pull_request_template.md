@@ -2,7 +2,7 @@
 
 * [ ] There is an associated issue.
       [Create a new one](https://github.com/LeastAuthority/txkube/issues/new) if necessary.
-      Link to it.
+      Link to it below.
 * [ ] I have created a [newsfragment](http://towncrier.readthedocs.io/en/actual-freaking-docs/quickstart.html#creating-news-fragments) in src/txkube/newsfragments/
 * [ ] I have updated the automated tests.
 
