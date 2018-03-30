@@ -32,7 +32,7 @@ def _eliottree(logs):
     render_tasks(
         write=out.write,
         tasks=tasks,
-        field_limit=0
+        field_limit=0,
     )
     return out.getvalue()
 
