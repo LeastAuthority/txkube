@@ -24,7 +24,7 @@ def _eliottree(logs):
     :param list[dict] logs: The Eliot log events to render.  These should be
         dicts like those passed to an Eliot destination.
 
-    :return bytes: The rendered string.
+    :return unicode: The rendered string.
     """
     tasks = tasks_from_iterable(logs)
 
