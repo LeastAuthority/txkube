@@ -360,7 +360,8 @@ class ClientCertificatePolicyForHTTPSTests(TestCase):
         )
         creator = policy.creatorForNetloc(
             host_used.encode("ascii"),
-            port_used)
+            port_used,
+        )
         verifyObject(IOpenSSLClientConnectionCreator, creator)
 
 
