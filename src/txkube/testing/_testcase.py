@@ -5,6 +5,13 @@
 xUnit TestCase for txkube testing.
 """
 
+from os import environ
+
+from hypothesis import (
+    HealthCheck,
+    settings,
+)
+
 from fixtures import CompoundFixture
 
 from testtools import TestCase as TesttoolsTestCase
@@ -13,6 +20,15 @@ from testtools.twistedsupport import AsynchronousDeferredRunTest
 from twisted.python.failure import Failure
 
 from ._eliot import CaptureEliotLogs
+
+
+def _setup_hypothesis():
+    settings.register_profile("ci", suppress_health_check=[HealthCheck.too_slow])
+
+    profile_name = environ.get("TXKUBE_HYPOTHESIS_PROFILE", None)
+    if profile_name is not None:
+        settings.load_profile(profile_name)
+_setup_hypothesis()
 
 
 class AsynchronousDeferredRunTest(AsynchronousDeferredRunTest):

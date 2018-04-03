@@ -15,6 +15,10 @@ branches:
   only:
     - "master"
 
+env:
+  global:
+    - "TXKUBE_HYPOTHESIS_PROFILE=ci"
+
 matrix:
   include:
     - python: 2.7
