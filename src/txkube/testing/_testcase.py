@@ -23,7 +23,16 @@ from ._eliot import CaptureEliotLogs
 
 
 def _setup_hypothesis():
-    settings.register_profile("ci", suppress_health_check=[HealthCheck.too_slow])
+    settings.register_profile(
+        "ci",
+        suppress_health_check=[
+            # CPU resources available to CI builds typically varies
+            # significantly from run to run making it difficult to determine
+            # if "too slow" data generation is a result of the code or the
+            # execution environment.  Prevent these checks from
+            # (intermittently) failing tests that are otherwise fine.
+            HealthCheck.too_slow,
+        ])
 
     profile_name = environ.get("TXKUBE_HYPOTHESIS_PROFILE", None)
     if profile_name is not None:
