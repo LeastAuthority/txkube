@@ -36,10 +36,7 @@ def _setup_hypothesis():
         # By the same reasoning as above, disable the deadline check.
         deadline=None,
     )
-
-    profile_name = environ.get("TXKUBE_HYPOTHESIS_PROFILE", None)
-    if profile_name is not None:
-        settings.load_profile(profile_name)
+    settings.load_profile(environ.get("TXKUBE_HYPOTHESIS_PROFILE", "default"))
 _setup_hypothesis()
 
 
