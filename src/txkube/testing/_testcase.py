@@ -32,7 +32,10 @@ def _setup_hypothesis():
             # execution environment.  Prevent these checks from
             # (intermittently) failing tests that are otherwise fine.
             HealthCheck.too_slow,
-        ])
+        ],
+        # By the same reasoning as above, disable the deadline check.
+        deadline=None,
+    )
 
     profile_name = environ.get("TXKUBE_HYPOTHESIS_PROFILE", None)
     if profile_name is not None:
