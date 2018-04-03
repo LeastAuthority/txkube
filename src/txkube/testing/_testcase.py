@@ -5,6 +5,13 @@
 xUnit TestCase for txkube testing.
 """
 
+from os import environ
+
+from hypothesis import (
+    HealthCheck,
+    settings,
+)
+
 from fixtures import CompoundFixture
 
 from testtools import TestCase as TesttoolsTestCase
@@ -13,6 +20,24 @@ from testtools.twistedsupport import AsynchronousDeferredRunTest
 from twisted.python.failure import Failure
 
 from ._eliot import CaptureEliotLogs
+
+
+def _setup_hypothesis():
+    settings.register_profile(
+        "ci",
+        suppress_health_check=[
+            # CPU resources available to CI builds typically varies
+            # significantly from run to run making it difficult to determine
+            # if "too slow" data generation is a result of the code or the
+            # execution environment.  Prevent these checks from
+            # (intermittently) failing tests that are otherwise fine.
+            HealthCheck.too_slow,
+        ],
+        # By the same reasoning as above, disable the deadline check.
+        deadline=None,
+    )
+    settings.load_profile(environ.get("TXKUBE_HYPOTHESIS_PROFILE", "default"))
+_setup_hypothesis()
 
 
 class AsynchronousDeferredRunTest(AsynchronousDeferredRunTest):
