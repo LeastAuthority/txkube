@@ -29,6 +29,7 @@ from cryptography.hazmat.backends import default_backend
 
 from zope.interface import implementer
 
+from twisted.python.compat import unicode
 from twisted.python.filepath import FilePath
 from twisted.internet.address import IPv4Address
 from twisted.internet.error import DNSLookupError
@@ -58,6 +59,7 @@ from .._authentication import (
     https_policy_from_config,
 )
 from .. import authenticate_with_serviceaccount
+from ._compat import encode_environ
 
 # Just an arbitrary certificate pulled off the internet.  Details ought not
 # matter.  Retrieved using:
@@ -145,22 +147,23 @@ class AuthenticateWithServiceAccountTests(TestCase):
         reactor = create_reactor()
         reactor.listenTCP(80, factory)
 
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
         serviceaccount.child(b"ca.crt").setContent(_CA_CERT_PEM)
         serviceaccount.child(b"token").setContent(token)
 
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": kubernetes_host,
-                b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+        environ = encode_environ(
+            {
+                u"KUBERNETES_SERVICE_HOST": kubernetes_host.decode("ascii"),
+                u"KUBERNETES_SERVICE_PORT": u"443"
+            })
+        self.patch(os, "environ", environ)
 
         agent = authenticate_with_serviceaccount(
-            reactor, path=serviceaccount.path,
+            reactor, path=serviceaccount.asTextMode().path,
         )
 
         d = agent.request(b"GET", b"http://" + kubernetes_host, headers)
@@ -182,7 +185,9 @@ class AuthenticateWithServiceAccountTests(TestCase):
         issues.  The header includes the bearer token from the service account
         file.
         """
-        token = bytes(uuid4())
+        token = str(uuid4())
+        if isinstance(token, unicode):
+            token = token.encode("ascii")
         request_bytes = self._authorized_request(token=token, headers=None)
 
         # Sure would be nice to have an HTTP parser.
@@ -211,7 +216,9 @@ class AuthenticateWithServiceAccountTests(TestCase):
         Other headers passed to the ``IAgent.request`` implementation are also
         sent in the request.
         """
-        token = bytes(uuid4())
+        token = str(uuid4())
+        if isinstance(token, unicode):
+            token = token.encode("ascii")
         headers = Headers({u"foo": [u"bar"]})
         request_bytes = self._authorized_request(token=token, headers=headers)
         self.expectThat(
@@ -237,7 +244,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
         *KUBERNETES_...* environment variables to identify the address of the
         server.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -245,14 +253,13 @@ class HTTPSPolicyFromConfigTests(TestCase):
         serviceaccount.child(b"token").setContent(b"token")
 
         netloc = NetLocation(host=u"example.invalid", port=443)
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": netloc.host.encode("ascii"),
-                b"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port).encode("ascii"),
-            },
-        )
+        environ = encode_environ({
+                u"KUBERNETES_SERVICE_HOST": netloc.host,
+                u"KUBERNETES_SERVICE_PORT": u"{}".format(netloc.port),
+        })
+        self.patch(os, "environ", environ)
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(path=serviceaccount.asTextMode().path)
 
         policy = https_policy_from_config(config)
         self.expectThat(
@@ -273,21 +280,21 @@ class HTTPSPolicyFromConfigTests(TestCase):
         If no CA certificate is found in the service account directory,
         ``https_policy_from_config`` raises ``ValueError``.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
         serviceaccount.child(b"ca.crt").setContent(b"not a cert pem")
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
-                b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+        environ = encode_environ({
+            u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+            u"KUBERNETES_SERVICE_PORT": u"443",
+        })
+        self.patch(os, "environ", environ)
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(path=serviceaccount.asTextMode().path)
         self.assertThat(
             lambda: https_policy_from_config(config),
             raises(ValueError("No certificate authority certificate found.")),
@@ -299,7 +306,8 @@ class HTTPSPolicyFromConfigTests(TestCase):
         If no CA certificate is found in the service account directory,
         ``https_policy_from_config`` raises ``ValueError``.
         """
-        t = FilePath(self.useFixture(TempDir()).join(b""))
+        t = FilePath(self.useFixture(TempDir()).path)
+        t = t.asBytesMode()
         serviceaccount = t.child(b"serviceaccount")
         serviceaccount.makedirs()
 
@@ -310,14 +318,13 @@ class HTTPSPolicyFromConfigTests(TestCase):
         )
         serviceaccount.child(b"token").setContent(b"token")
 
-        self.patch(
-            os, "environ", {
-                b"KUBERNETES_SERVICE_HOST": b"example.invalid.",
-                b"KUBERNETES_SERVICE_PORT": b"443",
-            },
-        )
+        environ = encode_environ({
+            u"KUBERNETES_SERVICE_HOST": u"example.invalid.",
+            u"KUBERNETES_SERVICE_PORT": u"443",
+        })
+        self.patch(os, "environ", environ)
 
-        config = KubeConfig.from_service_account(path=serviceaccount.path)
+        config = KubeConfig.from_service_account(path=serviceaccount.asTextMode().path)
         self.assertThat(
             lambda: https_policy_from_config(config),
             raises(ValueError(
