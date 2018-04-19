@@ -23,6 +23,7 @@ from twisted.web.client import Agent
 from pykube import KubeConfig
 
 from ._invariants import instance_of
+from ._compat import native_string_to_unicode
 
 
 class Certificates(CheckedPVector):
@@ -245,9 +246,7 @@ def https_policy_from_config(config):
         active context's cluster.
     """
     server = config.cluster["server"]
-    if isinstance(server, bytes):
-        server = server.decode("ascii")
-    base_url = URL.fromText(server)
+    base_url = URL.fromText(native_string_to_unicode(server))
 
     ca_certs = pem.parse(config.cluster["certificate-authority"].bytes())
     if not ca_certs:

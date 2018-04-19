@@ -42,7 +42,6 @@ from cryptography.hazmat.backends import default_backend
 from twisted.test.proto_helpers import MemoryReactorClock
 from twisted.trial.unittest import TestCase as TwistedTestCase
 
-from twisted.python.compat import unicode
 from twisted.python.filepath import FilePath
 from twisted.python.url import URL
 from twisted.python.components import proxyForInterface
@@ -71,6 +70,8 @@ from .._network import (
     collection_location,
     _merge_configs_from_env,
 )
+
+from .._compat import native_string_to_bytes
 
 
 def get_kubernetes(case):
@@ -109,16 +110,18 @@ class MergeConfigsTests(TestCase):
         """
         a = self.configs.child(b"a")
         b = self.configs.child(b"b")
-        a.setContent(safe_dump({
+        yaml = safe_dump({
             u"apiVersion": u"v1",
             u"kind": u"Config",
             u"current-context": u"foo",
-        }))
-        b.setContent(safe_dump({
+        })
+        a.setContent(native_string_to_bytes(yaml))
+        yaml = safe_dump({
             u"apiVersion": u"v1",
             u"kind": u"Config",
             u"current-context": u"bar",
-        }))
+        })
+        b.setContent(native_string_to_bytes(yaml))
         config = _merge_configs_from_env(u"{}:{}".format(a.path, b.path))
         self.assertEqual(
             u"foo",
@@ -157,20 +160,22 @@ class MergeConfigsTests(TestCase):
         }
         a = self.configs.child(b"a")
         b = self.configs.child(b"b")
-        a.setContent(safe_dump({
+        yaml = safe_dump({
             u"apiVersion": u"v1",
             u"kind": u"Config",
             u"contexts": [foo_context],
             u"users": [foo_user],
             u"clusters": [foo_cluster],
-        }))
-        b.setContent(safe_dump({
+        })
+        a.setContent(native_string_to_bytes(yaml))
+        yaml = safe_dump({
             u"apiVersion": u"v1",
             u"kind": u"Config",
             u"contexts": [bar_context],
             u"users": [bar_user],
             u"clusters": [bar_cluster],
-        }))
+        })
+        b.setContent(native_string_to_bytes(yaml))
         config = _merge_configs_from_env(u"{}:{}".format(a.path, b.path))
         self.expectThat(
             config.doc[u"contexts"],
@@ -496,9 +501,7 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
                 },
             ],
         })
-        if isinstance(config, unicode):
-            config = config.encode("ascii")
-        config_file.setContent(config)
+        config_file.setContent(native_string_to_bytes(config))
         return config_file
 
 
@@ -521,7 +524,7 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
         }
 
         a = FilePath(self.mktemp())
-        a.setContent(safe_dump({
+        yaml = safe_dump({
             "apiVersion": "v1",
             "kind": "Config",
             "contexts": [
@@ -537,9 +540,10 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             "users": [
                 {"name": "a", "user": userauth},
             ],
-        }))
+        })
+        a.setContent(native_string_to_bytes(yaml))
         b = FilePath(self.mktemp())
-        b.setContent(safe_dump({
+        yaml = safe_dump({
             "apiVersion": "v1",
             "kind": "Config",
             "contexts": [
@@ -555,13 +559,15 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             "users": [
                 {"name": "b", "user": userauth},
             ],
-        }))
+        })
+        b.setContent(native_string_to_bytes(yaml))
         c = FilePath(self.mktemp())
-        c.setContent(safe_dump({
+        yaml = safe_dump({
             "apiVersion": "v1",
             "kind": "Config",
             "current-context": "b",
-        }))
+        })
+        c.setContent(native_string_to_bytes(yaml))
         kubeconfig = pathsep.join((a.path, b.path, c.path))
         kubernetes = network_kubernetes_from_context(
             MemoryReactorClock(),
@@ -590,7 +596,7 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             "client-key": key_path.path,
         }
         config = FilePath(self.mktemp())
-        config.setContent(safe_dump({
+        yaml = safe_dump({
             "apiVersion": "v1",
             "kind": "Config",
             "contexts": [
@@ -606,7 +612,8 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             "users": [
                 {"name": "a", "user": userauth},
             ],
-        }))
+        })
+        config.setContent(native_string_to_bytes(yaml))
         import os
         self.patch(os, "environ", {u"KUBECONFIG": config.path})
 
@@ -649,7 +656,7 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             "client-key": key_path.path,
         }
         config = FilePath(self.mktemp())
-        config.setContent(safe_dump({
+        yaml = safe_dump({
             "apiVersion": "v1",
             "kind": "Config",
             "contexts": [
@@ -665,7 +672,8 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             "users": [
                 {"name": "a", "user": userauth},
             ],
-        }))
+        })
+        config.setContent(native_string_to_bytes(yaml))
 
         kubernetes = network_kubernetes_from_context(
             MemoryReactorClock(),
