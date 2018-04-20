@@ -459,6 +459,47 @@ class KubernetesErrorTests(TestCase):
         self.expectThat(a1, GreaterThan(smallest))
 
 
+    def test_equal_or_not_equal_to_other_type(self):
+        """
+        When comparing against something which is not a `KubernetesError`
+        '==' returns `False` and '!=' returns `True`.
+        """
+        model = v1_5_model
+        a1 = KubernetesError(200, model.v1.Status(status=u"A"))
+        self.expectThat(
+            a1 == 35,
+            Is(False),
+        )
+        self.expectThat(
+            a1 != 35,
+            Is(True),
+        )
+
+
+    def test_greater_or_less_than_other_type_py3(self):
+        """
+        '<' and '>' binary comparisons raise `TypeError` on Python 3, when
+        compared with something which is not a `KubernetesError`.
+        """
+        try:
+            cmp
+            self.skipTest("skipping test on Python 2")
+        except NameError:
+            # Python 3 does not have cmp()
+            pass
+
+        model = v1_5_model
+        a1 = KubernetesError(200, model.v1.Status(status=u"A"))
+        self.expectThat(
+            lambda: a1 < 35,
+            raises_exception(TypeError),
+        )
+        self.expectThat(
+            lambda: a1 > 35,
+            raises_exception(TypeError),
+        )
+
+
 
 class Extra15DataModelTests(TestCase):
     """
