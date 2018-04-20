@@ -122,7 +122,10 @@ class MergeConfigsTests(TestCase):
             u"current-context": u"bar",
         })
         b.setContent(native_string_to_bytes(yaml))
-        config = _merge_configs_from_env(u"{}:{}".format(a.path, b.path))
+        config = _merge_configs_from_env(u"{}:{}".format(
+            a.asTextMode().path,
+            b.asTextMode().path,
+        ))
         self.assertEqual(
             u"foo",
             config.current_context,
@@ -176,7 +179,10 @@ class MergeConfigsTests(TestCase):
             u"clusters": [bar_cluster],
         })
         b.setContent(native_string_to_bytes(yaml))
-        config = _merge_configs_from_env(u"{}:{}".format(a.path, b.path))
+        config = _merge_configs_from_env(u"{}:{}".format(
+            a.asTextMode().path,
+            b.asTextMode().path,
+        ))
         self.expectThat(
             config.doc[u"contexts"],
             Equals([foo_context, bar_context]),
