@@ -788,6 +788,7 @@ class _ClassModel(PClass):
         content["__new__"] = discard_constant_fields
         content["__lt__"] = lt_pclass
         content["__eq__"] = eq_pclass
+        content["__hash__"] = PClass.__hash__
         content = total_ordering(content)
         huh = type(nativeString(self.name), bases + (PClass,), content)
         return huh
