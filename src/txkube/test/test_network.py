@@ -437,7 +437,7 @@ class NetworkKubernetesFromContextTests(TwistedTestCase):
             ),
         )
         root = Resource()
-        root.putChild(b"", Data(b"success", b"text/plain"))
+        root.putChild(b"", Data(b"success", "text/plain"))
 
         # Construct the Kubernetes client objects with a Redirectable reactor.
         # This is necessary because the URL we pass to the Agent we get needs
