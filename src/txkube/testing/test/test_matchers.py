@@ -11,6 +11,8 @@ from pyrsistent import PClass, field
 
 from testtools.matchers import Is, Equals
 
+from sys import version_info
+
 from .. import TestCase
 from ..matchers import MappingEquals, AttrsEquals, PClassEquals
 
@@ -47,17 +49,6 @@ class MappingEqualsTests(TestCase):
             ),
         )
 
-        # Different types altogether.
-        mismatch = MappingEquals(0).match({0: 1})
-        self.expectThat(
-            mismatch.describe(),
-            Equals(
-                u"type mismatch:\n"
-                u"reference = <type 'int'> (0)\n"
-                u"actual    = <type 'dict'> ({0: 1})\n"
-            ),
-        )
-
         # Actual value missing a key.
         mismatch = MappingEquals({u"foo": u"bar"}).match({})
         self.expectThat(
@@ -89,6 +80,47 @@ class MappingEqualsTests(TestCase):
         )
 
 
+    def test_mismatch_py2(self):
+        """
+        ``MappingEquals.match`` returns a mismatch when comparing two ``dict``
+        which do not compare equal with ``==``.
+        """
+        if version_info >= (3,):
+            self.skipTest("skipping test on Python 3")
+
+        # Different types altogether.
+        mismatch = MappingEquals(0).match({0: 1})
+        self.expectThat(
+            mismatch.describe(),
+            Equals(
+                u"type mismatch:\n"
+                u"reference = <type 'int'> (0)\n"
+                u"actual    = <type 'dict'> ({0: 1})\n"
+            ),
+        )
+
+
+
+    def test_mismatch_py3(self):
+        """
+        ``MappingEquals.match`` returns a mismatch when comparing two ``dict``
+        which do not compare equal with ``==``.
+        """
+        if version_info < (3,):
+            self.skipTest("skipping test on Python 2")
+
+        # Different types altogether.
+        mismatch = MappingEquals(0).match({0: 1})
+        self.expectThat(
+            mismatch.describe(),
+            Equals(
+                u"type mismatch:\n"
+                u"reference = <class 'int'> (0)\n"
+                u"actual    = <class 'dict'> ({0: 1})\n"
+            ),
+        )
+
+
 
 class AttrsEqualsTests(TestCase):
     """
@@ -110,6 +142,34 @@ class AttrsEqualsTests(TestCase):
         )
 
 
+    def test_equals_py2(self):
+        """
+        ``AttrsEquals.match`` returns ``None`` when comparing two attrs-based
+        instances which compare equal with ``==``.
+        """
+        if version_info >= (3,):
+            self.skipTest("skipping test on Python 3")
+        # The matcher has a nice string representation.
+        self.expectThat(
+            str(AttrsEquals(self.attrs(u"bar"))),
+            Equals("AttrsEquals(attrs(foo=u'bar'))"),
+        )
+
+
+    def test_equals_py3(self):
+        """
+        ``AttrsEquals.match`` returns ``None`` when comparing two attrs-based
+        instances which compare equal with ``==``.
+        """
+        if version_info < (3,):
+            self.skipTest("skipping test on Python 2")
+        # The matcher has a nice string representation.
+        self.expectThat(
+            str(AttrsEquals(self.attrs(u"bar"))),
+            Equals("AttrsEquals(AttrsEqualsTests.attrs(foo='bar'))"),
+        )
+
+
     def test_mismatch(self):
         """
         ``AttrsEquals.match`` returns a mismatch when comparing two attrs-based
@@ -127,6 +187,15 @@ class AttrsEqualsTests(TestCase):
             ),
         )
 
+
+    def test_mismatch_py2(self):
+        """
+        ``AttrsEquals.match`` returns ``None`` when comparing two attrs-based
+        instances which compare equal with ``==``.
+        """
+        if version_info >= (3,):
+            self.skipTest("skipping test on Python 3")
+
         # Different types altogether.
         mismatch = AttrsEquals(self.attrs(0)).match(1)
         self.expectThat(
@@ -138,10 +207,24 @@ class AttrsEqualsTests(TestCase):
             ),
         )
 
-        # The matcher has a nice string representation.
+
+    def test_mismatch_py3(self):
+        """
+        ``AttrsEquals.match`` returns ``None`` when comparing two attrs-based
+        instances which compare equal with ``==``.
+        """
+        if version_info < (3,):
+            self.skipTest("skipping test on Python 2")
+
+        # Different types altogether.
+        mismatch = AttrsEquals(self.attrs(0)).match(1)
         self.expectThat(
-            str(AttrsEquals(self.attrs(u"bar"))),
-            Equals("AttrsEquals(attrs(foo=u'bar'))"),
+            mismatch.describe(),
+            Equals(
+                u"type mismatch:\n"
+                u"reference = <class 'txkube.testing.test.test_matchers.AttrsEqualsTests.attrs'> (AttrsEqualsTests.attrs(foo=0))\n"
+                u"actual    = <class 'int'> (1)\n"
+            ),
         )
 
 
@@ -166,6 +249,36 @@ class PClassEqualsTests(TestCase):
         )
 
 
+    def test_equals_py2(self):
+        """
+        On Python 2, the str representation of ``PClassEquals`` preserves the
+        'u' prefix for a unicode kwarg.
+        """
+        if version_info >= (3,):
+            self.skipTest("skipping test on Python 3")
+
+        # The matcher has a nice string representation.
+        self.expectThat(
+            str(PClassEquals(self.pclass(foo=u"bar"))),
+            Equals("PClassEquals(pclass(foo=u'bar'))"),
+        )
+
+
+    def test_equals_py3(self):
+        """
+        On Python 3, the str representation of ``PClassEquals`` does not
+        preserve the 'u' prefix for a unicode kwarg.
+        """
+        if version_info < (3,):
+            self.skipTest("skipping test on Python 2")
+
+        # The matcher has a nice string representation.
+        self.expectThat(
+            str(PClassEquals(self.pclass(foo=u"bar"))),
+            Equals("PClassEquals(pclass(foo='bar'))"),
+        )
+
+
     def test_mismatch(self):
         """
         ``PClassEquals.match`` returns a mismatch when comparing two ``dict``
@@ -180,17 +293,6 @@ class PClassEqualsTests(TestCase):
                 u"field: foo\n"
                 u"reference = bar\n"
                 u"actual    = baz\n"
-            ),
-        )
-
-        # Different types altogether.
-        mismatch = PClassEquals(0).match(self.pclass(foo=1))
-        self.expectThat(
-            mismatch.describe(),
-            Equals(
-                u"type mismatch:\n"
-                u"reference = <type 'int'> (0)\n"
-                u"actual    = <class 'txkube.testing.test.test_matchers.pclass'> (pclass(foo=1))\n"
             ),
         )
 
@@ -218,8 +320,45 @@ class PClassEqualsTests(TestCase):
             ),
         )
 
-        # The matcher has a nice string representation.
+
+    def test_mismatch_py2(self):
+        """
+        ``PClassEquals.match`` returns a mismatch when comparing two ``dict``
+        which do not compare equal with ``==``.  On Python 2, the reference
+        should contain <type 'int'> if passed an integer argument.
+        """
+        if version_info >= (3,):
+            self.skipTest("skipping test on Python 3")
+
+        # Different types altogether.
+        mismatch = PClassEquals(0).match(self.pclass(foo=1))
         self.expectThat(
-            str(PClassEquals(self.pclass(foo=u"bar"))),
-            Equals("PClassEquals(pclass(foo=u'bar'))"),
+            mismatch.describe(),
+            Equals(
+                u"type mismatch:\n"
+                u"reference = <type 'int'> (0)\n"
+                u"actual    = <class 'txkube.testing.test.test_matchers.pclass'> (pclass(foo=1))\n"
+            ),
         )
+
+
+
+    def test_mismatch_py3(self):
+        """
+        ``PClassEquals.match`` returns a mismatch when comparing two ``dict``
+        which do not compare equal with ``==``.
+        """
+        if version_info < (3,):
+            self.skipTest("skipping test on Python 2")
+
+        # Different types altogether.
+        mismatch = PClassEquals(0).match(self.pclass(foo=1))
+        self.expectThat(
+            mismatch.describe(),
+            Equals(
+                u"type mismatch:\n"
+                u"reference = <class 'int'> (0)\n"
+                u"actual    = <class 'txkube.testing.test.test_matchers.PClassEqualsTests.pclass'> (pclass(foo=1))\n"
+            ),
+        )
+

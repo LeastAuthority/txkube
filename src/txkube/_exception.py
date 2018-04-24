@@ -2,6 +2,7 @@
 # See LICENSE for details.
 
 from json import loads
+from functools import total_ordering
 
 from twisted.web.http import NOT_FOUND, CONFLICT
 from twisted.web.client import readBody
@@ -21,6 +22,7 @@ def _full_kind(details):
 
 
 
+@total_ordering
 class KubernetesError(Exception):
     """
     Kubernetes has returned an error for some attempted operation.
@@ -32,9 +34,19 @@ class KubernetesError(Exception):
         self.code = code
         self.status = status
 
-    def __cmp__(self, other):
-        if isinstance(other, self.__class__):
-            return cmp((self.code, self.status), (other.code, other.status))
+    def __lt__(self, other):
+        if isinstance(other, KubernetesError):
+            return (self.code, self.status) < (other.code, other.status)
+        return NotImplemented
+
+    def __eq__(self, other):
+        if isinstance(other, KubernetesError):
+            return (self.code, self.status) == (other.code, other.status)
+        return NotImplemented
+
+    def __ne__(self, other):
+        if isinstance(other, KubernetesError):
+            return (self.code, self.status) != (other.code, other.status)
         return NotImplemented
 
     @classmethod

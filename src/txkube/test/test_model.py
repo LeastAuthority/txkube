@@ -450,23 +450,54 @@ class KubernetesErrorTests(TestCase):
         # not (a1 > c)
         self.expectThat(a1, Not(GreaterThan(c)))
 
-        @attr.s
-        class Comparator(object):
-            result = attr.ib()
-
-            def __cmp__(self, other):
-                return self.result
-
-        largest = Comparator(1)
-        equalest = Comparator(0)
-        smallest = Comparator(-1)
+        largest = KubernetesError(999, model.v1.Status(status=u"Z"))
+        smallest = KubernetesError(1, model.v1.Status(status=u"A"))
 
         # a1 < largest
         self.expectThat(a1, LessThan(largest))
-        # a1 == equalest
-        self.expectThat(a1, Equals(equalest))
         # a1 > smallest
         self.expectThat(a1, GreaterThan(smallest))
+
+
+    def test_equal_or_not_equal_to_other_type(self):
+        """
+        When comparing against something which is not a `KubernetesError`
+        '==' returns `False` and '!=' returns `True`.
+        """
+        model = v1_5_model
+        a1 = KubernetesError(200, model.v1.Status(status=u"A"))
+        self.expectThat(
+            a1 == 35,
+            Is(False),
+        )
+        self.expectThat(
+            a1 != 35,
+            Is(True),
+        )
+
+
+    def test_greater_or_less_than_other_type_py3(self):
+        """
+        '<' and '>' binary comparisons raise `TypeError` on Python 3, when
+        compared with something which is not a `KubernetesError`.
+        """
+        try:
+            cmp
+            self.skipTest("skipping test on Python 2")
+        except NameError:
+            # Python 3 does not have cmp()
+            pass
+
+        model = v1_5_model
+        a1 = KubernetesError(200, model.v1.Status(status=u"A"))
+        self.expectThat(
+            lambda: a1 < 35,
+            raises_exception(TypeError),
+        )
+        self.expectThat(
+            lambda: a1 > 35,
+            raises_exception(TypeError),
+        )
 
 
 
