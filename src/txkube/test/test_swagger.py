@@ -575,11 +575,11 @@ class Kubernetes15SwaggerTests(TestCase):
         Capabilities = spec.pclass_for_definition(name)
 
         self.expectThat(
-            lambda: Capabilities(add=b"hello"),
+            lambda: Capabilities(add=[0]),
             raises_exception(
                 CheckedValueTypeError,
                 expected_types=(unicode,),
-                actual_type=bytes,
+                actual_type=int,
             ),
         )
 
