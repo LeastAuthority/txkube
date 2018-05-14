@@ -5,7 +5,7 @@
 Tests for ``txkube.testing._eliot``.
 """
 
-from eliot import start_action, add_destination, remove_destination
+from eliot import start_action, add_destinations, remove_destination
 
 from testtools.matchers import Contains
 
@@ -24,7 +24,7 @@ class EliotTreeTests(TestCase):
         Eliot actions and messages.
         """
         events = []
-        add_destination(events.append)
+        add_destinations(events.append)
         self.addCleanup(lambda: remove_destination(events.append))
 
         with start_action(action_type=u"foo"):
@@ -33,6 +33,6 @@ class EliotTreeTests(TestCase):
         # I don't know exactly what the tree rendering looks like.  That's why
         # I'm using eliot-tree!  So this assertion is sort of lame.
         self.assertThat(
-            _eliottree(events).decode("utf-8"),
-            Contains(u"foo@1/started"),
+            _eliottree(events),
+            Contains(u"foo/1 \u21d2 started"),
         )
