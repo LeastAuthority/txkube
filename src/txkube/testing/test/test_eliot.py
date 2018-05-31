@@ -51,7 +51,7 @@ class CaptureEliotLogsTests(TestCase):
     """
     def test_logs_as_detail(self):
         """
-        Capture logs are available as details on the fixture.
+        Captured logs are available as details on the fixture.
         """
         fixture = CaptureEliotLogs()
         fixture.setUp()
