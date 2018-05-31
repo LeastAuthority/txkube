@@ -6,12 +6,12 @@ Integration between Eliot, eliottree, and testtools to provide easily
 readable Eliot logs for failing tests.
 """
 
-from io import BytesIO
+from io import StringIO
 
 from fixtures import Fixture
 
-from eliot import add_destination, remove_destination
-from eliottree import Tree, render_task_nodes
+from eliot import add_destinations, remove_destination
+from eliottree import tasks_from_iterable, render_tasks
 
 from testtools.content import Content
 from testtools.content_type import UTF8_TEXT
@@ -24,16 +24,14 @@ def _eliottree(logs):
     :param list[dict] logs: The Eliot log events to render.  These should be
         dicts like those passed to an Eliot destination.
 
-    :return bytes: The rendered string.
+    :return unicode: The rendered string.
     """
-    tree = Tree()
-    tree.merge_tasks(logs)
-    nodes = tree.nodes()
+    tasks = tasks_from_iterable(logs)
 
-    out = BytesIO()
-    render_task_nodes(
+    out = StringIO()
+    render_tasks(
         write=out.write,
-        nodes=nodes,
+        tasks=tasks,
         field_limit=0,
     )
     return out.getvalue()
@@ -54,7 +52,7 @@ class CaptureEliotLogs(Fixture):
     # otherwise expect are private.
     def _setUp(self):
         self.logs = []
-        add_destination(self.logs.append)
+        add_destinations(self.logs.append)
         self.addCleanup(lambda: remove_destination(self.logs.append))
         self.addDetail(
             self.LOG_DETAIL_NAME,
@@ -62,6 +60,6 @@ class CaptureEliotLogs(Fixture):
                 UTF8_TEXT,
                 # Safeguard the logs against _tearDown.  Capture the list
                 # object in the lambda's defaults.
-                lambda logs=self.logs: [_eliottree(logs)],
+                lambda logs=self.logs: [_eliottree(logs).encode("utf-8")],
             ),
         )
