@@ -60,6 +60,6 @@ class CaptureEliotLogs(Fixture):
                 UTF8_TEXT,
                 # Safeguard the logs against _tearDown.  Capture the list
                 # object in the lambda's defaults.
-                lambda logs=self.logs: [_eliottree(logs)],
+                lambda logs=self.logs: [_eliottree(logs).encode("utf-8")],
             ),
         )
