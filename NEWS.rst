@@ -1,3 +1,21 @@
+txkube 0.3.0 (2018-08-07)
+=========================
+
+Features
+--------
+
+- txkube now supports Python 3.6
+- txkube.network_kubernetes_from_context now respects the KUBECONFIG
+  environment variable if it is set and no configuration path is passed to it.
+  (#127)
+
+
+Misc
+----
+
+- #175, #177, #178, #179, #180, #182, #183, #185, #186, #188, #190
+
+
 txkube 0.2.0 (2017-06-05)
 =========================
 
