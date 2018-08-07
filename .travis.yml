@@ -32,7 +32,10 @@ cache:
 
 install:
   - "pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
-  - "pip install .[dev]"
+  # Some Travis Python environments start with an out-dated attrs.  Tell pip
+  # it is allowed to upgrade dependencies while installing txkube so we get a
+  # newer version which can actually be used.
+  - "pip install --upgrade .[dev]"
 
 script:
   - "pyflakes src"
