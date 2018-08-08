@@ -30,12 +30,15 @@ cache:
     # repeatedly download packages over the network.
     - "$HOME/.cache/pip"
 
+before_install:
+  # Some Travis Python environments start with an out-dated (older than
+  # minimum requirement specified by our dependencies) attrs.  Get rid of that
+  # so a recent version can be installed during the install step.
+  - "pip uninstall --yes attrs"
+
 install:
   - "pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
-  # Some Travis Python environments start with an out-dated attrs.  Tell pip
-  # it is allowed to upgrade dependencies while installing txkube so we get a
-  # newer version which can actually be used.
-  - "pip install --upgrade .[dev]"
+  - "pip install .[dev]"
 
 script:
   - "pyflakes src"
