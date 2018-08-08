@@ -302,7 +302,7 @@ def _without_activeDeadlineSeconds(template):
 
 def replicasetspecs(model=default_model):
     """
-    Build ``v1beta1.ReplicaSetSpec"".
+    Build ``v1beta1.ReplicaSetSpec``.
     """
     return builds(
         lambda template, **kw: model.v1beta1.ReplicaSetSpec(
