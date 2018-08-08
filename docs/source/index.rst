@@ -10,6 +10,8 @@ Welcome to txkube's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   readme.rst
+   news.rst
 
 
 Indices and tables
