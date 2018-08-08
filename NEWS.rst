@@ -37,8 +37,8 @@ Features
   (with different object specifications). (#121)
 
 
-txkube 0.1.0
-============
+txkube 0.1.0 (2017-04-10)
+=========================
 
 Features
 --------
