@@ -45,6 +45,7 @@ setuptools.setup(
             "testtools",
             "hypothesis",
             "eliot-tree>=17.1.0",
+            "sphinx",
         ],
     },
 )
