@@ -13,6 +13,10 @@ txkube
    :target: https://codecov.io/github/LeastAuthority/txkube
    :alt: Coverage
 
+.. image:: https://readthedocs.org/projects/txkube/badge/?version=latest
+   :target: https://txkube.readthedocs.io/en/latest/
+   :alt: Read The Docs
+
 What is this?
 -------------
 
