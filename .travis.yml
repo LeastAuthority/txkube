@@ -30,6 +30,12 @@ cache:
     # repeatedly download packages over the network.
     - "$HOME/.cache/pip"
 
+before_install:
+  # Some Travis Python environments start with an out-dated (older than
+  # minimum requirement specified by our dependencies) attrs.  Get rid of that
+  # so a recent version can be installed during the install step.
+  - "pip uninstall --yes attrs"
+
 install:
   - "pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
   - "pip install .[dev]"
