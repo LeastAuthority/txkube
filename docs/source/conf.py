@@ -12,19 +12,19 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../../src'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'txkube'
-copyright = '2018, Jean-Paul Calderone'
+copyright = '2018, Least Authority TFA GmbH'
 author = 'Jean-Paul Calderone'
 
 # The short X.Y version
-version = ''
+version = '0.3'
 # The full version, including alpha/beta/rc tags
 release = '0.3.0'
 
@@ -130,7 +130,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'txkube.tex', 'txkube Documentation',
-     'Jean-Paul Calderone', 'manual'),
+     author, 'manual'),
 ]
 
 
