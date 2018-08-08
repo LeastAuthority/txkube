@@ -40,6 +40,7 @@ release = '0.3.0'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'repoze.sphinx.autointerface',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
