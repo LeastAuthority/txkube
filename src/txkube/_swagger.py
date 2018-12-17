@@ -969,7 +969,7 @@ class VersionedPClasses(object):
                 return self.spec.pclass_for_definition(self.full_name(version, name))
             except NoSuchDefinition:
                 pass
-        raise AttributeError(name)
+        raise AttributeError("{}".format(self.spec.info), name)
 
 
     def add_behavior_for_pclass(self, cls):
