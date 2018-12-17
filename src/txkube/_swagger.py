@@ -165,24 +165,36 @@ class Swagger(PClass):
         :return: A Python class which can be used to represent the Swagger
             definition of the given name.
         """
-        try:
-            cls = self._pclasses[name]
-        except KeyError:
+        while True:
             try:
-                original_definition = self.definitions[name]
+                cls = self._pclasses[name]
             except KeyError:
-                raise NoSuchDefinition(name)
+                try:
+                    original_definition = self.definitions[name]
+                except KeyError:
+                    raise NoSuchDefinition(name)
 
-            definition = self.transform_definition(name, original_definition)
-            kind = self._identify_kind(definition)
-            if kind is None:
-                raise NotClassLike(name, definition)
-            generator = getattr(self, "_model_for_{}".format(kind))
-            model = generator(name, definition)
-            bases = tuple(self._behaviors.get(name, []))
-            cls = model.pclass(bases)
-            self._pclasses[name] = cls
-        return cls
+                if "$ref" in original_definition:
+                    # Identify definitions that are merely a reference to
+                    # another and restart processing.  There is some
+                    # duplication of logic between this and the $ref handling
+                    # in _ClassModel.  It would be nice to eliminate this
+                    # duplication.
+                    name = original_definition[u"$ref"]
+                    assert name.startswith(u"#/definitions/")
+                    name = name[len(u"#/definitions/"):]
+                    continue
+
+                definition = self.transform_definition(name, original_definition)
+                kind = self._identify_kind(definition)
+                if kind is None:
+                    raise NotClassLike(name, definition)
+                generator = getattr(self, "_model_for_{}".format(kind))
+                model = generator(name, definition)
+                bases = tuple(self._behaviors.get(name, []))
+                cls = model.pclass(bases)
+                self._pclasses[name] = cls
+            return cls
 
 
     def _identify_kind(self, definition):

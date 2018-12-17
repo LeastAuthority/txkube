@@ -173,6 +173,10 @@ class SwaggerTests(TestCase):
                     },
                 },
             },
+            u"object-is-simple-ref": {
+                u"description": u"has a $ref pointing to another part of the schema",
+                u"$ref": u"#/definitions/boolean",
+            },
             u"object-with-simple-ref": {
                 u"description": u"has type object and $ref with simple type target",
                 u"properties": {
@@ -409,6 +413,13 @@ class SwaggerTests(TestCase):
             Type(o={u"foo": u"bar"}).o,
             Equals({u"foo": u"bar"}),
         )
+
+
+    def test_class_is_simple_ref(self):
+        Boolean = self.spec.pclass_for_definition(u"boolean")
+        Type = self.spec.pclass_for_definition(u"object-is-simple-ref")
+        self.expectThat(Type(v=True), IsInstance(Boolean))
+        self.expectThat(Type(v=True).v, Equals(True))
 
 
     def test_property_ref_simple(self):
