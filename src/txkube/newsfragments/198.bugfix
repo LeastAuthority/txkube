@@ -1,0 +1,2 @@
+Kubernetes models containing top-level type references are now treated as if they were that reference
+(previously an exception was raised).
