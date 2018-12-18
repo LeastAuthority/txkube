@@ -3,6 +3,9 @@
 #
 
 language: "python"
+python:
+  - "2.7"
+  - "3.6"
 
 # This is how you get container-based environments on Travis-CI.  And
 # container-based environments are how you get fast test runs.
@@ -18,11 +21,14 @@ branches:
 env:
   global:
     - "TXKUBE_HYPOTHESIS_PROFILE=ci"
-
-matrix:
-  include:
-    - python: 2.7
-    - python: 3.6
+  matrix:
+    # Test once with an editable install so testing-only inputs can be
+    # discovered.  In many cases I would just install the testing-only inputs
+    # to avoid having to test multiple configurations.  In this case, the
+    # testing-only inputs are many megabytes (dozens of times the size of the
+    # source itself) so avoiding their installation seems worthwhile.
+    - "PIP_INSTALL=-e"
+    - "PIP_INSTALL="
 
 cache:
   directories:
@@ -38,7 +44,7 @@ before_install:
 
 install:
   - "pip install --upgrade pip setuptools wheel coverage codecov pyflakes"
-  - "pip install .[dev]"
+  - "pip install ${PIP_INSTALL} .[dev]"
 
 script:
   - "pyflakes src"

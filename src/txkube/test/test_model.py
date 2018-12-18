@@ -8,7 +8,7 @@ Tests for ``txkube._model``.
 from json import loads, dumps
 
 from zope.interface import implementer
-from zope.interface.verify import verifyObject
+from zope.interface.verify import verifyObject, verifyClass
 
 import attr
 
@@ -35,6 +35,7 @@ from testtools.twistedsupport import succeeded
 from hypothesis import HealthCheck, settings, given, assume
 from hypothesis.strategies import sampled_from, choices
 
+from twisted.python.filepath import FilePath
 from twisted.python.failure import Failure
 from twisted.internet.defer import gatherResults
 from twisted.web.iweb import IResponse
@@ -65,11 +66,24 @@ from .._model import set_if_none
 
 from .._compat import dumps_bytes
 
+_models = [
+    v1_5_model,
+] + list(
+    openapi_to_data_model(loads(spec_path.getContent()))
+    for version
+    in ["1.8", "1.9", "1.10", "1.10", "1.11"]
+    for spec_path
+    in [FilePath(__file__).sibling("swagger-{}.json".format(version))]
+    if spec_path.exists()
+)
 
+print("Loaded {} Kubernetes models.".format(len(_models)))
 
 def models():
-    return sampled_from([v1_5_model])
-
+    """
+    Generate Kubernetes API models from Swagger/OpenAPI specifications.
+    """
+    return sampled_from(_models)
 
 
 class SerializationTests(TestCase):
@@ -124,6 +138,25 @@ class IObjectTests(TestCase):
         The object provides ``IObject``.
         """
         verifyObject(IObject, obj)
+
+
+    @given(model=models())
+    def test_interface_via_model(self, model):
+        """
+        The object types exposed via the model implement ``IObject``.
+        """
+        verifyClass(IObject, model.v1.Namespace)
+        verifyClass(IObject, model.v1.NamespaceList)
+        verifyClass(IObject, model.v1.ConfigMap)
+        verifyClass(IObject, model.v1.ConfigMapList)
+        verifyClass(IObject, model.v1.Service)
+        verifyClass(IObject, model.v1.ServiceList)
+        verifyClass(IObject, model.v1.Pod)
+        verifyClass(IObject, model.v1.PodList)
+        verifyClass(IObject, model.v1beta1.Deployment)
+        verifyClass(IObject, model.v1beta1.DeploymentList)
+        verifyClass(IObject, model.v1beta1.ReplicaSet)
+        verifyClass(IObject, model.v1beta1.ReplicaSetList)
 
 
     @given(models())

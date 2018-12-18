@@ -112,8 +112,10 @@ def openapi_to_data_model(openapi):
         return _openapi_to_v1_5_data_model(openapi)
     elif version.startswith(u"v1.6."):
         return _openapi_to_v1_6_data_model(openapi)
-    elif version.startswith(u"v1.7."):
+    elif version.startswith((u"v1.7.", "v1.8.")):
         return _openapi_to_v1_7_data_model(openapi)
+    elif version.startswith(u"v1.9."):
+        return _openapi_to_v1_9_data_model(openapi)
     else:
         # Optimistic...
         return _openapi_to_newest_data_model(openapi)
@@ -173,9 +175,35 @@ def _openapi_to_v1_6_data_model(openapi):
 # 1.6 and 1.7 happen to look similar enough that no *tested* functionality
 # requires us to differentiate between them here.
 _openapi_to_v1_7_data_model = _openapi_to_v1_6_data_model
+_openapi_to_v1_8_data_model = _openapi_to_v1_6_data_model
+
+def _openapi_to_v1_9_data_model(openapi):
+    return _KubernetesDataModel.from_swagger(
+        Swagger.from_document(openapi),
+        u"io.k8s.apimachinery.pkg.version.Info", dict(
+            major=u"1",
+            minor=u"9",
+            gitVersion=u"",
+            gitCommit=u"",
+            gitTreeState=u"",
+            buildDate=u"",
+            goVersion=u"",
+            compiler=u"",
+            platform=u"",
+        ),
+        {
+            u"io.k8s.api.core.v1",
+            u"io.k8s.apimachinery.pkg.apis.meta.v1",
+        },
+        {
+            u"io.k8s.api.extensions.v1beta1",
+            u"io.k8s.api.certificates.v1beta1",
+        },
+    )
+
 
 # Keep this up to date with whatever the newest thing we know about is...
-_openapi_to_newest_data_model =  _openapi_to_v1_7_data_model
+_openapi_to_newest_data_model =  _openapi_to_v1_9_data_model
 
 
 def set_if_none(desired_value):
