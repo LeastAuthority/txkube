@@ -3,6 +3,9 @@
 #
 
 language: "python"
+python:
+  - "2.7"
+  - "3.6"
 
 # This is how you get container-based environments on Travis-CI.  And
 # container-based environments are how you get fast test runs.
@@ -26,11 +29,6 @@ env:
     # source itself) so avoiding their installation seems worthwhile.
     - "PIP_INSTALL=-e"
     - "PIP_INSTALL="
-
-matrix:
-  include:
-    - python: 2.7
-    - python: 3.6
 
 cache:
   directories:
