@@ -66,22 +66,24 @@ from .._model import set_if_none
 
 from .._compat import dumps_bytes
 
+_models = [
+    v1_5_model,
+] + list(
+    openapi_to_data_model(loads(spec_path.getContent()))
+    for version
+    in ["1.8", "1.9", "1.10", "1.10", "1.11"]
+    for spec_path
+    in [FilePath(__file__).sibling("swagger-{}.json".format(version))]
+    if spec_path.exists()
+)
 
-v1_8_model = openapi_to_data_model(loads(FilePath(__file__).sibling("swagger-1.8.json").getContent()))
-v1_9_model = openapi_to_data_model(loads(FilePath(__file__).sibling("swagger-1.9.json").getContent()))
-v1_10_model = openapi_to_data_model(loads(FilePath(__file__).sibling("swagger-1.10.json").getContent()))
-v1_11_model = openapi_to_data_model(loads(FilePath(__file__).sibling("swagger-1.11.json").getContent()))
-
+print("Loaded {} Kubernetes models.".format(len(_models)))
 
 def models():
-    return sampled_from([
-        v1_5_model,
-        v1_8_model,
-        v1_9_model,
-        v1_10_model,
-        v1_11_model,
-    ])
-
+    """
+    Generate Kubernetes API models from Swagger/OpenAPI specifications.
+    """
+    return sampled_from(_models)
 
 
 class SerializationTests(TestCase):
